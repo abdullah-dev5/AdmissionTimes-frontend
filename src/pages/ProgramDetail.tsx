@@ -1,0 +1,318 @@
+import { Link, useParams, Navigate } from 'react-router-dom'
+import { useState } from 'react'
+import { getProgramById, getRelatedPrograms } from '../data/mockData'
+import StudentLayout from '../layouts/StudentLayout'
+
+function ProgramDetail() {
+  const { id } = useParams()
+  const [activeTab, setActiveTab] = useState('Overview')
+
+  const program = id ? getProgramById(id) : undefined
+  const relatedPrograms = program ? getRelatedPrograms(id || '', 3) : []
+
+  if (!program) {
+    return <Navigate to="/student/dashboard" replace />
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Open': return { bg: '#D1FAE5', text: '#10B981' }
+      case 'Closing Soon': return { bg: '#FEF3C7', text: '#FACC15' }
+      case 'Closed': return { bg: '#FEE2E2', text: '#EF4444' }
+      default: return { bg: '#F3F4F6', text: '#6B7280' }
+    }
+  }
+
+  const statusColors = getStatusColor(program.status)
+
+  return (
+    <StudentLayout>
+      <div className="p-6">
+        <div className="container mx-auto max-w-7xl">
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="mb-6">
+            <h1 className="text-4xl font-bold mb-2" style={{ color: '#111827' }}>{program.title}</h1>
+            <p className="text-xl text-gray-600 mb-4">{program.university}</p>
+            <div className="flex items-center gap-4 mb-6">
+              <div className="flex items-center gap-2 text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-base">{program.location}</span>
+              </div>
+              <span className="px-3 py-1 rounded-full text-sm font-medium" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+                {program.status}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Compare
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Set Reminder
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2" style={{ backgroundColor: '#10B981' }}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Apply Now
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Last Updated: {program.lastUpdated}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold flex items-center gap-2" style={{ color: '#111827' }}>
+                  <svg className="w-6 h-6" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  AI-Powered Summary
+                </h2>
+                <span className="text-xs text-gray-500">Powered by Gemini AI</span>
+              </div>
+              <ul className="space-y-4 mb-6">
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <div>
+                    <span className="font-medium text-gray-800">Application Window: </span>
+                    <span className="text-gray-600">{program.summary.applicationWindow}</span>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <div>
+                    <span className="font-medium text-gray-800">Eligibility: </span>
+                    <span className="text-gray-600">{program.summary.eligibility}</span>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <div>
+                    <span className="font-medium text-gray-800">Entry Test: </span>
+                    <span className="text-gray-600">{program.summary.entryTest}</span>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <div>
+                    <span className="font-medium text-gray-800">Application: </span>
+                    <span className="text-gray-600">{program.summary.application}</span>
+                  </div>
+                </li>
+              </ul>
+              <div className="pt-4 border-t border-gray-200">
+                <button className="text-sm font-medium cursor-pointer transition-colors mr-4" style={{ color: '#2563EB' }}>Show More</button>
+                <button className="text-sm font-medium cursor-pointer transition-colors" style={{ color: '#2563EB' }}>Show Original Description</button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="border-b border-gray-200 mb-6">
+                <nav className="flex space-x-8 -mb-px">
+                  {['Overview', 'Eligibility', 'Important Dates', 'Fee Structure', 'Documents'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm cursor-pointer transition-colors ${
+                        activeTab === tab
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              {activeTab === 'Overview' && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Overview</h2>
+                  <p className="text-gray-700 mb-6 leading-relaxed">
+                    {program.overview.description}
+                  </p>
+                  <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Program Highlights</h3>
+                  <ul className="list-disc list-inside space-y-2 text-gray-700 mb-6">
+                    {program.overview.highlights.map((highlight, idx) => (
+                      <li key={idx}>{highlight}</li>
+                    ))}
+                  </ul>
+                  <div className="w-full h-64 bg-gray-200 rounded-lg overflow-hidden">
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'Eligibility' && program.eligibility && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Eligibility Requirements</h2>
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Academic Requirements</h3>
+                    <ul className="list-disc list-inside space-y-2 text-gray-700">
+                      {program.eligibility.requirements.map((req, idx) => (
+                        <li key={idx}>{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Required Documents</h3>
+                    <ul className="list-disc list-inside space-y-2 text-gray-700">
+                      {program.eligibility.documents.map((doc, idx) => (
+                        <li key={idx}>{doc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'Important Dates' && program.importantDates && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Important Dates</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Application Start Date</span>
+                      <span className="text-gray-600">{program.importantDates.applicationStart}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Application End Date</span>
+                      <span className="text-gray-600">{program.importantDates.applicationEnd}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Entry Test Date</span>
+                      <span className="text-gray-600">{program.importantDates.entryTestDate}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Result Declaration Date</span>
+                      <span className="text-gray-600">{program.importantDates.resultDate}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'Fee Structure' && program.feeStructure && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Fee Structure</h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Admission Fee</span>
+                      <span className="text-gray-600 font-semibold">{program.feeStructure.admissionFee}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">Semester Fee</span>
+                      <span className="text-gray-600 font-semibold">{program.feeStructure.semesterFee}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 border-2 border-blue-500 rounded-lg" style={{ backgroundColor: '#E0E7FF' }}>
+                      <span className="font-semibold text-gray-800">Total Program Fee</span>
+                      <span className="font-bold" style={{ color: '#2563EB' }}>{program.feeStructure.totalProgramFee}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'Documents' && program.documents && (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Required Documents</h2>
+                  <ul className="list-disc list-inside space-y-3 text-gray-700">
+                    {program.documents.map((doc, idx) => (
+                      <li key={idx} className="text-base">{doc}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>You may also be interested in...</h2>
+              <div className="space-y-4">
+                {relatedPrograms.map((rp) => {
+                  const rpColors = getStatusColor(rp.status)
+                  return (
+                    <Link
+                      to={`/program/${rp.id}`}
+                      key={rp.id}
+                      className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium text-sm" style={{ color: '#111827' }}>{rp.title}</h3>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: rpColors.bg, color: rpColors.text }}>
+                          {rp.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600">{rp.university}</p>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links</h2>
+              <div className="space-y-3">
+                <a
+                  href={program.officialLinks.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+                  style={{ backgroundColor: '#2563EB' }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                  Visit Official Website
+                </a>
+                <a
+                  href={program.officialLinks.prospectus}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Prospectus
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </StudentLayout>
+  )
+}
+
+export default ProgramDetail
+
