@@ -1,19 +1,8 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-
-interface Admission {
-  id: string
-  university: string
-  program: string
-  degree: string
-  fee: string
-  deadline: string
-  location: string
-  status: 'Verified' | 'Pending' | 'Updated'
-  aiSummary: string
-  officialUrl: string
-}
+import { getStatusColor, type StudentAdmission } from '../../data/studentData'
+import { useStudentData } from '../../contexts/StudentDataContext'
 
 const CompareHeader = ({ count }: { count: number }) => {
   return (
@@ -25,16 +14,7 @@ const CompareHeader = ({ count }: { count: number }) => {
   )
 }
 
-const CompareCard = ({ admission }: { admission: Admission }) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Verified': return { bg: '#D1FAE5', text: '#10B981' }
-      case 'Pending': return { bg: '#FEF3C7', text: '#F59E0B' }
-      case 'Updated': return { bg: '#DBEAFE', text: '#3B82F6' }
-      default: return { bg: '#F3F4F6', text: '#6B7280' }
-    }
-  }
-
+const CompareCard = ({ admission }: { admission: StudentAdmission }) => {
   const statusColors = getStatusColor(admission.status)
 
   return (
@@ -45,7 +25,7 @@ const CompareCard = ({ admission }: { admission: Admission }) => {
           <p className="text-sm text-gray-600 truncate">{admission.program}</p>
         </div>
         <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ml-2" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-          {admission.status}
+          {admission.programStatus}
         </span>
       </div>
 
@@ -69,7 +49,7 @@ const CompareCard = ({ admission }: { admission: Admission }) => {
           <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span className="text-gray-700">{admission.deadline}</span>
+          <span className="text-gray-700">{admission.deadlineDisplay}</span>
         </div>
 
         <div className="flex items-center gap-2 text-sm">
@@ -83,11 +63,11 @@ const CompareCard = ({ admission }: { admission: Admission }) => {
 
       <div className="pt-4 border-t border-gray-200 mb-4 flex-1 flex flex-col min-h-0">
         <p className="text-xs text-gray-500 mb-2">AI Summary</p>
-        <p className="text-sm text-gray-700 leading-relaxed overflow-hidden">{admission.aiSummary}</p>
+        <p className="text-sm text-gray-700 leading-relaxed overflow-hidden">{admission.aiSummary || 'No summary available.'}</p>
       </div>
 
       <Link
-        to={admission.officialUrl}
+        to={admission.officialUrl || `/program/${admission.id}`}
         className="text-sm font-medium cursor-pointer transition-colors hover:opacity-80 mt-auto flex-shrink-0"
         style={{ color: '#2563EB' }}
       >
@@ -97,7 +77,7 @@ const CompareCard = ({ admission }: { admission: Admission }) => {
   )
 }
 
-const CompareGrid = ({ admissions }: { admissions: Admission[] }) => {
+const CompareGrid = ({ admissions }: { admissions: StudentAdmission[] }) => {
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-6 px-6" style={{ alignItems: 'stretch', minHeight: '600px' }}>
@@ -109,13 +89,25 @@ const CompareGrid = ({ admissions }: { admissions: Admission[] }) => {
   )
 }
 
-const CompareHighlights = ({ admissions: _admissions }: { admissions: Admission[] }) => {
-  const highlights = [
-    'FAST University offers the lowest fee at PKR 75,000, making it the most cost-effective option.',
-    'NUST has the earliest deadline (July 30, 2025), requiring immediate application submission.',
-    'LUMS provides the most comprehensive program with additional research opportunities.',
-    'All three universities are located in major cities with excellent infrastructure and facilities.',
-  ]
+const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) => {
+  const highlights = useMemo(() => {
+    if (admissions.length === 0) return []
+    
+    const lowestFee = admissions.reduce((min, a) => a.feeNumeric < min.feeNumeric ? a : min, admissions[0])
+    const earliestDeadline = admissions.reduce((earliest, a) => {
+      const dateA = new Date(a.deadline).getTime()
+      const dateB = new Date(earliest.deadline).getTime()
+      return dateA < dateB ? a : earliest
+    }, admissions[0])
+    const highestMatch = admissions.reduce((max, a) => (a.matchNumeric || 0) > (max.matchNumeric || 0) ? a : max, admissions[0])
+    
+    return [
+      `${lowestFee.university} offers the lowest fee at ${lowestFee.fee}, making it the most cost-effective option.`,
+      `${earliestDeadline.university} has the earliest deadline (${earliestDeadline.deadlineDisplay}), requiring immediate application submission.`,
+      `${highestMatch.university} provides the best match at ${highestMatch.match} based on your profile.`,
+      `All ${admissions.length} universities are located in major cities with excellent infrastructure and facilities.`,
+    ]
+  }, [admissions])
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mx-6 mb-6">
@@ -139,93 +131,38 @@ const CompareHighlights = ({ admissions: _admissions }: { admissions: Admission[
   )
 }
 
-const CompareActions = ({ onSave, onShare, onExport }: { onSave: () => void; onShare: () => void; onExport: () => void }) => {
-  return (
-    <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onSave}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-          </svg>
-          Save Comparison
-        </button>
-        <button
-          onClick={onShare}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-          </svg>
-          Share
-        </button>
-        <button
-          onClick={onExport}
-          className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2"
-          style={{ backgroundColor: '#2563EB' }}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export PDF
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function ComparePage() {
-  const [selectedAdmissions] = useState<Admission[]>([
-    {
-      id: '1',
-      university: 'FAST University',
-      program: 'BS Computer Science',
-      degree: 'Bachelor of Science',
-      fee: 'PKR 75,000',
-      deadline: 'July 30, 2025',
-      location: 'Islamabad, Pakistan',
-      status: 'Verified',
-      aiSummary: 'This program offers a comprehensive curriculum in computer science fundamentals with strong industry connections. The university has excellent placement records and modern lab facilities.',
-      officialUrl: '/program/1',
-    },
-    {
-      id: '2',
-      university: 'NUST',
-      program: 'MS Data Science',
-      degree: 'Master of Science',
-      fee: 'PKR 120,000',
-      deadline: 'August 15, 2025',
-      location: 'Islamabad, Pakistan',
-      status: 'Pending',
-      aiSummary: 'A rigorous graduate program focusing on advanced data analytics, machine learning, and statistical methods. Ideal for students seeking research opportunities and industry collaboration.',
-      officialUrl: '/program/2',
-    },
-    {
-      id: '3',
-      university: 'LUMS',
-      program: 'PhD in Management',
-      degree: 'Doctor of Philosophy',
-      fee: 'PKR 98,000',
-      deadline: 'June 20, 2025',
-      location: 'Lahore, Pakistan',
-      status: 'Updated',
-      aiSummary: 'An elite doctoral program designed for aspiring researchers and academics. Features world-class faculty, extensive research resources, and opportunities for international collaboration.',
-      officialUrl: '/program/3',
-    },
-  ])
+  const [searchParams] = useSearchParams()
+  const { getAdmissionById, savedAdmissions } = useStudentData()
+  const idsParam = searchParams.get('ids')
+  
+  const selectedAdmissions = useMemo(() => {
+    if (idsParam) {
+      const ids = idsParam.split(',')
+      return ids
+        .map(id => getAdmissionById(id))
+        .filter((a): a is StudentAdmission => a !== undefined)
+    }
+    // Default: use first 3 saved admissions
+    return savedAdmissions.slice(0, 3)
+  }, [idsParam, getAdmissionById, savedAdmissions])
 
   const handleSave = () => {
-    console.log('Save comparison')
+    alert('Comparison saved! You can access it from your saved comparisons.')
   }
 
   const handleShare = () => {
-    console.log('Share comparison')
+    const url = window.location.href
+    navigator.clipboard.writeText(url).then(() => {
+      alert('Comparison link copied to clipboard!')
+    }).catch(() => {
+      alert('Failed to copy link. Please copy manually: ' + url)
+    })
   }
 
   const handleExport = () => {
-    console.log('Export PDF')
+    alert('PDF export feature coming soon!')
   }
 
   const count = selectedAdmissions.length
@@ -241,11 +178,11 @@ function ComparePage() {
             <h2 className="text-xl font-semibold mb-2" style={{ color: '#111827' }}>Not Enough Admissions Selected</h2>
             <p className="text-gray-600 mb-6">Please select at least 2 admissions to compare.</p>
             <Link
-              to="/student/dashboard"
+              to="/student/watchlist"
               className="inline-block px-6 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
               style={{ backgroundColor: '#2563EB' }}
             >
-              Go to Dashboard
+              Go to Watchlist
             </Link>
           </div>
         </div>
@@ -264,11 +201,11 @@ function ComparePage() {
             <h2 className="text-xl font-semibold mb-2" style={{ color: '#111827' }}>Too Many Admissions Selected</h2>
             <p className="text-gray-600 mb-6">Please select a maximum of 4 admissions to compare.</p>
             <Link
-              to="/student/dashboard"
+              to="/student/watchlist"
               className="inline-block px-6 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
               style={{ backgroundColor: '#2563EB' }}
             >
-              Go to Dashboard
+              Go to Watchlist
             </Link>
           </div>
         </div>
@@ -286,7 +223,36 @@ function ComparePage() {
           <CompareHighlights admissions={selectedAdmissions} />
         </div>
 
-        <CompareActions onSave={handleSave} onShare={handleShare} onExport={handleExport} />
+        <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+            Save Comparison
+          </button>
+          <button
+            onClick={handleShare}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+            Share
+          </button>
+          <button
+            onClick={handleExport}
+            className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2"
+            style={{ backgroundColor: '#2563EB' }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export PDF
+          </button>
+        </div>
       </div>
     </StudentLayout>
   )

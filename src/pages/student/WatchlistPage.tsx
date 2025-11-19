@@ -1,28 +1,8 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-
-interface SavedProgram {
-  id: string
-  university: string
-  program: string
-  degree: string
-  deadline: string
-  daysRemaining: number
-  fee: string
-  status: 'Verified' | 'Pending' | 'Updated'
-  alertEnabled: boolean
-}
-
-interface Recommendation {
-  id: string
-  university: string
-  program: string
-  degree: string
-  deadline: string
-  fee: string
-  match: string
-}
+import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
+import { useStudentData } from '../../contexts/StudentDataContext'
 
 const AlertToggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) => {
   return (
@@ -180,48 +160,40 @@ const WatchlistCard = ({
   onAlertToggle,
   onRemove
 }: {
-  program: SavedProgram
+  program: StudentAdmission
   isSelected: boolean
   onSelect: (id: string) => void
   onAlertToggle: (id: string) => void
   onRemove: (id: string) => void
 }) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Verified': return { bg: '#D1FAE5', text: '#10B981' }
-      case 'Pending': return { bg: '#FEF3C7', text: '#F59E0B' }
-      case 'Updated': return { bg: '#DBEAFE', text: '#3B82F6' }
-      default: return { bg: '#F3F4F6', text: '#9CA3AF' }
-    }
-  }
-
   const statusColors = getStatusColor(program.status)
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-start justify-between mb-4 gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <input
             type="checkbox"
             checked={isSelected}
             onChange={() => onSelect(program.id)}
-            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer flex-shrink-0"
           />
           <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: '#1F2937' }}>
             {program.university.substring(0, 2).toUpperCase()}
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }}>{program.university}</h3>
-            <p className="text-sm text-gray-600 truncate">{program.program}</p>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={program.university}>{program.university}</h3>
+            <p className="text-sm text-gray-600 truncate" title={program.program}>{program.program}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
             {program.status}
           </span>
           <button
             onClick={() => onRemove(program.id)}
-            className="p-2 text-gray-400 hover:text-red-600 cursor-pointer transition-colors"
+            className="p-2 text-gray-400 hover:text-red-600 cursor-pointer transition-colors flex-shrink-0"
+            title="Remove from watchlist"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -244,7 +216,7 @@ const WatchlistCard = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span className={`font-medium ${program.daysRemaining <= 7 ? 'text-red-600' : 'text-gray-700'}`}>
-            {program.deadline} ({program.daysRemaining} days left)
+            {program.deadlineDisplay} ({program.daysRemaining >= 0 ? `${program.daysRemaining} days left` : 'Deadline passed'})
           </span>
         </div>
 
@@ -259,7 +231,7 @@ const WatchlistCard = ({
       <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">Alert</span>
-          <AlertToggle enabled={program.alertEnabled} onToggle={() => onAlertToggle(program.id)} />
+          <AlertToggle enabled={Boolean(program.alertEnabled)} onToggle={() => onAlertToggle(program.id)} />
         </div>
         <Link
           to={`/program/${program.id}`}
@@ -280,7 +252,7 @@ const WatchlistGrid = ({
   onAlertToggle,
   onRemove
 }: {
-  programs: SavedProgram[]
+  programs: StudentAdmission[]
   selectedIds: string[]
   onSelect: (id: string) => void
   onAlertToggle: (id: string) => void
@@ -308,7 +280,7 @@ const AiRecommendationCarousel = ({
   recommendations,
   onSave
 }: {
-  recommendations: Recommendation[]
+  recommendations: StudentAdmission[]
   onSave: (id: string) => void
 }) => {
   return (
@@ -346,7 +318,7 @@ const AiRecommendationCarousel = ({
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span>{rec.deadline}</span>
+                  <span>{rec.deadlineDisplay}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -390,88 +362,31 @@ const EmptyState = () => {
 }
 
 function WatchlistPage() {
+  const navigate = useNavigate()
+  const { admissions, toggleSaved, toggleAlert } = useStudentData()
   const [searchQuery, setSearchQuery] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [deadlineFilter, setDeadlineFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
-  const [savedPrograms, setSavedPrograms] = useState<SavedProgram[]>([
-    {
-      id: '1',
-      university: 'FAST University',
-      program: 'BS Computer Science',
-      degree: 'Bachelor of Science',
-      deadline: '2025-01-15',
-      daysRemaining: 3,
-      fee: 'PKR 75,000',
-      status: 'Verified',
-      alertEnabled: true,
-    },
-    {
-      id: '2',
-      university: 'NUST',
-      program: 'MS Data Science',
-      degree: 'Master of Science',
-      deadline: '2025-01-20',
-      daysRemaining: 8,
-      fee: 'PKR 120,000',
-      status: 'Pending',
-      alertEnabled: false,
-    },
-    {
-      id: '3',
-      university: 'LUMS',
-      program: 'PhD in Management',
-      degree: 'Doctor of Philosophy',
-      deadline: '2025-02-01',
-      daysRemaining: 20,
-      fee: 'PKR 98,000',
-      status: 'Updated',
-      alertEnabled: true,
-    },
-    {
-      id: '4',
-      university: 'COMSATS',
-      program: 'BS Software Engineering',
-      degree: 'Bachelor of Science',
-      deadline: '2025-01-25',
-      daysRemaining: 13,
-      fee: 'PKR 85,000',
-      status: 'Verified',
-      alertEnabled: false,
-    },
-  ])
+  // Get saved programs from shared data
+  const savedPrograms = useMemo(() => {
+    return admissions
+      .filter(a => a.saved)
+      .map(a => ({
+        ...a,
+        daysRemaining: calculateDaysRemaining(a.deadline),
+      }))
+  }, [admissions])
 
-  const [recommendations] = useState<Recommendation[]>([
-    {
-      id: 'rec1',
-      university: 'IBA Karachi',
-      program: 'MBA',
-      degree: 'Master of Business Administration',
-      deadline: '2025-02-10',
-      fee: 'PKR 150,000',
-      match: '92%',
-    },
-    {
-      id: 'rec2',
-      university: 'Air University',
-      program: 'BS Cyber Security',
-      degree: 'Bachelor of Science',
-      deadline: '2025-02-15',
-      fee: 'PKR 70,000',
-      match: '88%',
-    },
-    {
-      id: 'rec3',
-      university: 'GIKI',
-      program: 'BS Electrical Engineering',
-      degree: 'Bachelor of Science',
-      deadline: '2025-02-20',
-      fee: 'PKR 95,000',
-      match: '85%',
-    },
-  ])
+  // Get recommendations (not saved, high match)
+  const recommendations = useMemo(() => {
+    return admissions
+      .filter(a => !a.saved && a.matchNumeric && a.matchNumeric >= 80)
+      .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
+      .slice(0, 6)
+  }, [admissions])
 
   const handleSelect = (id: string) => {
     setSelectedIds(prev =>
@@ -480,55 +395,62 @@ function WatchlistPage() {
   }
 
   const handleAlertToggle = (id: string) => {
-    setSavedPrograms(prev =>
-      prev.map(p => p.id === id ? { ...p, alertEnabled: !p.alertEnabled } : p)
-    )
-    console.log('Alert toggled for program:', id)
+    toggleAlert(id)
   }
 
   const handleRemove = (id: string) => {
-    setSavedPrograms(prev => prev.filter(p => p.id !== id))
-    setSelectedIds(prev => prev.filter(i => i !== id))
+    if (window.confirm('Remove this program from your watchlist?')) {
+      const program = savedPrograms.find(program => program.id === id)
+      if (program?.alertEnabled) {
+        toggleAlert(id)
+      }
+      if (program) {
+        toggleSaved(id)
+      }
+      setSelectedIds(prev => prev.filter(i => i !== id))
+    }
   }
 
   const handleCompare = () => {
-    if (selectedIds.length >= 2) {
-      const ids = selectedIds.join(',')
-      window.location.href = `/student/compare?ids=${ids}`
+    if (selectedIds.length >= 2 && selectedIds.length <= 4) {
+      navigate(`/student/compare?ids=${selectedIds.join(',')}`)
+    } else if (selectedIds.length < 2) {
+      alert('Please select at least 2 programs to compare.')
+    } else {
+      alert('Please select a maximum of 4 programs to compare.')
     }
   }
 
   const handleSaveRecommendation = (id: string) => {
-    const rec = recommendations.find(r => r.id === id)
-    if (rec) {
-      const newProgram: SavedProgram = {
-        id: `saved-${Date.now()}`,
-        university: rec.university,
-        program: rec.program,
-        degree: rec.degree,
-        deadline: rec.deadline,
-        daysRemaining: Math.floor(Math.random() * 30) + 1,
-        fee: rec.fee,
-        status: 'Verified',
-        alertEnabled: false,
-      }
-      setSavedPrograms(prev => [...prev, newProgram])
-      console.log('Program saved:', newProgram.id)
+    const isSaved = savedPrograms.some(program => program.id === id)
+    if (!isSaved) {
+      toggleSaved(id)
+      alert('Program saved to watchlist!')
+    } else {
+      alert('Program already saved to watchlist.')
     }
   }
 
-  const filteredPrograms = savedPrograms.filter(program => {
-    if (searchQuery && !program.university.toLowerCase().includes(searchQuery.toLowerCase()) && !program.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    if (degreeFilter && !program.degree.includes(degreeFilter)) return false
-    if (statusFilter && program.status !== statusFilter) return false
-    return true
-  })
+  const filteredPrograms = useMemo(() => {
+    return savedPrograms.filter(program => {
+      if (searchQuery && !program.university.toLowerCase().includes(searchQuery.toLowerCase()) && !program.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
+      if (degreeFilter && program.degreeType !== degreeFilter) return false
+      if (statusFilter && program.status !== statusFilter) return false
+      if (deadlineFilter === 'week') {
+        return program.daysRemaining >= 0 && program.daysRemaining <= 7
+      }
+      if (deadlineFilter === 'month') {
+        return program.daysRemaining >= 0 && program.daysRemaining <= 30
+      }
+      if (deadlineFilter === '3months') {
+        return program.daysRemaining >= 0 && program.daysRemaining <= 90
+      }
+      return true
+    })
+  }, [savedPrograms, searchQuery, degreeFilter, statusFilter, deadlineFilter])
 
-  const activeAlerts = savedPrograms.filter(p => p.alertEnabled).length
+  const activeAlerts = savedPrograms.filter(program => program.alertEnabled).length
   const upcomingDeadlines = savedPrograms.filter(p => p.daysRemaining <= 30 && p.daysRemaining >= 0).length
-  const filteredRecommendations = recommendations.filter(rec => 
-    !savedPrograms.some(sp => sp.university === rec.university && sp.program === rec.program)
-  )
 
   return (
     <StudentLayout>
@@ -559,9 +481,9 @@ function WatchlistPage() {
                 onAlertToggle={handleAlertToggle}
                 onRemove={handleRemove}
               />
-              {filteredRecommendations.length > 0 && (
+              {recommendations.length > 0 && (
                 <AiRecommendationCarousel
-                  recommendations={filteredRecommendations}
+                  recommendations={recommendations}
                   onSave={handleSaveRecommendation}
                 />
               )}
