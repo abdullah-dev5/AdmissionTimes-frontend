@@ -1,106 +1,352 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import UniversityLayout from '../../layouts/UniversityLayout'
+import { getStatusColor, type Admission } from '../../data/universityData'
+import { useUniversityData } from '../../contexts/UniversityDataContext'
 
 function ManageAdmissions() {
-  const [activeNav, setActiveNav] = useState('Manage Admissions')
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editId = searchParams.get('edit')
+  const isEditMode = !!editId
+
+  const { admissions, getAdmissionById, createOrUpdateAdmission, deleteAdmission } = useUniversityData()
+  const existingAdmission = editId ? getAdmissionById(editId) : null
+
   const [formData, setFormData] = useState({
-    programTitle: 'Bachelor of Science in Computer Science',
-    degreeType: 'BS',
-    department: 'School of Engineering',
-    academicYear: '2025-2026',
-    applicationDeadline: '',
-    fee: '2500',
-    overview: '',
-    eligibility: '',
-    websiteUrl: 'https://university.edu',
-    admissionPortalLink: 'https://university.edu/admissions',
+    programTitle: existingAdmission?.title || 'Bachelor of Science in Computer Science',
+    degreeType: existingAdmission?.degreeType || 'BS',
+    department: existingAdmission?.department || 'School of Engineering',
+    academicYear: existingAdmission?.academicYear || '2025-2026',
+    applicationDeadline: existingAdmission?.deadline || '',
+    fee: existingAdmission?.fee || '2500',
+    overview: existingAdmission?.overview || '',
+    eligibility: existingAdmission?.eligibility || '',
+    websiteUrl: existingAdmission?.websiteUrl || 'https://university.edu',
+    admissionPortalLink: existingAdmission?.admissionPortalLink || 'https://university.edu/admissions',
   })
 
-  const recentAdmissions = [
-    {
-      id: '1',
-      title: 'BS Computer Science',
-      deadline: 'July 15, 2025',
-      status: 'Pending Audit',
-      statusColor: '#F59E0B',
-      verification: null,
-    },
-    {
-      id: '2',
-      title: 'MBA Fall 2025',
-      deadline: 'Aug 10, 2025',
-      status: 'Verified',
-      statusColor: '#10B981',
-      verification: 'Approved',
-    },
-    {
-      id: '3',
-      title: 'PhD in Physics',
-      deadline: 'June 30, 2025',
-      status: 'Rejected',
-      statusColor: '#EF4444',
-      verification: 'Info Missing',
-    },
-  ]
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (existingAdmission) {
+      setFormData({
+        programTitle: existingAdmission.title,
+        degreeType: existingAdmission.degreeType || 'BS',
+        department: existingAdmission.department || '',
+        academicYear: existingAdmission.academicYear || '2025-2026',
+        applicationDeadline: existingAdmission.deadline || '',
+        fee: existingAdmission.fee || '',
+        overview: existingAdmission.overview || '',
+        eligibility: existingAdmission.eligibility || '',
+        websiteUrl: existingAdmission.websiteUrl || '',
+        admissionPortalLink: existingAdmission.admissionPortalLink || '',
+      })
+    }
+  }, [existingAdmission])
+
+  // Mock function to extract data from PDF (in real app, this would call an API)
+  const extractDataFromPDF = async (_file: File): Promise<Partial<typeof formData>> => {
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    // Mock extracted data - in real app, this would come from OCR/AI extraction
+    return {
+      programTitle: 'Bachelor of Science in Computer Science',
+      degreeType: 'BS',
+      department: 'School of Engineering and Computer Science',
+      academicYear: '2025-2026',
+      applicationDeadline: '2025-07-15',
+      fee: '5000',
+      overview: 'This program provides comprehensive training in computer science fundamentals, software engineering, and modern technologies. Students will gain hands-on experience through projects and internships.',
+      eligibility: 'Minimum 60% marks in F.Sc/ICS/A-Level or equivalent. Entry test required. Mathematics and Physics background preferred.',
+      websiteUrl: 'https://university.edu/cs',
+      admissionPortalLink: 'https://university.edu/admissions/cs',
+    }
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      await processFile(file)
+    }
+  }
+
+  const handleRemoveFile = () => {
+    setUploadedFile(null)
+    setExtractionStatus(null)
+  }
+
+  const processFile = async (file: File) => {
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      alert('Please upload a PDF file only.')
+      return
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB.')
+      return
+    }
+
+    setUploadedFile(file)
+    setIsProcessing(true)
+    setExtractionStatus('Processing PDF and extracting information...')
+
+    try {
+      // Extract data from PDF
+      const extractedData = await extractDataFromPDF(file)
+      
+      // Auto-fill form with extracted data
+      setFormData(prev => ({
+        ...prev,
+        ...extractedData,
+      }))
+      
+      setExtractionStatus('Information extracted successfully! Please review and edit as needed.')
+      
+      // Clear status after 5 seconds
+      setTimeout(() => {
+        setExtractionStatus(null)
+      }, 5000)
+    } catch (error) {
+      setExtractionStatus('Error processing PDF. Please fill the form manually.')
+      console.error('PDF extraction error:', error)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      processFile(file)
+    }
+  }
+
+  const buildAdmissionPayload = (statusOverride?: Admission['status']): Admission => {
+    const now = new Date()
+    const lastAction = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(
+      now.getHours(),
+    ).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+    return {
+      id: existingAdmission?.id ?? `adm-${Date.now()}`,
+      title: formData.programTitle,
+      deadline: formData.applicationDeadline,
+      status: statusOverride ?? existingAdmission?.status ?? 'Pending Audit',
+      views: existingAdmission?.views ?? '0',
+      verifiedBy: existingAdmission?.verifiedBy,
+      lastAction,
+      remarks: existingAdmission?.remarks ?? 'Awaiting admin review',
+      degreeType: formData.degreeType,
+      department: formData.department,
+      academicYear: formData.academicYear,
+      fee: formData.fee,
+      overview: formData.overview,
+      eligibility: formData.eligibility,
+      websiteUrl: formData.websiteUrl,
+      admissionPortalLink: formData.admissionPortalLink,
+    }
+  }
+
+  const computeDiff = (previous: Admission | null, next: Admission) => {
+    if (!previous) {
+      return [
+        { field: 'Title', old: '—', new: next.title },
+        { field: 'Deadline', old: '—', new: next.deadline },
+        { field: 'Status', old: '—', new: next.status },
+      ]
+    }
+
+    const fieldMap: Array<{ key: keyof Admission; label: string }> = [
+      { key: 'title', label: 'Title' },
+      { key: 'deadline', label: 'Deadline' },
+      { key: 'fee', label: 'Fee' },
+      { key: 'department', label: 'Department' },
+      { key: 'degreeType', label: 'Degree Type' },
+      { key: 'academicYear', label: 'Academic Year' },
+      { key: 'overview', label: 'Overview' },
+      { key: 'eligibility', label: 'Eligibility' },
+      { key: 'websiteUrl', label: 'Website URL' },
+      { key: 'admissionPortalLink', label: 'Portal Link' },
+      { key: 'status', label: 'Status' },
+    ]
+
+    return fieldMap
+      .filter(({ key }) => (previous[key] || '') !== (next[key] || ''))
+      .map(({ key, label }) => ({
+        field: label,
+        old: (previous[key] as string) || '—',
+        new: (next[key] as string) || '—',
+      }))
+  }
+
+  const handleSaveDraft = () => {
+    const draft = buildAdmissionPayload('Draft')
+    createOrUpdateAdmission(draft, { diff: computeDiff(existingAdmission ?? null, draft), modifiedBy: 'Rep_01' })
+    alert('Draft saved successfully!')
+  }
+
+  const handlePublish = () => {
+    if (!formData.programTitle || !formData.applicationDeadline) {
+      alert('Please fill in required fields: Program Title and Application Deadline')
+      return
+    }
+
+    const payload = buildAdmissionPayload()
+    const diff = computeDiff(existingAdmission ?? null, payload)
+
+    createOrUpdateAdmission(payload, { diff, modifiedBy: 'Rep_01' })
+
+    if (isEditMode) {
+      alert(`Admission "${formData.programTitle}" updated and published!`)
+    } else {
+      alert(`Admission "${formData.programTitle}" published successfully!`)
+    }
+
+    navigate('/university/dashboard')
+  }
+
+  const recentAdmissions = useMemo(() => {
+    return [...admissions]
+      .sort((a, b) => (b.lastAction || '').localeCompare(a.lastAction || ''))
+      .slice(0, 3)
+  }, [admissions])
+
+  const handleEditRecent = (id: string) => {
+    navigate(`/university/manage-admissions?edit=${id}`)
+  }
+
+  const handleDeleteRecent = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this admission?')) {
+      deleteAdmission(id)
+      alert('Admission deleted!')
+    }
+  }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
-      <div className="flex h-screen overflow-hidden">
-        <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#2563EB' }}>
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-lg" style={{ color: '#111827' }}>University Portal</span>
-            </div>
-          </div>
-          <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-1">
-              {[
-                { name: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', link: '/university/dashboard' },
-                { name: 'Manage Admissions', icon: 'M9 12h6m-6 4h6m-2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2h-2.5', link: '/university/manage-admissions' },
-                { name: 'Programs', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', link: '#' },
-                { name: 'Announcements', icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z', link: '#' },
-                { name: 'Analytics', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', link: '#' },
-                { name: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z', link: '#' },
-                { name: 'Logout', icon: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1', link: '#' },
-              ].map((item) => (
-                <li key={item.name}>
-                  <Link
-                    to={item.link || '#'}
-                    onClick={() => setActiveNav(item.name)}
-                    className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors ${
-                      activeNav === item.name
-                        ? 'text-white font-medium'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                    style={activeNav === item.name ? { backgroundColor: '#2563EB' } : {}}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                    </svg>
-                    <span>{item.name}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </aside>
-
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">
+    <UniversityLayout>
+      <div className="p-6">
             <div className="max-w-7xl mx-auto">
               <div className="mb-6">
-                <h1 className="text-3xl font-bold mb-2" style={{ color: '#111827' }}>Upload or Manage Admissions</h1>
-                <p className="text-gray-600">Add new admissions or update existing listings. Records are auto-published as Pending Audit.</p>
+                <h1 className="text-3xl font-bold mb-2" style={{ color: '#111827' }}>
+                  {isEditMode ? 'Edit Admission' : 'Upload or Manage Admissions'}
+                </h1>
+                <p className="text-gray-600">
+                  {isEditMode 
+                    ? 'Update admission details. Changes will require re-verification.' 
+                    : 'Add new admissions or update existing listings. Records are auto-published as Pending Audit.'}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
+                  {/* PDF/Brochure Upload Section */}
+                  <div 
+                    className={`bg-white rounded-lg shadow-sm p-6 border-2 border-dashed transition-colors ${
+                      isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload PDF/Brochure (Optional)</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Upload a PDF or brochure to automatically extract and fill admission information. Supported formats: PDF (max 10MB).
+                        </p>
+                        
+                        {!uploadedFile ? (
+                          <div>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept=".pdf"
+                              onChange={handleFileUpload}
+                              disabled={isProcessing}
+                              className="hidden"
+                            />
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                disabled={isProcessing}
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ backgroundColor: '#2563EB' }}
+                              >
+                                {isProcessing ? 'Processing...' : 'Choose PDF File'}
+                              </button>
+                              <span className="text-sm text-gray-500">or drag and drop here</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                              </svg>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{uploadedFile.name}</p>
+                                <p className="text-xs text-gray-500">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={handleRemoveFile}
+                              disabled={isProcessing}
+                              className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+
+                        {isProcessing && (
+                          <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
+                            <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Extracting information from PDF...</span>
+                          </div>
+                        )}
+
+                        {extractionStatus && !isProcessing && (
+                          <div className={`mt-4 p-3 rounded-lg text-sm ${
+                            extractionStatus.includes('Error') 
+                              ? 'bg-red-50 text-red-700' 
+                              : 'bg-green-50 text-green-700'
+                          }`}>
+                            {extractionStatus}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,12 +436,12 @@ function ManageAdmissions() {
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Fee</label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Rs</span>
                             <input
                               type="text"
                               value={formData.fee}
                               onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
-                              className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           </div>
                         </div>
@@ -324,11 +570,18 @@ function ManageAdmissions() {
                     >
                       Cancel / Back
                     </Link>
-                    <button className="px-6 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors">
+                    <button 
+                      onClick={handleSaveDraft}
+                      className="px-6 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                    >
                       Save as Draft
                     </button>
-                    <button className="px-6 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" style={{ backgroundColor: '#2563EB' }}>
-                      Publish Admission
+                    <button 
+                      onClick={handlePublish}
+                      className="px-6 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
+                      style={{ backgroundColor: '#2563EB' }}
+                    >
+                      {isEditMode ? 'Update & Publish' : 'Publish Admission'}
                     </button>
                   </div>
                 </div>
@@ -337,44 +590,53 @@ function ManageAdmissions() {
                   <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Recent Admissions</h2>
                     <div className="space-y-4">
-                      {recentAdmissions.map((admission) => (
-                        <div key={admission.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-medium text-sm" style={{ color: '#111827' }}>{admission.title}</h3>
-                            <div className="flex items-center gap-2">
-                              <button className="p-1 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              <button className="p-1 text-gray-600 hover:text-red-600 cursor-pointer transition-colors">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
+                      {recentAdmissions.map((admission) => {
+                        const statusColors = getStatusColor(admission.status)
+                        return (
+                          <div key={admission.id} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <h3 className="font-medium text-sm" style={{ color: '#111827' }}>{admission.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => handleEditRecent(admission.id)}
+                                  className="p-1 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
+                                  title="Edit"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteRecent(admission.id)}
+                                  className="p-1 text-gray-600 hover:text-red-600 cursor-pointer transition-colors"
+                                  title="Delete"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
                             </div>
+                            <p className="text-xs text-gray-600 mb-2">Deadline: {admission.deadline}</p>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.bg }}></div>
+                              <span className="text-xs font-medium" style={{ color: statusColors.text }}>{admission.status}</span>
+                            </div>
+                            {admission.verifiedBy && (
+                              <span className="text-xs font-medium text-green-600">
+                                Verified by {admission.verifiedBy}
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-gray-600 mb-2">Deadline: {admission.deadline}</p>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: admission.statusColor }}></div>
-                            <span className="text-xs font-medium" style={{ color: admission.statusColor }}>{admission.status}</span>
-                          </div>
-                          {admission.verification && (
-                            <span className={`text-xs font-medium ${admission.verification === 'Approved' ? 'text-green-600' : 'text-red-600'}`}>
-                              {admission.verification}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </main>
-        </div>
       </div>
-    </div>
+    </UniversityLayout>
   )
 }
 

@@ -1,30 +1,23 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-
-interface Deadline {
-  id: string
-  university: string
-  program: string
-  degree: string
-  deadline: string
-  daysRemaining: number
-  status: 'Verified' | 'Pending' | 'Updated' | 'Closed'
-  alertEnabled: boolean
-}
+import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
+import { useStudentData } from '../../contexts/StudentDataContext'
 
 const DeadlineHeader = ({ 
   onUniversityFilter, 
   onDegreeFilter, 
   onDateRangeFilter,
   onSearch,
-  searchValue
+  searchValue,
+  universities
 }: { 
   onUniversityFilter: (value: string) => void
   onDegreeFilter: (value: string) => void
   onDateRangeFilter: (value: string) => void
   onSearch: (value: string) => void
   searchValue: string
+  universities: string[]
 }) => {
   return (
     <div className="bg-white flex flex-col border-b border-gray-200 px-6 py-3">
@@ -52,10 +45,9 @@ const DeadlineHeader = ({
           className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
         >
           <option value="">All Universities</option>
-          <option value="FAST">FAST University</option>
-          <option value="NUST">NUST</option>
-          <option value="LUMS">LUMS</option>
-          <option value="COMSATS">COMSATS</option>
+          {universities.map(uni => (
+            <option key={uni} value={uni}>{uni}</option>
+          ))}
         </select>
         <select
           onChange={(e) => onDegreeFilter(e.target.value)}
@@ -99,34 +91,24 @@ const AlertToggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => 
   )
 }
 
-const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: Deadline; onAlertToggle: (id: string) => void }) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Verified': return { bg: '#D1FAE5', text: '#10B981' }
-      case 'Pending': return { bg: '#FEF3C7', text: '#F59E0B' }
-      case 'Updated': return { bg: '#DBEAFE', text: '#3B82F6' }
-      case 'Closed': return { bg: '#FEE2E2', text: '#EF4444' }
-      default: return { bg: '#F3F4F6', text: '#9CA3AF' }
-    }
-  }
-
+const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission & { daysRemaining: number; alertEnabled: boolean }; onAlertToggle: (id: string) => void }) => {
   const statusColors = getStatusColor(deadline.status)
-  const isClosed = deadline.status === 'Closed' || deadline.daysRemaining < 0
+  const isClosed = deadline.programStatus === 'Closed' || deadline.daysRemaining < 0
 
   return (
     <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${isClosed ? 'opacity-60' : ''}`}>
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-start justify-between mb-4 gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: '#1F2937' }}>
             {deadline.university.substring(0, 2).toUpperCase()}
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }}>{deadline.university}</h3>
-            <p className="text-sm text-gray-600 truncate">{deadline.program}</p>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={deadline.university}>{deadline.university}</h3>
+            <p className="text-sm text-gray-600 truncate" title={deadline.program}>{deadline.program}</p>
           </div>
         </div>
-        <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ml-2" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-          {deadline.status}
+        <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+          {deadline.programStatus}
         </span>
       </div>
 
@@ -143,7 +125,7 @@ const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: Deadline; onAlert
           <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <span className={`font-medium ${isClosed ? 'text-gray-500' : 'text-red-600'}`}>{deadline.deadline}</span>
+          <span className={`font-medium ${isClosed ? 'text-gray-500' : 'text-red-600'}`}>{deadline.deadlineDisplay}</span>
         </div>
 
         <div className="flex items-center gap-2 text-sm">
@@ -173,7 +155,7 @@ const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: Deadline; onAlert
   )
 }
 
-const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: Deadline[]; onAlertToggle: (id: string) => void }) => {
+const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]; onAlertToggle: (id: string) => void }) => {
   const groupedDeadlines = deadlines.reduce((acc, deadline) => {
     const date = deadline.deadline
     if (!acc[date]) {
@@ -181,7 +163,7 @@ const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: Deadline[]; onA
     }
     acc[date].push(deadline)
     return acc
-  }, {} as Record<string, Deadline[]>)
+  }, {} as Record<string, (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]>)
 
   const sortedDates = Object.keys(groupedDeadlines).sort((a, b) => {
     return new Date(a).getTime() - new Date(b).getTime()
@@ -235,7 +217,7 @@ const AiSummaryBox = ({ count }: { count: number }) => {
   )
 }
 
-const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: Deadline[]; selectedDate: string | null; onDateSelect: (date: string | null) => void }) => {
+const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (StudentAdmission & { daysRemaining: number })[]; selectedDate: string | null; onDateSelect: (date: string | null) => void }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   
   const getDaysInMonth = (date: Date) => {
@@ -434,89 +416,48 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: De
 }
 
 function DeadlinePage() {
+  const { admissions, toggleAlert } = useStudentData()
   const [universityFilter, setUniversityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [dateRangeFilter, setDateRangeFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  const [deadlines, setDeadlines] = useState<Deadline[]>([
-    {
-      id: '1',
-      university: 'FAST University',
-      program: 'BS Computer Science',
-      degree: 'Bachelor of Science',
-      deadline: '2025-01-15',
-      daysRemaining: 3,
-      status: 'Verified',
-      alertEnabled: true,
-    },
-    {
-      id: '2',
-      university: 'NUST',
-      program: 'MS Data Science',
-      degree: 'Master of Science',
-      deadline: '2025-01-15',
-      daysRemaining: 3,
-      status: 'Pending',
-      alertEnabled: false,
-    },
-    {
-      id: '3',
-      university: 'LUMS',
-      program: 'PhD in Management',
-      degree: 'Doctor of Philosophy',
-      deadline: '2025-01-20',
-      daysRemaining: 8,
-      status: 'Updated',
-      alertEnabled: true,
-    },
-    {
-      id: '4',
-      university: 'COMSATS',
-      program: 'BS Software Engineering',
-      degree: 'Bachelor of Science',
-      deadline: '2025-01-25',
-      daysRemaining: 13,
-      status: 'Verified',
-      alertEnabled: false,
-    },
-    {
-      id: '5',
-      university: 'IBA Karachi',
-      program: 'MBA',
-      degree: 'Master of Business Administration',
-      deadline: '2025-02-01',
-      daysRemaining: 20,
-      status: 'Verified',
-      alertEnabled: true,
-    },
-    {
-      id: '6',
-      university: 'Air University',
-      program: 'BS Cyber Security',
-      degree: 'Bachelor of Science',
-      deadline: '2024-12-20',
-      daysRemaining: -10,
-      status: 'Closed',
-      alertEnabled: false,
-    },
-  ])
+  const universities = useMemo(() => {
+    return Array.from(new Set(admissions.map(admission => admission.university))).sort()
+  }, [admissions])
+
+  // Convert shared admissions to deadline format with calculated days remaining
+  const deadlines = useMemo(() => {
+    return admissions.map(admission => ({
+      ...admission,
+      daysRemaining: calculateDaysRemaining(admission.deadline),
+      alertEnabled: Boolean(admission.alertEnabled),
+    }))
+  }, [admissions])
 
   const handleAlertToggle = (id: string) => {
-    setDeadlines(deadlines.map(d => 
-      d.id === id ? { ...d, alertEnabled: !d.alertEnabled } : d
-    ))
-    console.log('Alert toggled for deadline:', id)
+    toggleAlert(id)
   }
 
-  const filteredDeadlines = deadlines.filter(deadline => {
-    if (universityFilter && !deadline.university.includes(universityFilter)) return false
-    if (degreeFilter && !deadline.degree.includes(degreeFilter)) return false
-    if (searchQuery && !deadline.university.toLowerCase().includes(searchQuery.toLowerCase()) && !deadline.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    if (selectedDate && deadline.deadline !== selectedDate) return false
-    return true
-  })
+  const filteredDeadlines = useMemo(() => {
+    return deadlines.filter(deadline => {
+      if (universityFilter && !deadline.university.includes(universityFilter)) return false
+      if (degreeFilter && deadline.degreeType !== degreeFilter) return false
+      if (searchQuery && !deadline.university.toLowerCase().includes(searchQuery.toLowerCase()) && !deadline.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
+      if (selectedDate && deadline.deadline !== selectedDate) return false
+      if (dateRangeFilter === 'week') {
+        return deadline.daysRemaining >= 0 && deadline.daysRemaining <= 7
+      }
+      if (dateRangeFilter === 'month') {
+        return deadline.daysRemaining >= 0 && deadline.daysRemaining <= 30
+      }
+      if (dateRangeFilter === '3months') {
+        return deadline.daysRemaining >= 0 && deadline.daysRemaining <= 90
+      }
+      return true
+    })
+  }, [deadlines, universityFilter, degreeFilter, searchQuery, selectedDate, dateRangeFilter])
 
   const approachingCount = filteredDeadlines.filter(d => d.daysRemaining >= 0 && d.daysRemaining <= 7).length
 
@@ -529,6 +470,7 @@ function DeadlinePage() {
           onDateRangeFilter={setDateRangeFilter}
           onSearch={setSearchQuery}
           searchValue={searchQuery}
+          universities={universities}
         />
 
         <div className="flex-1 overflow-y-auto">

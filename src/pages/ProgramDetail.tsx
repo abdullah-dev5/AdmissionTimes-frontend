@@ -1,14 +1,23 @@
 import { Link, useParams, Navigate } from 'react-router-dom'
-import { useState } from 'react'
-import { getProgramById, getRelatedPrograms } from '../data/mockData'
+import { useState, useMemo } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
+import { useStudentData } from '../contexts/StudentDataContext'
+import { calculateDaysRemaining } from '../data/studentData'
 
 function ProgramDetail() {
   const { id } = useParams()
   const [activeTab, setActiveTab] = useState('Overview')
+  const { getAdmissionById, admissions } = useStudentData()
 
-  const program = id ? getProgramById(id) : undefined
-  const relatedPrograms = program ? getRelatedPrograms(id || '', 3) : []
+  const program = id ? getAdmissionById(id) : undefined
+  
+  // Get related programs (same degree type, different university, limit 3)
+  const relatedPrograms = useMemo(() => {
+    if (!program) return []
+    return admissions
+      .filter(a => a.id !== program.id && a.degreeType === program.degreeType)
+      .slice(0, 3)
+  }, [program, admissions])
 
   if (!program) {
     return <Navigate to="/student/dashboard" replace />
@@ -23,7 +32,8 @@ function ProgramDetail() {
     }
   }
 
-  const statusColors = getStatusColor(program.status)
+  const statusColors = getStatusColor(program.programStatus)
+  const daysRemaining = calculateDaysRemaining(program.deadline)
 
   return (
     <StudentLayout>
@@ -31,7 +41,7 @@ function ProgramDetail() {
         <div className="container mx-auto max-w-7xl">
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="mb-6">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: '#111827' }}>{program.title}</h1>
+            <h1 className="text-4xl font-bold mb-2" style={{ color: '#111827' }}>{program.program}</h1>
             <p className="text-xl text-gray-600 mb-4">{program.university}</p>
             <div className="flex items-center gap-4 mb-6">
               <div className="flex items-center gap-2 text-gray-600">
@@ -42,7 +52,7 @@ function ProgramDetail() {
                 <span className="text-base">{program.location}</span>
               </div>
               <span className="px-3 py-1 rounded-full text-sm font-medium" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-                {program.status}
+                {program.programStatus}
               </span>
             </div>
           </div>
@@ -73,7 +83,7 @@ function ProgramDetail() {
                 Download
               </button>
             </div>
-            <p className="text-xs text-gray-500">Last Updated: {program.lastUpdated}</p>
+            <p className="text-xs text-gray-500">Last Updated: {program.updated}</p>
           </div>
         </div>
 
@@ -95,42 +105,44 @@ function ProgramDetail() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <div>
-                    <span className="font-medium text-gray-800">Application Window: </span>
-                    <span className="text-gray-600">{program.summary.applicationWindow}</span>
+                    <span className="font-medium text-gray-800">Application Deadline: </span>
+                    <span className="text-gray-600">{program.deadlineDisplay} {daysRemaining >= 0 ? `(${daysRemaining} days left)` : '(Deadline passed)'}</span>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
                   <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
                   </svg>
                   <div>
-                    <span className="font-medium text-gray-800">Eligibility: </span>
-                    <span className="text-gray-600">{program.summary.eligibility}</span>
+                    <span className="font-medium text-gray-800">Degree Type: </span>
+                    <span className="text-gray-600">{program.degree}</span>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
                   <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <span className="font-medium text-gray-800">Entry Test: </span>
-                    <span className="text-gray-600">{program.summary.entryTest}</span>
+                    <span className="font-medium text-gray-800">Status: </span>
+                    <span className="text-gray-600">{program.status}</span>
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
                   <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <span className="font-medium text-gray-800">Application: </span>
-                    <span className="text-gray-600">{program.summary.application}</span>
+                    <span className="font-medium text-gray-800">Fee: </span>
+                    <span className="text-gray-600">{program.fee}</span>
                   </div>
                 </li>
               </ul>
-              <div className="pt-4 border-t border-gray-200">
-                <button className="text-sm font-medium cursor-pointer transition-colors mr-4" style={{ color: '#2563EB' }}>Show More</button>
-                <button className="text-sm font-medium cursor-pointer transition-colors" style={{ color: '#2563EB' }}>Show Original Description</button>
-              </div>
+              {program.aiSummary && (
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-gray-700 leading-relaxed">{program.aiSummary}</p>
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
@@ -155,99 +167,105 @@ function ProgramDetail() {
               {activeTab === 'Overview' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Overview</h2>
-                  <p className="text-gray-700 mb-6 leading-relaxed">
-                    {program.overview.description}
-                  </p>
-                  <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Program Highlights</h3>
-                  <ul className="list-disc list-inside space-y-2 text-gray-700 mb-6">
-                    {program.overview.highlights.map((highlight, idx) => (
-                      <li key={idx}>{highlight}</li>
-                    ))}
-                  </ul>
-                  <div className="w-full h-64 bg-gray-200 rounded-lg overflow-hidden">
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Program Information</h3>
+                      <p className="text-gray-700 leading-relaxed">
+                        {program.program} at {program.university} is a {program.degree} program located in {program.location}.
+                        {program.aiSummary && (
+                          <span className="block mt-2">{program.aiSummary}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Degree Type</p>
+                        <p className="font-semibold text-gray-800">{program.degree}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Location</p>
+                        <p className="font-semibold text-gray-800">{program.location}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Application Fee</p>
+                        <p className="font-semibold text-gray-800">{program.fee}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-1">Deadline</p>
+                        <p className="font-semibold text-gray-800">{program.deadlineDisplay}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'Eligibility' && program.eligibility && (
+              {activeTab === 'Eligibility' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Eligibility Requirements</h2>
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Academic Requirements</h3>
-                    <ul className="list-disc list-inside space-y-2 text-gray-700">
-                      {program.eligibility.requirements.map((req, idx) => (
-                        <li key={idx}>{req}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#111827' }}>Required Documents</h3>
-                    <ul className="list-disc list-inside space-y-2 text-gray-700">
-                      {program.eligibility.documents.map((doc, idx) => (
-                        <li key={idx}>{doc}</li>
-                      ))}
-                    </ul>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Degree Type</h3>
+                      <p className="text-gray-700">{program.degree}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>General Requirements</h3>
+                      <p className="text-gray-700">Please contact the university directly for specific eligibility requirements and required documents for this program.</p>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'Important Dates' && program.importantDates && (
+              {activeTab === 'Important Dates' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Important Dates</h2>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Application Start Date</span>
-                      <span className="text-gray-600">{program.importantDates.applicationStart}</span>
+                      <span className="font-medium text-gray-700">Application Deadline</span>
+                      <span className="text-gray-600">{program.deadlineDisplay}</span>
                     </div>
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Application End Date</span>
-                      <span className="text-gray-600">{program.importantDates.applicationEnd}</span>
+                      <span className="font-medium text-gray-700">Days Remaining</span>
+                      <span className={`font-semibold ${daysRemaining >= 0 && daysRemaining <= 7 ? 'text-red-600' : daysRemaining >= 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                        {daysRemaining >= 0 ? `${daysRemaining} days` : 'Deadline passed'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Entry Test Date</span>
-                      <span className="text-gray-600">{program.importantDates.entryTestDate}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Result Declaration Date</span>
-                      <span className="text-gray-600">{program.importantDates.resultDate}</span>
+                      <span className="font-medium text-gray-700">Last Updated</span>
+                      <span className="text-gray-600">{program.updated}</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'Fee Structure' && program.feeStructure && (
+              {activeTab === 'Fee Structure' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Fee Structure</h2>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Admission Fee</span>
-                      <span className="text-gray-600 font-semibold">{program.feeStructure.admissionFee}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-700">Semester Fee</span>
-                      <span className="text-gray-600 font-semibold">{program.feeStructure.semesterFee}</span>
-                    </div>
                     <div className="flex items-center justify-between p-4 border-2 border-blue-500 rounded-lg" style={{ backgroundColor: '#E0E7FF' }}>
-                      <span className="font-semibold text-gray-800">Total Program Fee</span>
-                      <span className="font-bold" style={{ color: '#2563EB' }}>{program.feeStructure.totalProgramFee}</span>
+                      <span className="font-semibold text-gray-800">Application Fee</span>
+                      <span className="font-bold" style={{ color: '#2563EB' }}>{program.fee}</span>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">For detailed fee structure including semester fees and total program cost, please contact the university directly or visit their official website.</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'Documents' && program.documents && (
+              {activeTab === 'Documents' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Required Documents</h2>
-                  <ul className="list-disc list-inside space-y-3 text-gray-700">
-                    {program.documents.map((doc, idx) => (
-                      <li key={idx} className="text-base">{doc}</li>
-                    ))}
-                  </ul>
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-gray-700 mb-4">Please contact the university directly or visit their official website for the complete list of required documents for this program.</p>
+                    <p className="text-sm text-gray-600">Common documents typically required include:</p>
+                    <ul className="list-disc list-inside space-y-2 text-gray-700 mt-2">
+                      <li>Academic transcripts and certificates</li>
+                      <li>CNIC/B-Form copy</li>
+                      <li>Recent passport size photographs</li>
+                      <li>Entry test result (if applicable)</li>
+                      <li>Character certificate</li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>
@@ -258,7 +276,7 @@ function ProgramDetail() {
               <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>You may also be interested in...</h2>
               <div className="space-y-4">
                 {relatedPrograms.map((rp) => {
-                  const rpColors = getStatusColor(rp.status)
+                  const rpColors = getStatusColor(rp.programStatus)
                   return (
                     <Link
                       to={`/program/${rp.id}`}
@@ -266,9 +284,9 @@ function ProgramDetail() {
                       className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-medium text-sm" style={{ color: '#111827' }}>{rp.title}</h3>
+                        <h3 className="font-medium text-sm" style={{ color: '#111827' }}>{rp.program}</h3>
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: rpColors.bg, color: rpColors.text }}>
-                          {rp.status}
+                          {rp.programStatus}
                         </span>
                       </div>
                       <p className="text-xs text-gray-600">{rp.university}</p>
@@ -281,29 +299,24 @@ function ProgramDetail() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links</h2>
               <div className="space-y-3">
-                <a
-                  href={program.officialLinks.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
-                  style={{ backgroundColor: '#2563EB' }}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                  </svg>
-                  Visit Official Website
-                </a>
-                <a
-                  href={program.officialLinks.prospectus}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download Prospectus
-                </a>
+                {program.officialUrl ? (
+                  <a
+                    href={program.officialUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+                    style={{ backgroundColor: '#2563EB' }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    Visit Official Website
+                  </a>
+                ) : (
+                  <div className="p-4 bg-gray-50 rounded-lg text-center">
+                    <p className="text-sm text-gray-600">Official website link not available. Please contact the university directly for more information.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

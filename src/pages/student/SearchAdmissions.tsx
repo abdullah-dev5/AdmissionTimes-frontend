@@ -1,73 +1,35 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
+import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
+import { useStudentData } from '../../contexts/StudentDataContext'
 
 function SearchAdmissions() {
-  const [aiSearch, setAiSearch] = useState(false)
+  const navigate = useNavigate()
+  const { admissions, toggleSaved } = useStudentData()
   const [viewMode, setViewMode] = useState('grid')
   const [filtersCollapsed, setFiltersCollapsed] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [universityFilter, setUniversityFilter] = useState('')
+  const [cityFilter, setCityFilter] = useState('')
+  const [degreeFilter, setDegreeFilter] = useState('')
   const [feeRange, setFeeRange] = useState([10000, 200000])
+  const [deadlineFilter, setDeadlineFilter] = useState('')
+  const [programTitleFilter, setProgramTitleFilter] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
+  const [sortBy, setSortBy] = useState('Relevance')
+  const [compareIds, setCompareIds] = useState<string[]>([])
 
-  const admissions = [
-    {
-      id: '1',
-      university: 'FAST University',
-      program: 'BS Computer Science',
-      deadline: 'July 30, 2025',
-      fee: 'PKR 75,000',
-      updated: 'Updated 2 days ago',
-      status: 'Verified',
-      statusColor: '#10B981',
-      logoBg: '#1F2937',
-    },
-    {
-      id: '2',
-      university: 'NUST',
-      program: 'MS Data Science',
-      deadline: 'August 15, 2025',
-      fee: 'PKR 120,000',
-      updated: 'Updated 5 days ago',
-      status: 'Pending',
-      statusColor: '#FACC15',
-      logoBg: '#1F2937',
-    },
-    {
-      id: '3',
-      university: 'LUMS',
-      program: 'PhD in Management',
-      deadline: 'June 20, 2025',
-      fee: 'PKR 98,000',
-      updated: 'Updated 1 week ago',
-      status: 'Verified',
-      statusColor: '#10B981',
-      logoBg: '#1F2937',
-    },
-  ]
+  const savedIds = useMemo(() => admissions.filter(a => a.saved).map(a => a.id), [admissions])
 
-  const recommendedAdmissions = [
-    {
-      id: '4',
-      university: 'Air University',
-      program: 'BS Cyber Security',
-      deadline: 'Aug 5, 2025',
-      logoBg: '#3B82F6',
-    },
-    {
-      id: '5',
-      university: 'COMSATS',
-      program: 'BS Software Engineering',
-      deadline: 'Jul 25, 2025',
-      logoBg: '#10B981',
-    },
-    {
-      id: '6',
-      university: 'IBA Karachi',
-      program: 'BS Economics',
-      deadline: 'Sep 1, 2025',
-      logoBg: '#1F2937',
-    },
-  ]
+  // Get unique values for filters
+  const universities = useMemo(() => {
+    return Array.from(new Set(admissions.map(a => a.university))).sort()
+  }, [admissions])
+
+  const cities = useMemo(() => {
+    return Array.from(new Set(admissions.map(a => a.city))).sort()
+  }, [admissions])
 
   const toggleStatus = (status: string) => {
     setSelectedStatus(prev =>
@@ -75,6 +37,104 @@ function SearchAdmissions() {
         ? prev.filter(s => s !== status)
         : [...prev, status]
     )
+  }
+
+  const toggleSave = (id: string) => {
+    toggleSaved(id)
+  }
+
+  const handleResetFilters = () => {
+    setSearchQuery('')
+    setUniversityFilter('')
+    setCityFilter('')
+    setDegreeFilter('')
+    setFeeRange([10000, 200000])
+    setDeadlineFilter('')
+    setProgramTitleFilter('')
+    setSelectedStatus([])
+  }
+
+  // Filter and sort admissions
+  const filteredAdmissions = useMemo(() => {
+    let filtered = [...admissions]
+
+    // Search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(a =>
+        a.university.toLowerCase().includes(query) ||
+        a.program.toLowerCase().includes(query) ||
+        a.degree.toLowerCase().includes(query)
+      )
+    }
+
+    // University filter
+    if (universityFilter) {
+      filtered = filtered.filter(a => a.university === universityFilter)
+    }
+
+    // City filter
+    if (cityFilter) {
+      filtered = filtered.filter(a => a.city === cityFilter)
+    }
+
+    // Degree filter
+    if (degreeFilter) {
+      filtered = filtered.filter(a => a.degreeType === degreeFilter)
+    }
+
+    // Fee range filter
+    filtered = filtered.filter(a => a.feeNumeric >= feeRange[0] && a.feeNumeric <= feeRange[1])
+
+    // Deadline filter
+    if (deadlineFilter) {
+      filtered = filtered.filter(a => a.deadline <= deadlineFilter)
+    }
+
+    // Program title filter
+    if (programTitleFilter.trim()) {
+      const query = programTitleFilter.toLowerCase()
+      filtered = filtered.filter(a => a.program.toLowerCase().includes(query))
+    }
+
+    // Status filter
+    if (selectedStatus.length > 0) {
+      filtered = filtered.filter(a => selectedStatus.includes(a.status))
+    }
+
+    // Sort
+    if (sortBy === 'Deadline') {
+      filtered.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+    } else if (sortBy === 'Fee (Low to High)') {
+      filtered.sort((a, b) => a.feeNumeric - b.feeNumeric)
+    } else if (sortBy === 'Fee (High to Low)') {
+      filtered.sort((a, b) => b.feeNumeric - a.feeNumeric)
+    } else if (sortBy === 'Relevance') {
+      filtered.sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
+    }
+
+    return filtered
+  }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, feeRange, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
+
+  const toggleCompare = (id: string) => {
+    setCompareIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id)
+      } else if (prev.length < 4) {
+        return [...prev, id]
+      } else {
+        alert('You can compare up to 4 programs at once. Please remove one first.')
+        return prev
+      }
+    })
+  }
+
+  const handleCompare = () => {
+    if (compareIds.length >= 2) {
+      navigate(`/student/compare?ids=${compareIds.join(',')}`)
+    } else {
+      alert('Please select at least 2 programs to compare.')
+    }
   }
 
   return (
@@ -86,7 +146,9 @@ function SearchAdmissions() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Q Search for programs, universities, or use AI search..."
+                  placeholder="Search for programs, universities, or use AI search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   style={{ color: '#111827' }}
                 />
@@ -96,22 +158,14 @@ function SearchAdmissions() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">AI Search</span>
                 <button
-                  onClick={() => setAiSearch(!aiSearch)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors ${
-                    aiSearch ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      aiSearch ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              <button className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" style={{ backgroundColor: '#2563EB' }}>
+                onClick={() => {
+                  // In real app, this would trigger AI search
+                  alert('AI Search feature coming soon!')
+                }}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
+                style={{ backgroundColor: '#2563EB' }}
+              >
                 Search
               </button>
             </div>
@@ -151,27 +205,35 @@ function SearchAdmissions() {
                       </svg>
                       University
                     </label>
-                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm">
-                      <option>All Universities</option>
-                      <option>FAST University</option>
-                      <option>NUST</option>
-                      <option>LUMS</option>
-                      <option>COMSATS</option>
+                  <select
+                    value={universityFilter}
+                    onChange={(e) => setUniversityFilter(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
+                  >
+                    <option value="">All Universities</option>
+                    {universities.map(uni => (
+                      <option key={uni} value={uni}>{uni}</option>
+                    ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
                       City
                     </label>
-                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm">
-                      <option>All Cities</option>
-                      <option>Islamabad</option>
-                      <option>Lahore</option>
-                      <option>Karachi</option>
+                  <select
+                    value={cityFilter}
+                    onChange={(e) => setCityFilter(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
+                  >
+                    <option value="">All Cities</option>
+                    {cities.map(city => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
                     </select>
                   </div>
 
@@ -183,12 +245,19 @@ function SearchAdmissions() {
                       </svg>
                       Degree
                     </label>
-                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm">
-                      <option>Any Degree</option>
-                      <option>BS</option>
-                      <option>MS</option>
-                      <option>PhD</option>
-                      <option>MBA</option>
+                  <select
+                    value={degreeFilter}
+                    onChange={(e) => setDegreeFilter(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
+                  >
+                    <option value="">Any Degree</option>
+                    <option value="BS">BS</option>
+                    <option value="MS">MS</option>
+                    <option value="PhD">PhD</option>
+                    <option value="MBA">MBA</option>
+                    <option value="BBA">BBA</option>
+                    <option value="MD">MD</option>
+                    <option value="MPhil">MPhil</option>
                     </select>
                   </div>
 
@@ -204,6 +273,7 @@ function SearchAdmissions() {
                         type="range"
                         min="10000"
                         max="200000"
+                      step="10000"
                         value={feeRange[1]}
                         onChange={(e) => setFeeRange([feeRange[0], parseInt(e.target.value)])}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
@@ -211,6 +281,7 @@ function SearchAdmissions() {
                       />
                       <div className="flex justify-between mt-2 text-xs text-gray-600">
                         <span>10k</span>
+                      <span>PKR {feeRange[1].toLocaleString()}</span>
                         <span>200k+</span>
                       </div>
                     </div>
@@ -221,17 +292,15 @@ function SearchAdmissions() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      Deadline
+                    Deadline Before
                     </label>
                     <div className="relative">
                       <input
                         type="date"
-                        placeholder="mm/dd/yyyy"
+                      value={deadlineFilter}
+                      onChange={(e) => setDeadlineFilter(e.target.value)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       />
-                      <svg className="w-5 h-5 absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
                     </div>
                   </div>
 
@@ -245,6 +314,8 @@ function SearchAdmissions() {
                     <input
                       type="text"
                       placeholder="e.g., Computer Science"
+                    value={programTitleFilter}
+                    onChange={(e) => setProgramTitleFilter(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     />
                   </div>
@@ -257,32 +328,32 @@ function SearchAdmissions() {
                       Status
                     </label>
                     <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                    {['Verified', 'Pending', 'Updated'].map(status => (
+                      <label key={status} className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={selectedStatus.includes('Verified')}
-                          onChange={() => toggleStatus('Verified')}
+                          checked={selectedStatus.includes(status)}
+                          onChange={() => toggleStatus(status)}
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                         />
-                        <span className="text-sm text-gray-700">Verified</span>
+                        <span className="text-sm text-gray-700">{status}</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedStatus.includes('Pending')}
-                          onChange={() => toggleStatus('Pending')}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                        />
-                        <span className="text-sm text-gray-700">Pending</span>
-                      </label>
+                    ))}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
-                    <button className="flex-1 px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" style={{ backgroundColor: '#2563EB' }}>
-                      ✓ Apply Filters
+                  <button
+                    onClick={handleResetFilters}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors"
+                  >
+                    Reset
                     </button>
-                    <button className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">
+                  <button
+                    onClick={handleResetFilters}
+                    className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+                    title="Reset filters"
+                  >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
@@ -294,7 +365,24 @@ function SearchAdmissions() {
 
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-6">
-                  <p className="text-gray-600">Showing 12 Admissions</p>
+              <div className="flex items-center gap-4">
+                <p className="text-gray-600">Showing {filteredAdmissions.length} Admissions</p>
+                {compareIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">{compareIds.length} selected</span>
+                    <button
+                      onClick={handleCompare}
+                      className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2"
+                      style={{ backgroundColor: '#2563EB' }}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                      </svg>
+                      Compare ({compareIds.length})
+                    </button>
+                  </div>
+                )}
+              </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 border border-gray-300 rounded-lg overflow-hidden">
                       <button
@@ -318,38 +406,46 @@ function SearchAdmissions() {
                         </svg>
                       </button>
                     </div>
-                    <select className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                      <option>Sort by: Relevance</option>
-                      <option>Sort by: Deadline</option>
-                      <option>Sort by: Fee (Low to High)</option>
-                      <option>Sort by: Fee (High to Low)</option>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option>Relevance</option>
+                  <option>Deadline</option>
+                  <option>Fee (Low to High)</option>
+                  <option>Fee (High to Low)</option>
                     </select>
                   </div>
                 </div>
 
+            {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                  {admissions.map((admission) => (
+                {filteredAdmissions.map((admission) => {
+                  const statusColors = getStatusColor(admission.status)
+                  const isSaved = savedIds.includes(admission.id)
+                  return (
                     <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded flex items-center justify-center text-white font-semibold text-sm" style={{ backgroundColor: admission.logoBg }}>
-                            {admission.university.split(' ')[0]}
+                      <div className="flex items-start justify-between mb-4 gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-12 h-12 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: admission.logoBg }}>
+                            {admission.university.substring(0, 2).toUpperCase()}
                           </div>
-                          <div>
-                            <p className="font-semibold text-sm" style={{ color: '#111827' }}>{admission.university}</p>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <p className="font-semibold text-sm truncate" style={{ color: '#111827' }} title={admission.university}>{admission.university}</p>
                           </div>
                         </div>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: `${admission.statusColor}20`, color: admission.statusColor }}>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
                           {admission.status}
                         </span>
                       </div>
-                      <h3 className="font-semibold text-lg mb-2" style={{ color: '#111827' }}>{admission.program}</h3>
+                      <h3 className="font-semibold text-lg mb-2 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <span className="text-red-600 font-medium">{admission.deadline}</span>
+                          <span className={calculateDaysRemaining(admission.deadline) <= 7 ? 'text-red-600 font-medium' : 'text-gray-600'}>{admission.deadlineDisplay}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -361,8 +457,25 @@ function SearchAdmissions() {
                       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                         <p className="text-xs text-gray-500">{admission.updated}</p>
                         <div className="flex items-center gap-2">
-                          <button className="p-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <button
+                            onClick={() => toggleCompare(admission.id)}
+                            className={`p-2 cursor-pointer transition-colors ${
+                              compareIds.includes(admission.id) ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600'
+                            }`}
+                            title={compareIds.includes(admission.id) ? 'Remove from compare' : 'Add to compare'}
+                          >
+                            <svg className="w-5 h-5" fill={compareIds.includes(admission.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => toggleSave(admission.id)}
+                            className={`p-2 cursor-pointer transition-colors ${
+                              isSaved ? 'text-blue-600' : 'text-gray-600 hover:text-blue-600'
+                            }`}
+                            title={isSaved ? 'Remove from saved' : 'Save to watchlist'}
+                          >
+                            <svg className="w-5 h-5" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                             </svg>
                           </button>
@@ -378,33 +491,84 @@ function SearchAdmissions() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  )
+                })}
                 </div>
-
-                <div className="mt-12">
-                  <h2 className="text-xl font-semibold mb-6" style={{ color: '#111827' }}>You may also like</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {recommendedAdmissions.map((admission) => (
-                      <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-xs" style={{ backgroundColor: admission.logoBg }}>
-                            {admission.university.split(' ')[0]}
+            ) : (
+              <div className="space-y-4 mb-8">
+                {filteredAdmissions.map((admission) => {
+                  const statusColors = getStatusColor(admission.status)
+                  const isSaved = savedIds.includes(admission.id)
+                  return (
+                    <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="w-16 h-16 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: admission.logoBg }}>
+                            {admission.university.substring(0, 2).toUpperCase()}
                           </div>
-                          <div>
-                            <p className="font-semibold text-sm" style={{ color: '#111827' }}>{admission.university}</p>
+                          <div className="flex-1 min-w-0 overflow-hidden">
+                            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
+                            <p className="text-sm text-gray-600 mb-2 truncate" title={`${admission.university} • ${admission.degree}`}>{admission.university} • {admission.degree}</p>
+                            <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
+                              <span className={admission.daysRemaining <= 7 ? 'text-red-600 font-medium' : ''}>{admission.deadlineDisplay}</span>
+                              <span>{admission.fee}</span>
+                              <span className="px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+                                {admission.status}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <h3 className="font-medium text-base mb-2" style={{ color: '#111827' }}>{admission.program}</h3>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <span className="text-red-600 font-medium">{admission.deadline}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => toggleCompare(admission.id)}
+                            className={`p-2 cursor-pointer transition-colors ${
+                              compareIds.includes(admission.id) ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600'
+                            }`}
+                            title={compareIds.includes(admission.id) ? 'Remove from compare' : 'Add to compare'}
+                          >
+                            <svg className="w-5 h-5" fill={compareIds.includes(admission.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => toggleSave(admission.id)}
+                            className={`p-2 cursor-pointer transition-colors ${
+                              isSaved ? 'text-blue-600' : 'text-gray-600 hover:text-blue-600'
+                            }`}
+                          >
+                            <svg className="w-5 h-5" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                            </svg>
+                          </button>
+                          <Link
+                            to={`/program/${admission.id}`}
+                            className="p-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </Link>
                         </div>
                       </div>
-                    ))}
                   </div>
+                  )
+                })}
                 </div>
+            )}
+
+            {filteredAdmissions.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-500 mb-4">No admissions found matching your criteria.</p>
+                <button
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+                  style={{ backgroundColor: '#2563EB' }}
+                >
+                  Reset Filters
+                </button>
+              </div>
+            )}
               </div>
             </div>
         </div>
@@ -413,4 +577,3 @@ function SearchAdmissions() {
 }
 
 export default SearchAdmissions
-
