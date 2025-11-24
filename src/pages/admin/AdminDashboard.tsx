@@ -1,0 +1,481 @@
+import { useNavigate } from "react-router-dom"
+import AdminLayout from "../../layouts/AdminLayout"
+import {
+	pendingVerifications,
+	recentAdminActions,
+	adminNotifications,
+	scraperActivities,
+	systemMetrics,
+	admissionAnalytics,
+	getActionColor,
+	getScraperStatusColor,
+	getVerificationStatusColor,
+} from "../../data/adminData"
+import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
+import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
+import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
+import DegreeTypeChart from "../../components/admin/DegreeTypeChart"
+
+function AdminDashboard() {
+	const navigate = useNavigate()
+
+	// Get limited items for display
+	const displayPendingVerifications = pendingVerifications.slice(0, 5)
+	const displayRecentActions = recentAdminActions.slice(0, 5)
+	const displayNotifications = adminNotifications.slice(0, 4)
+	const displayScraperActivities = scraperActivities.slice(0, 4)
+
+	return (
+		<AdminLayout>
+			<div className="p-6">
+				{/* Header */}
+				<div className="mb-6 flex items-center justify-between">
+					<div>
+						<h1 className="text-2xl font-bold mb-2" style={{ color: "#111827" }}>
+							Admin Dashboard
+						</h1>
+						<p className="text-gray-600">System overview and pending verification tasks.</p>
+					</div>
+					<button
+						onClick={() => navigate("/admin/verification")}
+						className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+						style={{ backgroundColor: "#2563EB" }}
+					>
+						Go to Verification Center
+					</button>
+				</div>
+
+				{/* System Metrics Cards */}
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+					{/* Total Users */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<div>
+								<p className="text-sm text-gray-600 mb-1">Total Users</p>
+								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
+									{systemMetrics.totalUsers.toLocaleString()}
+								</p>
+							</div>
+							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#DBEAFE" }}>
+								<svg className="w-6 h-6" style={{ color: "#2563EB" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+									/>
+								</svg>
+							</div>
+						</div>
+					</div>
+
+					{/* Total Admissions */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<div>
+								<p className="text-sm text-gray-600 mb-1">Total Admissions</p>
+								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
+									{systemMetrics.totalAdmissions.toLocaleString()}
+								</p>
+							</div>
+							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#D1FAE5" }}>
+								<svg className="w-6 h-6" style={{ color: "#10B981" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+									/>
+								</svg>
+							</div>
+						</div>
+					</div>
+
+					{/* Total Alerts Sent */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<div>
+								<p className="text-sm text-gray-600 mb-1">Total Alerts Sent</p>
+								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
+									{systemMetrics.totalAlertsSent.toLocaleString()}
+								</p>
+							</div>
+							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEF3C7" }}>
+								<svg className="w-6 h-6" style={{ color: "#F59E0B" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+									/>
+								</svg>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				{/* AI Summary Section */}
+				{systemMetrics.aiSummary && (
+					<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+						<h2 className="text-xl font-semibold mb-4" style={{ color: "#111827" }}>
+							AI-Generated System Insights
+						</h2>
+						<p className="text-gray-700 leading-relaxed">{systemMetrics.aiSummary}</p>
+					</div>
+				)}
+
+				{/* Admission Analytics Section */}
+				<div className="mb-6">
+					<h2 className="text-xl font-semibold mb-4" style={{ color: "#111827" }}>
+						Admission Analytics
+					</h2>
+
+					{/* Charts Grid */}
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+						{/* Status Breakdown Chart */}
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+								Status Breakdown
+							</h3>
+							<AdmissionStatusChart data={admissionAnalytics.statusBreakdown} />
+						</div>
+
+						{/* Degree Type Distribution */}
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+								Degree Type Distribution
+							</h3>
+							<DegreeTypeChart data={admissionAnalytics.degreeTypeDistribution} />
+						</div>
+					</div>
+
+					{/* University Distribution and Monthly Trend */}
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+						{/* University Distribution */}
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+								University Distribution
+							</h3>
+							<UniversityDistributionChart data={admissionAnalytics.universityDistribution} />
+						</div>
+
+						{/* Monthly Trend */}
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+								Monthly Admission Trend
+							</h3>
+							<MonthlyTrendChart data={admissionAnalytics.monthlyTrend} />
+						</div>
+					</div>
+
+					{/* Top Admissions Table */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+							Top Admissions by Views
+						</h3>
+						<div className="overflow-x-auto">
+							<table className="w-full">
+								<thead>
+									<tr className="border-b border-gray-200">
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Rank</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Views</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+									</tr>
+								</thead>
+								<tbody>
+									{admissionAnalytics.topAdmissions.map((admission, index) => {
+										const statusColors = getVerificationStatusColor(admission.status)
+										return (
+											<tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+												<td className="py-4 px-4">
+													<div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "#2563EB" }}>
+														{index + 1}
+													</div>
+												</td>
+												<td className="py-4 px-4">
+													<p className="font-medium" style={{ color: "#111827" }}>
+														{admission.title}
+													</p>
+												</td>
+												<td className="py-4 px-4">
+													<p className="text-sm text-gray-600">{admission.university}</p>
+												</td>
+												<td className="py-4 px-4">
+													<p className="text-sm font-medium text-gray-700">{admission.views}</p>
+												</td>
+												<td className="py-4 px-4">
+													<span
+														className="px-2 py-1 rounded-full text-xs font-medium"
+														style={{ backgroundColor: statusColors.bg, color: statusColors.text }}
+													>
+														{admission.status}
+													</span>
+												</td>
+											</tr>
+										)
+									})}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+
+				{/* Section 1: Pending Verifications */}
+				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+							Admissions Awaiting Verification
+						</h2>
+						<button
+							onClick={() => navigate("/admin/verification")}
+							className="text-sm font-medium cursor-pointer transition-colors"
+							style={{ color: "#2563EB" }}
+						>
+							View All
+						</button>
+					</div>
+					<div className="overflow-x-auto">
+						<table className="w-full">
+							<thead>
+								<tr className="border-b border-gray-200">
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted By</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted On</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{displayPendingVerifications.map((verification) => (
+									<tr key={verification.id} className="border-b border-gray-100 hover:bg-gray-50">
+										<td className="py-4 px-4">
+											<p className="font-medium" style={{ color: "#111827" }}>
+												{verification.admissionTitle}
+											</p>
+										</td>
+										<td className="py-4 px-4">
+											<p className="text-sm text-gray-600">{verification.university}</p>
+										</td>
+										<td className="py-4 px-4">
+											<p className="text-sm text-gray-600">{verification.submittedBy}</p>
+										</td>
+										<td className="py-4 px-4">
+											<p className="text-sm text-gray-600">{verification.submittedOn}</p>
+										</td>
+										<td className="py-4 px-4">
+											<span
+												className="px-2 py-1 rounded-full text-xs font-medium"
+												style={{ backgroundColor: "#FEF3C7", color: "#F59E0B" }}
+											>
+												{verification.status}
+											</span>
+										</td>
+										<td className="py-4 px-4">
+											<button
+												onClick={() => navigate(`/admin/verification/${verification.id}`)}
+												className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
+											>
+												Verify
+											</button>
+										</td>
+									</tr>
+								))}
+								{displayPendingVerifications.length === 0 && (
+									<tr>
+										<td colSpan={6} className="py-10 text-center text-sm text-gray-500">
+											No pending verifications.
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+				{/* Section 2: Recent Actions Log */}
+				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+							Recent Admin Actions
+						</h2>
+						<button
+							onClick={() => navigate("/admin/change-logs")}
+							className="text-sm font-medium cursor-pointer transition-colors"
+							style={{ color: "#2563EB" }}
+						>
+							View Full Log
+						</button>
+					</div>
+					<div className="overflow-x-auto">
+						<table className="w-full">
+							<thead>
+								<tr className="border-b border-gray-200">
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admin</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Timestamp</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Remarks</th>
+								</tr>
+							</thead>
+							<tbody>
+								{displayRecentActions.map((action) => {
+									const actionColors = getActionColor(action.action)
+									return (
+										<tr key={action.id} className="border-b border-gray-100 hover:bg-gray-50">
+											<td className="py-4 px-4">
+												<p className="font-medium" style={{ color: "#111827" }}>
+													{action.admission}
+												</p>
+											</td>
+											<td className="py-4 px-4">
+												<span
+													className="px-2 py-1 rounded-full text-xs font-medium"
+													style={{ backgroundColor: actionColors.bg, color: actionColors.text }}
+												>
+													{action.action}
+												</span>
+											</td>
+											<td className="py-4 px-4">
+												<p className="text-sm text-gray-600">{action.admin}</p>
+											</td>
+											<td className="py-4 px-4">
+												<p className="text-sm text-gray-600">{action.timestamp}</p>
+											</td>
+											<td className="py-4 px-4">
+												<p className="text-sm text-gray-600 truncate max-w-[200px]" title={action.remarks}>
+													{action.remarks}
+												</p>
+											</td>
+										</tr>
+									)
+								})}
+								{displayRecentActions.length === 0 && (
+									<tr>
+										<td colSpan={5} className="py-10 text-center text-sm text-gray-500">
+											No recent actions.
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+				{/* Section 3 & 4: Notifications and Scraper Activity (Side by Side) */}
+				<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+					{/* Notifications Preview */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+								Latest Notifications
+							</h2>
+							<button
+								onClick={() => navigate("/admin/notifications")}
+								className="text-sm font-medium cursor-pointer transition-colors"
+								style={{ color: "#2563EB" }}
+							>
+								Open Notifications
+							</button>
+						</div>
+						<div className="space-y-4">
+							{displayNotifications.map((notification) => (
+								<div
+									key={notification.id}
+									className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+									onClick={() => navigate("/admin/notifications")}
+								>
+									<div className="flex-1">
+										<div className="flex items-center gap-2 mb-1">
+											<p className={`text-sm font-medium ${notification.unread ? "" : "text-gray-500"}`} style={{ color: notification.unread ? "#111827" : undefined }}>
+												{notification.title}
+											</p>
+											{notification.unread && (
+												<div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#2563EB" }}></div>
+											)}
+										</div>
+										<p className="text-xs text-gray-500">{notification.type}</p>
+										<p className="text-xs text-gray-400 mt-1">{notification.timestamp}</p>
+									</div>
+								</div>
+							))}
+							{displayNotifications.length === 0 && (
+								<div className="text-center py-4">
+									<p className="text-sm text-gray-500">No notifications.</p>
+								</div>
+							)}
+						</div>
+					</div>
+
+					{/* Scraper Activity Snapshot */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+								Recent Scraper Activity
+							</h2>
+							<button
+								onClick={() => navigate("/admin/scraper-logs")}
+								className="text-sm font-medium cursor-pointer transition-colors"
+								style={{ color: "#2563EB" }}
+							>
+								Open Scraper Logs
+							</button>
+						</div>
+						<div className="overflow-x-auto">
+							<table className="w-full">
+								<thead>
+									<tr className="border-b border-gray-200">
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Last Run</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Changes Detected</th>
+									</tr>
+								</thead>
+								<tbody>
+									{displayScraperActivities.map((activity) => {
+										const statusColors = getScraperStatusColor(activity.status)
+										return (
+											<tr key={activity.id} className="border-b border-gray-100 hover:bg-gray-50">
+												<td className="py-4 px-4">
+													<p className="font-medium text-sm" style={{ color: "#111827" }}>
+														{activity.university}
+													</p>
+												</td>
+												<td className="py-4 px-4">
+													<p className="text-sm text-gray-600">{activity.lastRun}</p>
+												</td>
+												<td className="py-4 px-4">
+													<span
+														className="px-2 py-1 rounded-full text-xs font-medium"
+														style={{ backgroundColor: statusColors.bg, color: statusColors.text }}
+													>
+														{activity.status}
+													</span>
+												</td>
+												<td className="py-4 px-4">
+													<p className="text-sm text-gray-600">{activity.changesDetected}</p>
+												</td>
+											</tr>
+										)
+									})}
+									{displayScraperActivities.length === 0 && (
+										<tr>
+											<td colSpan={4} className="py-10 text-center text-sm text-gray-500">
+												No scraper activity.
+											</td>
+										</tr>
+									)}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+		</AdminLayout>
+	)
+}
+
+export default AdminDashboard
+

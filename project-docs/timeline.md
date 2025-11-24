@@ -1,14 +1,155 @@
 # Project Timeline & Progress
 
-- Date: 2025-11-19
+- Date: 2025-11-20
 
 ## Milestones
+- 2025-11-20: Added comprehensive Admission Analytics visuals to Admin Dashboard with charts and tables. Removed login/logout events from analytics tracking.
+- 2025-11-20: Added System Metrics cards and AI Summary section to Admin Dashboard. Created Admin Analytics page for user activity tracking.
+- 2025-11-20: Added Admin Change Logs Viewer page with filters, change logs table, and field-level diff viewer modal.
+- 2025-11-20: Added Admin Scraper Jobs Monitor page with summary cards, scraper jobs table, job details drawer, and retry/rerun controls.
+- 2025-11-20: Added Admin Notifications Center page with filter tabs, unread toggle, notification cards, and mark as read functionality.
+- 2025-11-20: Added Admin Verification Center page with filters, verification table, review modal with diff view, and admin action panel.
+- 2025-11-20: Added Admin Dashboard page with system overview, pending verifications, recent actions, notifications, and scraper activity.
 - 2025-11-11: Added Verification Center page (Pending Audits / Verification Updates), route, and documentation.
 - 2025-11-11: Added Change Logs page, route, and documentation.
 - 2025-11-11: Added Notifications Center page, route, and documentation.
 - 2025-11-11: Added University AI Assistant Sidebar Widget with university-specific prompts and responses.
 
 ## Change Records
+- 2025-11-20:
+  - Added Admission Analytics visuals to Admin Dashboard:
+    - Status Breakdown bar chart (Verified, Pending, Rejected, Disputed)
+    - Degree Type Distribution pie chart (BS, MS, MBA, PhD, BBA)
+    - University Distribution horizontal bar chart
+    - Monthly Admission Trend bar chart
+    - Top Admissions by Views table
+    - Created chart components: `AdmissionStatusChart`, `DegreeTypeChart`, `UniversityDistributionChart`, `MonthlyTrendChart`
+    - Added `admissionAnalytics` mock data with comprehensive analytics
+  - Removed login/logout events from analytics:
+    - Removed "login" and "logout" from `AnalyticsEventType`
+    - Removed login/logout events from `analyticsEvents` array
+    - Updated `AdminAnalytics` page to remove login/logout color coding
+  - Added System Metrics feature to Admin Dashboard:
+    - Created `SystemMetrics` interface and `systemMetrics` mock data in `adminData.ts`
+    - Added three summary cards: Total Users, Total Admissions, Total Alerts Sent
+    - Added AI-generated system insights section
+    - Cards display with icons and formatted numbers
+  - Created Admin Analytics page (`AdminAnalytics.tsx`) for user activity tracking:
+    - Full analytics events table with filters (User, Event Type, Role, Date Range)
+    - Displays user activity events: page_view, search, admission_view, download, click, login, logout
+    - Shows device info (browser, OS, device type), session ID, and metadata
+    - Color-coded event type and role badges
+    - Pagination support
+    - Empty state handling
+  - Extended admin mock data (`adminData.ts`) with:
+    - `AnalyticsEvent` interface with comprehensive event structure
+    - `AnalyticsEventType` type
+    - `analyticsEvents` array with 12 sample events
+    - Helper functions: `getUniqueAnalyticsUsers`, `getUniqueEventTypes`
+  - Added route `/admin/analytics` to router
+  - Added "Analytics" link to Admin Sidebar
+  - Refactored Admin Change Logs Viewer page for modularity and best practices:
+    - Extracted utility functions (`src/utils/dateUtils.ts`) for date formatting
+    - Created custom hook (`src/hooks/useChangeLogFilters.ts`) for filtering logic
+    - Extracted reusable components:
+      - `ChangeLogFilters.tsx` - Filter section component
+      - `ChangeLogTable.tsx` - Table display component
+      - `DiffViewerModal.tsx` - Modal for viewing change details
+      - `Pagination.tsx` - Reusable pagination component
+    - Added constants file (`src/constants/pagination.ts`) for configuration
+    - Main page now uses composition pattern with clear separation of concerns
+    - Improved code reusability, testability, and maintainability
+  - Created Admin Change Logs Viewer page (`AdminChangeLogs.tsx`) with:
+    - Filters section (Admission dropdown, Modified By dropdown, Change Type dropdown, Date Range picker)
+    - Change logs table with columns: Admission Title, Modified By, Type, Summary, Timestamp, Actions
+    - Status badges with color coding:
+      - Scraper Update: Blue
+      - Manual Edit: Yellow
+      - Admin Edit: Purple
+    - Diff viewer modal/drawer with:
+      - Meta information (Admission, Modified By, Timestamp, Change Type, Reason for Change)
+      - Field-level diff comparison (3-column layout: Field, Old Value, New Value)
+      - Link to Verification Log (when applicable)
+    - Pagination (20 items per page)
+    - Empty state with message
+    - Follows SDS Change_Log table and Scraper update flow sections
+  - Extended admin mock data (`adminData.ts`) with:
+    - `AdminChangeLog` interface with comprehensive change log structure
+    - `ChangeType` type (Manual Edit, Scraper Update, Admin Edit)
+    - `adminChangeLogs` array with 10 sample change logs
+    - `getChangeTypeColor` helper function
+    - `getUniqueAdmissions` and `getUniqueUsers` helper functions for filters
+  - Added route `/admin/change-logs` to router
+  - Created Admin Scraper Jobs Monitor page (`AdminScraperJobsMonitor.tsx`) with:
+    - Job overview summary cards (Total Jobs Run, Successful Jobs, Failed Jobs, Last Execution)
+    - Scraper jobs table with columns: University Name, Job ID, Started At, Finished At, Status, Source URL, Duration, Actions
+    - Status badges with color coding (Success: Green, No Changes: Yellow, Changes Detected: Blue, Failed: Red)
+    - Job details drawer/sheet with:
+      - Job metadata (Job ID, University, Start/End Time, Duration, Status, Source URL, Scheduler Triggered)
+      - Scraping logs (scrollable raw log text)
+      - Error log section (only if failed)
+      - Request metadata (headers, status code)
+      - Change detection section with links to Change Logs
+    - Retry button for failed jobs
+    - Rerun scraper functionality per university
+    - "Run Scraper Manually" button (runs all scrapers)
+    - Pagination (20 items per page)
+    - Empty state with GlobeOff icon
+    - Follows SDS sections 8.14 Scraper Update Flow
+  - Extended admin mock data (`adminData.ts`) with:
+    - `ScraperJob` interface with comprehensive job details
+    - `ScraperJobStatus` type (Success, Failed, No Changes, Changes Detected)
+    - `ScraperSummary` interface for summary statistics
+    - `scraperSummary` mock data
+    - `scraperJobs` array with 8 sample jobs
+    - `getScraperJobStatusColor` helper function
+  - Added route `/admin/scraper-logs` to router
+  - Created Admin Notifications Center page (`AdminNotificationsCenter.tsx`) with:
+    - Filter tabs (All, Verification Updates, University Uploads, System Alerts, Scraper Alerts)
+    - Unread Only toggle switch
+    - Mark All as Read button
+    - Notification cards with:
+      - Type-based icons (ShieldCheck, FilePlus, AlertTriangle, Globe)
+      - Color-coded icons based on notification type
+      - Title, message, timestamp (timeago), and status badge
+      - University information (when applicable)
+      - Mark as Read action for unread notifications
+    - Empty state with contextual messages
+    - Follows SDS Alerts & Notification System sections
+  - Extended admin mock data (`adminData.ts`) with:
+    - Updated `NotificationType` with proper types: `verification_update`, `university_upload`, `system_alert`, `scraper_alert`
+    - Enhanced `AdminNotification` interface with `message`, `timeAgo`, `admissionId`, `university` fields
+    - Comprehensive `adminNotifications` array with 12 sample notifications covering all types
+  - Added route `/admin/notifications` to router
+  - Created Admin Verification Center page (`AdminVerificationCenter.tsx`) with:
+    - Status filter tabs (All, Pending, Verified, Rejected, Disputed)
+    - University filter dropdown
+    - Search functionality for admission titles
+    - Verification table with columns: Admission Title, University, Submitted By, Submitted On, Status, Action
+    - Review modal/drawer with:
+      - Full admission metadata display
+      - Field-level differences view (2-column diff: Old Value → New Value)
+      - Admin action panel (Verify/Reject/Dispute buttons)
+      - Remarks textarea (minimum 10 characters required)
+    - Empty state with reset filters button
+    - Pagination (10 items per page)
+  - Extended admin mock data (`adminData.ts`) with:
+    - `VerificationItem` interface with metadata and diff data
+    - `verificationItems` array with 10 sample admissions
+    - `getVerificationStatusColor` helper function
+    - `getUniqueUniversities` helper function
+  - Added route `/admin/verification` to router
+  - Followed SDS sections 8.7, 8.8, 8.9 for verification workflow
+  - Created Admin Dashboard page (`AdminDashboard.tsx`) with four main sections:
+    - Pending Verifications table (max 5 items) with admission details and verify action
+    - Recent Admin Actions table (max 5 items) showing verification/rejection/dispute actions
+    - Latest Notifications preview (max 4 items) with unread indicators
+    - Recent Scraper Activity snapshot (max 4 entries) with status and changes detected
+  - Created AdminLayout component (`AdminLayout.tsx`) following UniversityLayout pattern
+  - Created AdminSidebar component (`AdminSidebar.tsx`) with navigation for Dashboard, Verification, Change Logs, Notifications, Scraper Logs, Settings
+  - Created admin mock data file (`adminData.ts`) with interfaces and mock data for all admin dashboard sections
+  - Added route `/admin/dashboard` to router
+  - Followed clean layout principles, consistent with Student + University dashboard styles
 - 2025-11-19:
   - Introduced shared Student/University data contexts, wiring all student/university pages to common mock state.
   - Documented complete Student Module user stories & technical flows in `student-module.md`.

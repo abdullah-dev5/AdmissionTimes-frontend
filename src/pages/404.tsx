@@ -87,12 +87,6 @@ const NotFound = () => {
                             Go Back
                         </button>
                     </div>
-                    <p className="mt-6 text-sm text-gray-500">
-                    Need help? Contact support or check the{" "}
-                    <Link to="/" className="text-blue-500 hover:text-blue-600 underline">
-                        dashboard
-                    </Link>
-                </p>
                 </div>
 
            
