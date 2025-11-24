@@ -1,11 +1,40 @@
 # Technical Specifications
 
-- Date: 2025-11-11
+- Date: 2025-11-20
 
 ## Tech Stack
 - React 19, TypeScript, Vite
 - React Router v7
 - Tailwind CSS v4
+
+## Architecture & Best Practices
+
+### Component Organization
+- **Pages**: Main page components in `src/pages/`
+- **Components**: Reusable UI components in `src/components/`
+- **Hooks**: Custom React hooks in `src/hooks/`
+- **Utils**: Utility functions in `src/utils/`
+- **Constants**: Configuration constants in `src/constants/`
+- **Data**: Mock data and types in `src/data/`
+
+### Code Organization Principles
+1. **Separation of Concerns**: Each component has a single responsibility
+2. **Reusability**: Extract common patterns into reusable components
+3. **Custom Hooks**: Business logic extracted into custom hooks
+4. **Utility Functions**: Pure functions for data transformation
+5. **Type Safety**: Strong TypeScript typing throughout
+6. **Composition**: Use composition over inheritance
+
+### Example: Admin Change Logs (Modular Structure)
+- **Page**: `src/pages/admin/AdminChangeLogs.tsx` - Main page component
+- **Components**:
+  - `src/components/admin/ChangeLogFilters.tsx` - Filter section
+  - `src/components/admin/ChangeLogTable.tsx` - Table display
+  - `src/components/admin/DiffViewerModal.tsx` - Modal for details
+  - `src/components/admin/Pagination.tsx` - Reusable pagination
+- **Hook**: `src/hooks/useChangeLogFilters.ts` - Filtering logic
+- **Utils**: `src/utils/dateUtils.ts` - Date formatting functions
+- **Constants**: `src/constants/pagination.ts` - Configuration values
 
 ## Page: Verification Center
 - Path: `/university/verification-center`

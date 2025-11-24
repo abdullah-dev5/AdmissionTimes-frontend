@@ -237,7 +237,7 @@ function ProgramDetail() {
                 </div>
               )}
 
-              {activeTab === 'Fee Structure' && (
+        {activeTab === 'Fee Structure' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Fee Structure</h2>
                   <div className="space-y-4">
