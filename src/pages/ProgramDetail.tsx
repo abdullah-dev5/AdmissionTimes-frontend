@@ -89,7 +89,7 @@ function ProgramDetail() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6">
+           {/*  <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold flex items-center gap-2" style={{ color: '#111827' }}>
                   <svg className="w-6 h-6" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -143,12 +143,12 @@ function ProgramDetail() {
                   <p className="text-gray-700 leading-relaxed">{program.aiSummary}</p>
                 </div>
               )}
-            </div>
+            </div>*/}
 
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="border-b border-gray-200 mb-6">
                 <nav className="flex space-x-8 -mb-px">
-                  {['Overview', 'Eligibility', 'Important Dates', 'Fee Structure', 'Documents'].map((tab) => (
+                  {['Overview', 'Eligibility', 'Important Dates', ].map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -237,7 +237,7 @@ function ProgramDetail() {
                 </div>
               )}
 
-        {activeTab === 'Fee Structure' && (
+      {/*  {activeTab === 'Fee Structure' && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Fee Structure</h2>
                   <div className="space-y-4">
@@ -267,12 +267,12 @@ function ProgramDetail() {
                     </ul>
                   </div>
                 </div>
-              )}
+              )}*/}
             </div>
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6">
+           {/* <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>You may also be interested in...</h2>
               <div className="space-y-4">
                 {relatedPrograms.map((rp) => {
@@ -294,7 +294,7 @@ function ProgramDetail() {
                   )
                 })}
               </div>
-            </div>
+            </div> */}
 
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links</h2>

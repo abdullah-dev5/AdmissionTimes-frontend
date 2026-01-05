@@ -101,7 +101,7 @@ function StudentSidebar() {
             )
           })}
         </ul>
-        {isExpanded && (
+       {/*  {isExpanded && (
           <>
             <div className="mb-6">
               <p className="text-xs font-semibold text-gray-500 uppercase mb-3 px-4">QUICK FILTERS</p>
@@ -123,7 +123,7 @@ function StudentSidebar() {
               </button>
             </div>
           </>
-        )}
+        )} */}
       </nav>
     </aside>
   )

@@ -1,8 +1,9 @@
 # Project Timeline & Progress
 
-- Date: 2025-11-20
+- Date: 2025-11-24
 
 ## Milestones
+- 2025-11-24: Unified the admin persona across admin/university mock data and documentation to reflect a single Admin user.
 - 2025-11-20: Added comprehensive Admission Analytics visuals to Admin Dashboard with charts and tables. Removed login/logout events from analytics tracking.
 - 2025-11-20: Added System Metrics cards and AI Summary section to Admin Dashboard. Created Admin Analytics page for user activity tracking.
 - 2025-11-20: Added Admin Change Logs Viewer page with filters, change logs table, and field-level diff viewer modal.
@@ -16,6 +17,10 @@
 - 2025-11-11: Added University AI Assistant Sidebar Widget with university-specific prompts and responses.
 
 ## Change Records
+- 2025-11-24:
+  - Replaced all numbered admin references (`Admin-01`, `Admin-02`, etc.) with a single `Admin` identity inside `adminData.ts`, `analyticsEvents`, and admin change logs to match production rules.
+  - Updated university mock datasets (verification metadata, change logs) so every approval/dispute references the single Admin persona.
+  - Refreshed `university-module.md` plus documentation index/timeline notes to explain the new constraint.
 - 2025-11-20:
   - Added Admission Analytics visuals to Admin Dashboard:
     - Status Breakdown bar chart (Verified, Pending, Rejected, Disputed)

@@ -1,6 +1,6 @@
 # AdmissionTimes Project Documentation Index
 
-- Date: 2025-11-20
+- Date: 2025-11-24
 
 ## Documents
 - overview.md — High-level background, vision, and objectives
@@ -12,6 +12,7 @@
 - university-module.md — Comprehensive university user stories & technical flows (V1)
 
 ## Latest Updates
+- 2025-11-24: Consolidated admin persona into a single `Admin` identity across admin/university mock data and documentation to match product constraints.
 - 2025-11-20: Added comprehensive Admission Analytics visuals to Admin Dashboard including status breakdown, degree type distribution, university distribution, monthly trends, and top admissions table. Removed login/logout events from analytics tracking.
 - 2025-11-20: Added System Metrics cards (Total Users, Total Admissions, Total Alerts Sent) and AI Summary section to Admin Dashboard. Created Admin Analytics page for user activity tracking with filters and comprehensive event logging.
 - 2025-11-20: Added Admin Change Logs Viewer page with filters (Admission, Modified By, Change Type, Date Range), change logs table, and field-level diff viewer modal. Follows SDS Change_Log table and Scraper update flow sections.

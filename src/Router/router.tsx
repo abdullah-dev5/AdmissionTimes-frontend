@@ -1,6 +1,8 @@
 import { Routes, Route } from "react-router-dom";
 import App from "../App";
 import NotFound from "../pages/404";
+import Contact from "../pages/Contact";
+import Features from "../pages/Features";
 import StudentDashboard from "../pages/student/StudentDashboard";
 import ProgramDetail from "../pages/ProgramDetail";
 import Notifications from "../pages/student/Notifications";
@@ -25,6 +27,8 @@ const AppRouter = () => {
     return (
         <Routes>
             <Route path="/" element={<App />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/features" element={<Features />} />
             <Route path="/student/dashboard" element={<StudentDashboard />} />
             <Route path="/student/search" element={<SearchAdmissions />} />
             <Route path="/student/compare" element={<ComparePage />} />

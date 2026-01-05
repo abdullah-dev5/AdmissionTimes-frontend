@@ -22,10 +22,31 @@ function App() {
               <span className="font-semibold text-xl transition-all duration-300" style={{ color: '#111827' }}>AdmissionTimes</span>
             </button>
             <nav className="hidden md:flex items-center gap-8">
-              <a href="#" className="text-sm font-medium" style={{ color: '#111827' }}>Home</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Universities</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Features</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Contact</a>
+              <button 
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="text-sm font-medium cursor-pointer transition-colors" 
+                style={{ color: '#111827' }}
+              >
+                Home
+              </button>
+              <button 
+                onClick={() => navigate('/student/search')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Universities
+              </button>
+              <button 
+                onClick={() => navigate('/features')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Features
+              </button>
+              <button 
+                onClick={() => navigate('/contact')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Contact
+              </button>
             </nav>
             <div className="flex items-center gap-4">
               <button className="text-sm font-medium text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">Sign In</button>
@@ -44,13 +65,17 @@ function App() {
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Search and compare admission information from top universities. Get verified data, deadline reminders, and AI-powered recommendations.
             </p>
-            <button className="px-8 py-4 text-lg font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" style={{ backgroundColor: '#2563EB' }}>
+            <button 
+              onClick={() => navigate('/student/search')}
+              className="px-8 py-4 text-lg font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
+              style={{ backgroundColor: '#2563EB' }}
+            >
               Search Admissions
             </button>
           </div>
         </section>
 
-        <section className="py-16 px-4" style={{ backgroundColor: '#F9FAFB' }}>
+        <section id="features-section" className="py-16 px-4" style={{ backgroundColor: '#F9FAFB' }}>
           <div className="container mx-auto max-w-6xl">
             <h2 className="text-3xl font-bold text-center mb-12" style={{ color: '#111827' }}>Features</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -118,10 +143,30 @@ function App() {
               <span className="font-semibold" style={{ color: '#111827' }}>AdmissionTimes</span>
             </div>
             <div className="flex flex-wrap items-center gap-6 mb-4 md:mb-0">
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Privacy Policy</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Terms of Service</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">About</a>
-              <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Contact</a>
+              <button 
+                onClick={() => navigate('/')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Privacy Policy
+              </button>
+              <button 
+                onClick={() => navigate('/')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Terms of Service
+              </button>
+              <button 
+                onClick={() => navigate('/')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                About
+              </button>
+              <button 
+                onClick={() => navigate('/contact')}
+                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Contact
+              </button>
             </div>
             <p className="text-sm text-gray-600">
               © 2024 AdmissionTimes. All rights reserved.

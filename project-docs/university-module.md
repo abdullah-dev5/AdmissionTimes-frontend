@@ -375,11 +375,13 @@
 **User Story:** As a rep, I want to see admin responses about my admissions.
 
 **Types of Notifications:**
-1. **Admission Verified** — "Your admission 'BSCS Fall 2025' has been verified by Admin-01."
+1. **Admission Verified** — "Your admission 'BSCS Fall 2025' has been verified by the Admin."
 2. **Admission Rejected** — "Your admission 'MS Data Science' was rejected. Reason: Incomplete document."
-3. **Admission Disputed** — "Admin-02 has disputed your admission 'PhD Physics'. Please review comments."
-4. **Feedback Comment** — "Admin-01 left a comment on 'BSCS Fall 2025': 'Please update fee structure.'"
+3. **Admission Disputed** — "The Admin has disputed your admission 'PhD Physics'. Please review comments."
+4. **Feedback Comment** — "Admin left a comment on 'BSCS Fall 2025': 'Please update fee structure.'"
 5. **System Maintenance Alerts** — "System maintenance scheduled for 2025-02-10 02:00 AM."
+
+> **Note:** The current release models a single administrator persona (`Admin`) rather than multiple individually named admins.
 
 **Functional Flow:**
 1. Rep opens "Notifications Center" page
@@ -412,7 +414,7 @@
       {
         "id": 1,
         "title": "Admission Verified",
-        "message": "Your admission 'BSCS Fall 2025' has been verified by Admin-01.",
+        "message": "Your admission 'BSCS Fall 2025' has been verified by the Admin.",
         "type": "Admin Feedback",
         "time": "2025-02-07T10:00:00Z",
         "timeAgo": "2 hours ago",

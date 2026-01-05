@@ -59,7 +59,7 @@ function UniversitySidebar() {
 			onMouseEnter={() => setIsHovered(true)}
 			onMouseLeave={() => setIsHovered(false)}
 		>
-			<div className="p-5 border-b border-gray-200 flex items-center justify-between">
+			<div className="p-7 border-b border-gray-200 flex items-center justify-between">
 				{isExpanded ? (
 					<button
 						onClick={() => navigate("/university/dashboard")}

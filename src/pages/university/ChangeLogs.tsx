@@ -220,12 +220,12 @@ function ChangeLogs() {
 						<h1 className="text-2xl font-bold text-gray-900">Change Logs</h1>
 						<p className="text-gray-600">Track all admission modifications and audit revisions.</p>
 					</div>
-				</header>
-				<main className="max-w-6xl mx-auto px-4 py-6">
-					<div className="bg-white shadow-sm rounded-xl p-4 mb-4">
-						<FilterBar
-							from={from}
-							to={to}
+					</header>
+					<main className="max-w-6xl mx-auto px-4 py-6">
+						<div className="bg-white shadow-sm rounded-xl p-4 mb-4">
+							<FilterBar
+								from={from}
+								to={to}
 							onFromChange={setFrom}
 							onToChange={setTo}
 							admission={admission}
