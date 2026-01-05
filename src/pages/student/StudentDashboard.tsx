@@ -4,6 +4,16 @@ import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
 import { useStudentData } from '../../contexts/StudentDataContext'
 
+// Helper function to convert match percentage to text label
+function getMatchLabel(matchNumeric?: number): string {
+  if (!matchNumeric) return 'Match'
+  if (matchNumeric >= 90) return 'Excellent Match'
+  if (matchNumeric >= 85) return 'High Match'
+  if (matchNumeric >= 80) return 'Good Match'
+  if (matchNumeric >= 75) return 'Fair Match'
+  return 'Match'
+}
+
 function StudentDashboard() {
   const navigate = useNavigate()
   const { admissions, savedAdmissions, notifications } = useStudentData()
@@ -203,7 +213,7 @@ function StudentDashboard() {
                             <p className="text-sm text-gray-600">{admission.university}</p>
                           </div>
                           <span className="text-sm font-medium px-2 py-1 rounded" style={{ color: '#10B981', backgroundColor: '#D1FAE5' }}>
-                            {admission.match} Match
+                            {getMatchLabel(admission.matchNumeric)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">

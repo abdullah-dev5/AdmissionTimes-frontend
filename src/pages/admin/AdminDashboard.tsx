@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import AdminLayout from "../../layouts/AdminLayout"
 import {
@@ -15,6 +16,55 @@ import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
 import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
 import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
 import DegreeTypeChart from "../../components/admin/DegreeTypeChart"
+
+// Tooltip Component
+function InfoTooltip({ description }: { description: string }) {
+	const [showTooltip, setShowTooltip] = useState(false)
+
+	return (
+		<div className="relative inline-block">
+			<button
+				type="button"
+				onMouseEnter={() => setShowTooltip(true)}
+				onMouseLeave={() => setShowTooltip(false)}
+				onFocus={() => setShowTooltip(true)}
+				onBlur={() => setShowTooltip(false)}
+				className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+				aria-label="Chart information"
+			>
+				<svg
+					className="w-4 h-4"
+					style={{ color: "#6B7280" }}
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						strokeWidth={2}
+						d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+					/>
+				</svg>
+			</button>
+			{showTooltip && (
+				<div
+					className="absolute z-50 left-0 mt-2 w-64 p-3 text-sm text-white rounded-lg shadow-lg"
+					style={{ backgroundColor: "#1F2937" }}
+					onMouseEnter={() => setShowTooltip(true)}
+					onMouseLeave={() => setShowTooltip(false)}
+				>
+					<p className="leading-relaxed">{description}</p>
+					<div
+						className="absolute -top-1 left-4 w-2 h-2 rotate-45"
+						style={{ backgroundColor: "#1F2937" }}
+					></div>
+				</div>
+			)}
+		</div>
+	)
+}
 
 function AdminDashboard() {
 	const navigate = useNavigate()
@@ -114,111 +164,128 @@ function AdminDashboard() {
 					</div>
 				</div>
 
-				{/* AI Summary Section */}
+				{/* AI Summary Section 
 				{systemMetrics.aiSummary && (
 					<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
 						<h2 className="text-xl font-semibold mb-4" style={{ color: "#111827" }}>
-							AI-Generated System Insights
+							 System Insights
 						</h2>
 						<p className="text-gray-700 leading-relaxed">{systemMetrics.aiSummary}</p>
 					</div>
 				)}
-
+*/}
 				{/* Admission Analytics Section */}
 				<div className="mb-6">
 					<h2 className="text-xl font-semibold mb-4" style={{ color: "#111827" }}>
 						Admission Analytics
 					</h2>
 
-					{/* Charts Grid */}
+					{/* Active Charts - Displayed in Row */}
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 						{/* Status Breakdown Chart */}
 						<div className="bg-white rounded-lg shadow-sm p-6">
-							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
-								Status Breakdown
-							</h3>
+							<div className="flex items-center mb-4">
+								<h3 className="text-lg font-semibold" style={{ color: "#111827" }}>
+									Status Breakdown
+								</h3>
+								<InfoTooltip
+									description="This chart displays the distribution of admission records across different verification statuses (e.g., Pending, Approved, Rejected, Under Review). It helps administrators quickly identify how many admissions are in each status category, enabling better workload management and prioritization of verification tasks."
+								/>
+							</div>
 							<AdmissionStatusChart data={admissionAnalytics.statusBreakdown} />
 						</div>
 
-						{/* Degree Type Distribution */}
+						{/* University Distribution */}
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<div className="flex items-center mb-4">
+								<h3 className="text-lg font-semibold" style={{ color: "#111827" }}>
+									University Distribution
+								</h3>
+								<InfoTooltip
+									description="This chart shows the number of admission records contributed by each university in the system. It provides insights into which universities are most active in posting admissions, helping identify top contributors and potential areas for outreach or support."
+								/>
+							</div>
+							<UniversityDistributionChart data={admissionAnalytics.universityDistribution} />
+						</div>
+					</div>
+
+					{/* Monthly Trend Chart */}
+					<div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
+						<div className="bg-white rounded-lg shadow-sm p-6">
+							<div className="flex items-center mb-4">
+								<h3 className="text-lg font-semibold" style={{ color: "#111827" }}>
+									Monthly Admission Trend
+								</h3>
+								<InfoTooltip
+									description="This chart visualizes the trend of new admission postings over time, typically displayed month by month. It helps administrators identify seasonal patterns, growth trends, and peak periods in admission submissions. This information is valuable for resource planning, understanding user engagement cycles, and predicting future workload."
+								/>
+							</div>
+							<MonthlyTrendChart data={admissionAnalytics.monthlyTrend} />
+						</div>
+					</div>
+
+					{/* Commented Charts - Wrapped in Div */}
+					<div style={{ display: "none" }}>
+						{/* Degree Type Distribution 
 						<div className="bg-white rounded-lg shadow-sm p-6">
 							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
 								Degree Type Distribution
 							</h3>
 							<DegreeTypeChart data={admissionAnalytics.degreeTypeDistribution} />
-						</div>
-					</div>
+						</div>*/}
 
-					{/* University Distribution and Monthly Trend */}
-					<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-						{/* University Distribution */}
+						{/* Top Admissions Table 
 						<div className="bg-white rounded-lg shadow-sm p-6">
 							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
-								University Distribution
+								Top Admissions by Views
 							</h3>
-							<UniversityDistributionChart data={admissionAnalytics.universityDistribution} />
-						</div>
-
-						{/* Monthly Trend */}
-						<div className="bg-white rounded-lg shadow-sm p-6">
-							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
-								Monthly Admission Trend
-							</h3>
-							<MonthlyTrendChart data={admissionAnalytics.monthlyTrend} />
-						</div>
-					</div>
-
-					{/* Top Admissions Table */}
-					<div className="bg-white rounded-lg shadow-sm p-6">
-						<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
-							Top Admissions by Views
-						</h3>
-						<div className="overflow-x-auto">
-							<table className="w-full">
-								<thead>
-									<tr className="border-b border-gray-200">
-										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Rank</th>
-										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
-										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
-										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Views</th>
-										<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{admissionAnalytics.topAdmissions.map((admission, index) => {
-										const statusColors = getVerificationStatusColor(admission.status)
-										return (
-											<tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-												<td className="py-4 px-4">
-													<div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "#2563EB" }}>
-														{index + 1}
-													</div>
-												</td>
-												<td className="py-4 px-4">
-													<p className="font-medium" style={{ color: "#111827" }}>
-														{admission.title}
-													</p>
-												</td>
-												<td className="py-4 px-4">
-													<p className="text-sm text-gray-600">{admission.university}</p>
-												</td>
-												<td className="py-4 px-4">
-													<p className="text-sm font-medium text-gray-700">{admission.views}</p>
-												</td>
-												<td className="py-4 px-4">
-													<span
-														className="px-2 py-1 rounded-full text-xs font-medium"
-														style={{ backgroundColor: statusColors.bg, color: statusColors.text }}
-													>
-														{admission.status}
-													</span>
-												</td>
-											</tr>
-										)
-									})}
-								</tbody>
-							</table>
-						</div>
+							<div className="overflow-x-auto">
+								<table className="w-full">
+									<thead>
+										<tr className="border-b border-gray-200">
+											<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Rank</th>
+											<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
+											<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
+											<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Views</th>
+											<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+										</tr>
+									</thead>
+									<tbody>
+										{admissionAnalytics.topAdmissions.map((admission, index) => {
+											const statusColors = getVerificationStatusColor(admission.status)
+											return (
+												<tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+													<td className="py-4 px-4">
+														<div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "#2563EB" }}>
+															{index + 1}
+														</div>
+													</td>
+													<td className="py-4 px-4">
+														<p className="font-medium" style={{ color: "#111827" }}>
+															{admission.title}
+														</p>
+													</td>
+													<td className="py-4 px-4">
+														<p className="text-sm text-gray-600">{admission.university}</p>
+													</td>
+													<td className="py-4 px-4">
+														<p className="text-sm font-medium text-gray-700">{admission.views}</p>
+													</td>
+													<td className="py-4 px-4">
+														<span
+															className="px-2 py-1 rounded-full text-xs font-medium"
+															style={{ backgroundColor: statusColors.bg, color: statusColors.text }}
+														>
+															{admission.status}
+														</span>
+													</td>
+												</tr>
+											)
+										})}
+									</tbody>
+								</table>
+							</div>
+						</div>*/}
 					</div>
 				</div>
 

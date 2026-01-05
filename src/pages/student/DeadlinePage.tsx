@@ -207,7 +207,7 @@ const AiSummaryBox = ({ count }: { count: number }) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
         <div>
-          <h3 className="font-semibold mb-1" style={{ color: '#111827' }}>AI Summary</h3>
+          <h3 className="font-semibold mb-1" style={{ color: '#111827' }}> Summary</h3>
           <p className="text-sm text-gray-700">
             {count} deadline{count !== 1 ? 's' : ''} approaching in the next 7 days. Make sure to submit your applications on time.
           </p>

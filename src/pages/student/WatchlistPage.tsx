@@ -4,6 +4,16 @@ import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
 import { useStudentData } from '../../contexts/StudentDataContext'
 
+// Helper function to convert match percentage to text label
+function getMatchLabel(matchNumeric?: number): string {
+  if (!matchNumeric) return 'Match'
+  if (matchNumeric >= 90) return 'Excellent Match'
+  if (matchNumeric >= 85) return 'High Match'
+  if (matchNumeric >= 80) return 'Good Match'
+  if (matchNumeric >= 75) return 'Fair Match'
+  return 'Match'
+}
+
 const AlertToggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) => {
   return (
     <button
@@ -304,7 +314,7 @@ const AiRecommendationCarousel = ({
                   <p className="text-xs text-gray-600 truncate">{rec.program}</p>
                 </div>
                 <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#D1FAE5', color: '#10B981' }}>
-                  {rec.match} Match
+                  {getMatchLabel(rec.matchNumeric)}
                 </span>
               </div>
               <div className="space-y-2 mb-3 text-xs text-gray-600">

@@ -4,6 +4,16 @@ import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentData } from '../../contexts/StudentDataContext'
 
+// Helper function to convert match percentage to text label
+function getMatchLabel(matchNumeric?: number): string {
+  if (!matchNumeric) return 'Match'
+  if (matchNumeric >= 90) return 'Excellent Match'
+  if (matchNumeric >= 85) return 'High Match'
+  if (matchNumeric >= 80) return 'Good Match'
+  if (matchNumeric >= 75) return 'Fair Match'
+  return 'Match'
+}
+
 const CompareHeader = ({ count }: { count: number }) => {
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -104,7 +114,7 @@ const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) =
     return [
       `${lowestFee.university} offers the lowest fee at ${lowestFee.fee}, making it the most cost-effective option.`,
       `${earliestDeadline.university} has the earliest deadline (${earliestDeadline.deadlineDisplay}), requiring immediate application submission.`,
-      `${highestMatch.university} provides the best match at ${highestMatch.match} based on your profile.`,
+      `${highestMatch.university} provides the best match (${getMatchLabel(highestMatch.matchNumeric)}) based on your profile.`,
       `All ${admissions.length} universities are located in major cities with excellent infrastructure and facilities.`,
     ]
   }, [admissions])
@@ -222,8 +232,7 @@ function ComparePage() {
           <CompareGrid admissions={selectedAdmissions} />
           <CompareHighlights admissions={selectedAdmissions} />
         </div>
-
-        <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+{/*   <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
           <button
             onClick={handleSave}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
@@ -252,7 +261,8 @@ function ComparePage() {
             </svg>
             Export PDF
           </button>
-        </div>
+        </div>*/}
+       
       </div>
     </StudentLayout>
   )
