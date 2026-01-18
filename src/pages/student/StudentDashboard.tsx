@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
 import { useStudentData } from '../../contexts/StudentDataContext'
+import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -16,10 +17,23 @@ function getMatchLabel(matchNumeric?: number): string {
 
 function StudentDashboard() {
   const navigate = useNavigate()
-  const { admissions, savedAdmissions, notifications } = useStudentData()
+  const { admissions, savedAdmissions, notifications, loading, error, stats: apiStats } = useStudentData()
 
-  // Calculate stats from shared data with dynamic calculations
+  // Use API stats if available, otherwise calculate from data
+  // NOTE: All hooks must be called before any conditional returns
   const stats = useMemo(() => {
+    // If API stats are available, use them
+    if (apiStats) {
+      return {
+        active: apiStats.active_admissions,
+        saved: apiStats.saved_count,
+        upcoming: apiStats.upcoming_deadlines,
+        recommendations: apiStats.recommendations_count,
+        urgent: apiStats.urgent_deadlines,
+      }
+    }
+
+    // Fallback: Calculate stats from shared data with dynamic calculations
     const upcoming = admissions.filter(a => {
       const daysRemaining = calculateDaysRemaining(a.deadline)
       return (a.programStatus === 'Open' || a.programStatus === 'Closing Soon') && daysRemaining >= 0 && daysRemaining <= 7
@@ -44,7 +58,7 @@ function StudentDashboard() {
       recommendations,
       urgent,
     }
-  }, [admissions, savedAdmissions])
+  }, [admissions, savedAdmissions, apiStats])
 
   // Get recommended programs (high match, open status, not past deadline)
   const recommendedPrograms = useMemo(() => {
@@ -108,6 +122,37 @@ function StudentDashboard() {
     // Return top 3 activities
     return activities.slice(0, 3)
   }, [notifications, savedAdmissions, admissions])
+
+  // Show loading state (AFTER all hooks are called)
+  if (loading) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <LoadingSpinner size="lg" message="Loading dashboard..." />
+        </div>
+      </StudentLayout>
+    )
+  }
+
+  // Show error state (AFTER all hooks are called)
+  if (error) {
+    return (
+      <StudentLayout>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h3 className="text-red-800 font-semibold mb-2">Error Loading Dashboard</h3>
+            <p className="text-red-600">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </StudentLayout>
+    )
+  }
 
   return (
     <StudentLayout>
