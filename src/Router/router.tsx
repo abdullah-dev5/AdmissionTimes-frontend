@@ -3,6 +3,8 @@ import App from "../App";
 import NotFound from "../pages/404";
 import Contact from "../pages/Contact";
 import Features from "../pages/Features";
+import SignIn from "../pages/SignIn";
+import SignUp from "../pages/SignUp";
 import StudentDashboard from "../pages/student/StudentDashboard";
 import ProgramDetail from "../pages/ProgramDetail";
 import Notifications from "../pages/student/Notifications";
@@ -22,31 +24,34 @@ import AdminNotificationsCenter from "../pages/admin/AdminNotificationsCenter";
 import AdminScraperJobsMonitor from "../pages/admin/AdminScraperJobsMonitor";
 import AdminChangeLogs from "../pages/admin/AdminChangeLogs";
 import AdminAnalytics from "../pages/admin/AdminAnalytics";
+import { ProtectedRoute } from "../components/common/ProtectedRoute";
 
 const AppRouter = () => {
     return (
         <Routes>
             <Route path="/" element={<App />} />
+            <Route path="/signin" element={<SignIn />} />
+            <Route path="/signup" element={<SignUp />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/features" element={<Features />} />
-            <Route path="/student/dashboard" element={<StudentDashboard />} />
-            <Route path="/student/search" element={<SearchAdmissions />} />
-            <Route path="/student/compare" element={<ComparePage />} />
-            <Route path="/student/deadlines" element={<DeadlinePage />} />
-            <Route path="/student/watchlist" element={<WatchlistPage />} />
-            <Route path="/student/notifications" element={<Notifications />} />
-            <Route path="/university/dashboard" element={<UniversityDashboard />} />
-            <Route path="/university/manage-admissions" element={<ManageAdmissions />} />
-            <Route path="/university/verification-center" element={<VerificationCenter />} />
-            <Route path="/university/change-logs" element={<ChangeLogs />} />
-            <Route path="/university/notifications-center" element={<NotificationsCenter />} />
-            <Route path="/university/settings" element={<Settings />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/verification" element={<AdminVerificationCenter />} />
-            <Route path="/admin/notifications" element={<AdminNotificationsCenter />} />
-            <Route path="/admin/scraper-logs" element={<AdminScraperJobsMonitor />} />
-            <Route path="/admin/change-logs" element={<AdminChangeLogs />} />
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            <Route path="/student/dashboard" element={<ProtectedRoute requiredRole="student"><StudentDashboard /></ProtectedRoute>} />
+            <Route path="/student/search" element={<ProtectedRoute requiredRole="student"><SearchAdmissions /></ProtectedRoute>} />
+            <Route path="/student/compare" element={<ProtectedRoute requiredRole="student"><ComparePage /></ProtectedRoute>} />
+            <Route path="/student/deadlines" element={<ProtectedRoute requiredRole="student"><DeadlinePage /></ProtectedRoute>} />
+            <Route path="/student/watchlist" element={<ProtectedRoute requiredRole="student"><WatchlistPage /></ProtectedRoute>} />
+            <Route path="/student/notifications" element={<ProtectedRoute requiredRole="student"><Notifications /></ProtectedRoute>} />
+            <Route path="/university/dashboard" element={<ProtectedRoute requiredRole="university"><UniversityDashboard /></ProtectedRoute>} />
+            <Route path="/university/manage-admissions" element={<ProtectedRoute requiredRole="university"><ManageAdmissions /></ProtectedRoute>} />
+            <Route path="/university/verification-center" element={<ProtectedRoute requiredRole="university"><VerificationCenter /></ProtectedRoute>} />
+            <Route path="/university/change-logs" element={<ProtectedRoute requiredRole="university"><ChangeLogs /></ProtectedRoute>} />
+            <Route path="/university/notifications-center" element={<ProtectedRoute requiredRole="university"><NotificationsCenter /></ProtectedRoute>} />
+            <Route path="/university/settings" element={<ProtectedRoute requiredRole="university"><Settings /></ProtectedRoute>} />
+            <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/verification" element={<ProtectedRoute requiredRole="admin"><AdminVerificationCenter /></ProtectedRoute>} />
+            <Route path="/admin/notifications" element={<ProtectedRoute requiredRole="admin"><AdminNotificationsCenter /></ProtectedRoute>} />
+            <Route path="/admin/scraper-logs" element={<ProtectedRoute requiredRole="admin"><AdminScraperJobsMonitor /></ProtectedRoute>} />
+            <Route path="/admin/change-logs" element={<ProtectedRoute requiredRole="admin"><AdminChangeLogs /></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/program/:id" element={<ProgramDetail />} />
             <Route path="*" element={<NotFound />} />
         </Routes>

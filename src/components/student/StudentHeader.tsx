@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStudentData } from '../../contexts/StudentDataContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 function StudentHeader() {
   const { notifications } = useStudentData()
+  const { user, signOut } = useAuth()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
   const unreadNotifications = notifications.filter(notification => !notification.read).length
@@ -23,9 +25,9 @@ function StudentHeader() {
     }
   }, [isProfileOpen])
 
-  const handleLogout = () => {
-    console.log('Logout clicked')
+  const handleLogout = async () => {
     setIsProfileOpen(false)
+    await signOut()
   }
 
   return (
@@ -50,8 +52,10 @@ function StudentHeader() {
               <span className="text-white font-medium">AI</span>
             </div>
             <div>
-              <p className="text-sm font-medium" style={{ color: '#111827' }}>Aryan Izhar</p>
-              <p className="text-xs text-gray-500">Student</p>
+              <p className="text-sm font-medium" style={{ color: '#111827' }}>
+                {user?.email || 'User'}
+              </p>
+              <p className="text-xs text-gray-500 capitalize">{user?.role || user?.user_type || 'Student'}</p>
             </div>
             <svg className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

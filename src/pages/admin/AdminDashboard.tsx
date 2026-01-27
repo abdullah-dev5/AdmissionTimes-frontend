@@ -1,5 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "../../contexts/AuthContext"
+import { dashboardService } from "../../services/dashboardService"
 import AdminLayout from "../../layouts/AdminLayout"
 import {
 	pendingVerifications,
@@ -10,12 +12,10 @@ import {
 	admissionAnalytics,
 	getActionColor,
 	getScraperStatusColor,
-	getVerificationStatusColor,
 } from "../../data/adminData"
 import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
 import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
 import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
-import DegreeTypeChart from "../../components/admin/DegreeTypeChart"
 
 // Tooltip Component
 function InfoTooltip({ description }: { description: string }) {
@@ -67,13 +67,58 @@ function InfoTooltip({ description }: { description: string }) {
 }
 
 function AdminDashboard() {
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const navigate = useNavigate()
+	const { isAuthenticated, user, isLoading: authLoading } = useAuth()
+	const [apiDashboard, setApiDashboard] = useState<any>(null)
+	const [_loading, _setLoading] = useState(false)
+	const [_error, _setError] = useState<string | null>(null)
 
-	// Get limited items for display
-	const displayPendingVerifications = pendingVerifications.slice(0, 5)
-	const displayRecentActions = recentAdminActions.slice(0, 5)
-	const displayNotifications = adminNotifications.slice(0, 4)
-	const displayScraperActivities = scraperActivities.slice(0, 4)
+	/**
+	 * Fetch admin dashboard from API if authenticated
+	 * Falls back to mock data on error
+	 */
+	useEffect(() => {
+		// Wait for auth to finish loading
+		if (authLoading) return
+
+		// Only fetch for admin users
+		const userType = user?.role || user?.user_type;
+		if (!isAuthenticated || userType !== 'admin') {
+			return
+		}
+
+		fetchDashboard()
+	}, [isAuthenticated, user?.user_type, authLoading])
+
+	/**
+	 * Fetch dashboard data from API
+	 */
+	const fetchDashboard = async () => {
+		try {
+			_setLoading(true)
+			_setError(null)
+
+			const response = await dashboardService.getAdminDashboard()
+			setApiDashboard(response.data)
+
+			console.debug('[AdminDashboard] Dashboard data fetched successfully')
+		} catch (err: any) {
+			console.error('[AdminDashboard] Failed to fetch dashboard data:', err)
+			_setError(err.message || 'Failed to load dashboard data')
+			// Will use mock data instead
+		} finally {
+			_setLoading(false)
+		}
+	}
+
+	// Use API data if available, otherwise use mock data
+	const displayPendingVerifications = (apiDashboard?.pending_verifications || pendingVerifications).slice(0, 5)
+	const displayRecentActions = (apiDashboard?.recent_actions || recentAdminActions).slice(0, 5)
+	const displayNotifications = (apiDashboard?.notifications || adminNotifications).slice(0, 4)
+	const displayScraperActivities = (apiDashboard?.scraper_activity || scraperActivities).slice(0, 4)
+	const metrics = apiDashboard?.stats || systemMetrics
+	const analytics = apiDashboard?.analytics || admissionAnalytics
 
 	return (
 		<AdminLayout>
@@ -103,7 +148,7 @@ function AdminDashboard() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Total Users</p>
 								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
-									{systemMetrics.totalUsers.toLocaleString()}
+									{metrics.totalUsers.toLocaleString()}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#DBEAFE" }}>
@@ -125,7 +170,7 @@ function AdminDashboard() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Total Admissions</p>
 								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
-									{systemMetrics.totalAdmissions.toLocaleString()}
+									{metrics.totalAdmissions.toLocaleString()}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#D1FAE5" }}>
@@ -147,7 +192,7 @@ function AdminDashboard() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Total Alerts Sent</p>
 								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
-									{systemMetrics.totalAlertsSent.toLocaleString()}
+									{metrics.totalAlertsSent.toLocaleString()}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEF3C7" }}>
@@ -165,12 +210,12 @@ function AdminDashboard() {
 				</div>
 
 				{/* AI Summary Section 
-				{systemMetrics.aiSummary && (
+				{metrics.aiSummary && (
 					<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
 						<h2 className="text-xl font-semibold mb-4" style={{ color: "#111827" }}>
 							 System Insights
 						</h2>
-						<p className="text-gray-700 leading-relaxed">{systemMetrics.aiSummary}</p>
+						<p className="text-gray-700 leading-relaxed">{metrics.aiSummary}</p>
 					</div>
 				)}
 */}
@@ -192,7 +237,7 @@ function AdminDashboard() {
 									description="This chart displays the distribution of admission records across different verification statuses (e.g., Pending, Approved, Rejected, Under Review). It helps administrators quickly identify how many admissions are in each status category, enabling better workload management and prioritization of verification tasks."
 								/>
 							</div>
-							<AdmissionStatusChart data={admissionAnalytics.statusBreakdown} />
+							<AdmissionStatusChart data={analytics.statusBreakdown} />
 						</div>
 
 						{/* University Distribution */}
@@ -205,7 +250,7 @@ function AdminDashboard() {
 									description="This chart shows the number of admission records contributed by each university in the system. It provides insights into which universities are most active in posting admissions, helping identify top contributors and potential areas for outreach or support."
 								/>
 							</div>
-							<UniversityDistributionChart data={admissionAnalytics.universityDistribution} />
+							<UniversityDistributionChart data={analytics.universityDistribution} />
 						</div>
 					</div>
 
@@ -220,7 +265,7 @@ function AdminDashboard() {
 									description="This chart visualizes the trend of new admission postings over time, typically displayed month by month. It helps administrators identify seasonal patterns, growth trends, and peak periods in admission submissions. This information is valuable for resource planning, understanding user engagement cycles, and predicting future workload."
 								/>
 							</div>
-							<MonthlyTrendChart data={admissionAnalytics.monthlyTrend} />
+							<MonthlyTrendChart data={analytics.monthlyTrend} />
 						</div>
 					</div>
 
@@ -231,7 +276,7 @@ function AdminDashboard() {
 							<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
 								Degree Type Distribution
 							</h3>
-							<DegreeTypeChart data={admissionAnalytics.degreeTypeDistribution} />
+							Placeholder for DegreeTypeChart - import not needed
 						</div>*/}
 
 						{/* Top Admissions Table 
@@ -251,8 +296,8 @@ function AdminDashboard() {
 										</tr>
 									</thead>
 									<tbody>
-										{admissionAnalytics.topAdmissions.map((admission, index) => {
-											const statusColors = getVerificationStatusColor(admission.status)
+										{analytics.topAdmissions.map((admission: any, index) => {
+											// const statusColors = getVerificationStatusColor(admission.status)
 											return (
 												<tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
 													<td className="py-4 px-4">
@@ -316,7 +361,7 @@ function AdminDashboard() {
 								</tr>
 							</thead>
 							<tbody>
-								{displayPendingVerifications.map((verification) => (
+								{displayPendingVerifications.map((verification: any) => (
 									<tr key={verification.id} className="border-b border-gray-100 hover:bg-gray-50">
 										<td className="py-4 px-4">
 											<p className="font-medium" style={{ color: "#111827" }}>
@@ -388,7 +433,7 @@ function AdminDashboard() {
 								</tr>
 							</thead>
 							<tbody>
-								{displayRecentActions.map((action) => {
+								{displayRecentActions.map((action: any) => {
 									const actionColors = getActionColor(action.action)
 									return (
 										<tr key={action.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -448,7 +493,7 @@ function AdminDashboard() {
 							</button>
 						</div>
 						<div className="space-y-4">
-							{displayNotifications.map((notification) => (
+							{displayNotifications.map((notification: any) => (
 								<div
 									key={notification.id}
 									className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
@@ -501,7 +546,7 @@ function AdminDashboard() {
 									</tr>
 								</thead>
 								<tbody>
-									{displayScraperActivities.map((activity) => {
+									{displayScraperActivities.map((activity: any) => {
 										const statusColors = getScraperStatusColor(activity.status)
 										return (
 											<tr key={activity.id} className="border-b border-gray-100 hover:bg-gray-50">
