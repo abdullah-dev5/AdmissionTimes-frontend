@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { authService, type SignInData, type SignUpData } from '../services/authService';
 import { setupUserContext, clearUserContext } from '../utils/setupUserContext';
 import { useToast } from './ToastContext';
+import { useAuthStore } from '../store/authStore';
 import type { User } from '../types/api';
 
 interface AuthContextType {
@@ -54,6 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Try to get current user from API
         const response = await authService.getCurrentUser();
         setUser(response.data);
+        
+        // Also sync with Zustand store
+        useAuthStore.getState().login(response.data);
       } else {
         setUser(null);
       }
@@ -62,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Auth check failed:', error);
       setUser(null);
       clearUserContext();
+      useAuthStore.getState().logout();
     } finally {
       setIsLoading(false);
     }
@@ -75,15 +80,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       const response = await authService.signIn(data);
       
+      console.log('[AuthContext] Sign-in response:', response);
+      
       // Store user data
       const userData = response.data.user;
+      console.log('[AuthContext] User data from response:', userData);
+      
       setUser(userData);
+      
+      // Also sync with Zustand store (for API client interceptor)
+      useAuthStore.getState().login(userData);
+      console.log('[AuthContext] Zustand store updated');
       
       // Setup user context for API calls (pass user ID)
       setupUserContext(
-        userData.user_type as 'student' | 'university' | 'admin',
+        (userData.role || userData.user_type) as 'student' | 'university' | 'admin',
         userData.id
       );
+      console.log('[AuthContext] User context setup complete');
       
       // Also store university_id if present
       if (userData.university_id) {
@@ -92,13 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       showSuccess('Signed in successfully!');
       
+      const userType = userData.role || userData.user_type;
+      console.log('[AuthContext] Checking user type for navigation:', userType);
+      
       // Redirect based on user type
-      if (userData.user_type === 'student') {
+      if (userType === 'student') {
+        console.log('[AuthContext] Navigating to /student/dashboard');
         navigate('/student/dashboard');
-      } else if (userData.user_type === 'university') {
+      } else if (userType === 'university') {
+        console.log('[AuthContext] Navigating to /university/dashboard');
         navigate('/university/dashboard');
-      } else if (userData.user_type === 'admin') {
+      } else if (userType === 'admin') {
+        console.log('[AuthContext] Navigating to /admin/dashboard');
         navigate('/admin/dashboard');
+      } else {
+        console.warn('[AuthContext] Unknown user type, cannot navigate:', userType);
       }
     } catch (error: any) {
       console.error('Sign in failed:', error);
@@ -122,9 +144,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = response.data.user;
       setUser(userData);
       
+      // Also sync with Zustand store (for API client interceptor)
+      useAuthStore.getState().login(userData);
+      
+      const userType = userData.role || userData.user_type;
+      
       // Setup user context for API calls (pass user ID)
       setupUserContext(
-        userData.user_type as 'student' | 'university' | 'admin',
+        userType as 'student' | 'university' | 'admin',
         userData.id
       );
       
@@ -136,11 +163,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       showSuccess('Account created successfully!');
       
       // Redirect based on user type
-      if (userData.user_type === 'student') {
+      if (userType === 'student') {
         navigate('/student/dashboard');
-      } else if (userData.user_type === 'university') {
+      } else if (userType === 'university') {
         navigate('/university/dashboard');
-      } else if (userData.user_type === 'admin') {
+      } else if (userType === 'admin') {
         navigate('/admin/dashboard');
       }
     } catch (error: any) {
@@ -166,6 +193,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear local state
       setUser(null);
       clearUserContext();
+      
+      // Also clear Zustand store
+      useAuthStore.getState().logout();
       
       showSuccess('Signed out successfully');
       navigate('/signin');

@@ -16,6 +16,7 @@
  */
 
 import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { getAuthState } from '../store/authStore';
 
 /**
  * Standard API response structure
@@ -88,33 +89,41 @@ const apiClient: AxiosInstance = axios.create({
  * 
  * Automatically adds authentication headers to all requests.
  * 
- * Development Mode:
- * - Reads user context from localStorage (mock authentication)
- * - Adds x-user-id, x-user-role, x-university-id headers
+ * Development Mode (Current - Phase 1-3):
+ * - Reads user from Zustand auth store
+ * - Adds x-user-id, x-user-role, x-university-id headers (mock authentication)
  * 
- * Production Mode (Future):
- * - Reads JWT token from localStorage
- * - Adds Authorization: Bearer <token> header
+ * Production Mode (Future - Phase 4C):
+ * - Will read JWT token from Supabase
+ * - Will add Authorization: Bearer <token> header
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Get user context from localStorage (mock auth for development)
-    const userId = localStorage.getItem('userId');
-    const userRole = localStorage.getItem('userRole');
-    const universityId = localStorage.getItem('universityId');
+    // Get user from Zustand store (persisted in localStorage automatically)
+    const { user } = getAuthState();
 
-    // Add mock auth headers (development only)
-    if (userId && config.headers) {
-      config.headers['x-user-id'] = userId;
-    }
-    if (userRole && config.headers) {
+    // Add mock auth headers (development/current MVP)
+    if (user && config.headers) {
+      const userRole = user.role || user.user_type;  // Support both field names
+      
+      config.headers['x-user-id'] = user.id;
       config.headers['x-user-role'] = userRole;
-    }
-    if (universityId && config.headers) {
-      config.headers['x-university-id'] = universityId;
+      
+      // Add university ID only if user is from a university
+      if (user.university_id) {
+        config.headers['x-university-id'] = user.university_id;
+      }
+      
+      console.debug('[API] Auth headers added:', {
+        userId: user.id,
+        role: userRole,
+        universityId: user.university_id || 'N/A'
+      });
+    } else {
+      console.warn('[API] No user found in auth store - request will proceed without headers');
     }
 
-    // Future: Add real auth token (Phase 4C - Authentication)
+    // Future (Phase 4C): Replace with real JWT token
     // const token = localStorage.getItem('authToken');
     // if (token && config.headers) {
     //   config.headers['Authorization'] = `Bearer ${token}`;
@@ -124,7 +133,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     // Handle request configuration errors
-    console.error('Request interceptor error:', error);
+    console.error('[API] Request interceptor error:', error);
     return Promise.reject(error);
   }
 );

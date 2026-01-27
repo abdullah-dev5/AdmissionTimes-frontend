@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, useEffect, type ReactNode } from 'react'
+import { useAuth } from './AuthContext'
+import { dashboardService } from '../services/dashboardService'
 import {
   sharedAdmissions,
   sharedChangeLogs,
@@ -63,9 +65,80 @@ const formatNow = () => {
 }
 
 export function UniversityDataProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
   const [admissions, setAdmissions] = useState<Admission[]>(() => cloneAdmissions())
   const [changeLogs, setChangeLogs] = useState<ChangeLogItem[]>(() => cloneChangeLogs())
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => cloneNotifications())
+  const [_loading, _setLoading] = useState(true)
+  const [_error, _setError] = useState<string | null>(null)
+
+  /**
+   * Fetch dashboard data from API if user is authenticated
+   * Falls back to mock data on error or if not authenticated
+   */
+  useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return
+
+    // Only fetch for university users
+    const userType = user?.role || user?.user_type;
+    if (!isAuthenticated || userType !== 'university') {
+      setAdmissions([])
+      setNotifications([])
+      setChangeLogs([])
+      _setLoading(false)
+      return
+    }
+
+    fetchDashboardData()
+  }, [isAuthenticated, user?.user_type, authLoading])
+
+  /**
+   * Fetch university dashboard data from API
+   */
+  const fetchDashboardData = async () => {
+    try {
+      _setLoading(true)
+      _setError(null)
+
+      const response = await dashboardService.getUniversityDashboard()
+
+      // Transform API response to match our data structure
+      // API returns: pending_verifications, recent_notifications, recent_changes
+      if (response.data.pending_verifications && Array.isArray(response.data.pending_verifications)) {
+        // Cast to Admission[] - API returns extended Admission type with verification fields
+        setAdmissions(response.data.pending_verifications as any)
+      } else {
+        setAdmissions(cloneAdmissions())
+      }
+
+      if (response.data.recent_notifications && Array.isArray(response.data.recent_notifications)) {
+        // Cast to NotificationItem[] - API returns Notification type
+        setNotifications(response.data.recent_notifications as any)
+      } else {
+        setNotifications(cloneNotifications())
+      }
+
+      if (response.data.recent_changes && Array.isArray(response.data.recent_changes)) {
+        // Cast to ChangeLogItem[] - API returns ChangeLog type
+        setChangeLogs(response.data.recent_changes as any)
+      } else {
+        setChangeLogs(cloneChangeLogs())
+      }
+
+      console.debug('[UniversityDataContext] Dashboard data fetched successfully')
+    } catch (err: any) {
+      console.error('[UniversityDataContext] Failed to fetch dashboard data:', err)
+      _setError(err.message || 'Failed to load dashboard data')
+
+      // Fallback to mock data
+      setAdmissions(cloneAdmissions())
+      setNotifications(cloneNotifications())
+      setChangeLogs(cloneChangeLogs())
+    } finally {
+      _setLoading(false)
+    }
+  }
 
   const appendChangeLog = useCallback((entry: Omit<ChangeLogItem, 'id'>) => {
     setChangeLogs((prev) => {

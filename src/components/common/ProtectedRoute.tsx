@@ -41,13 +41,14 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   // Check role if required
-  if (requiredRole && user?.user_type !== requiredRole) {
+  const userType = user?.role || user?.user_type;
+  if (requiredRole && userType !== requiredRole) {
     // Redirect to appropriate dashboard based on user role
-    if (user?.user_type === 'student') {
+    if (userType === 'student') {
       return <Navigate to="/student/dashboard" replace />;
-    } else if (user?.user_type === 'university') {
+    } else if (userType === 'university') {
       return <Navigate to="/university/dashboard" replace />;
-    } else if (user?.user_type === 'admin') {
+    } else if (userType === 'admin') {
       return <Navigate to="/admin/dashboard" replace />;
     }
     return <Navigate to="/" replace />;

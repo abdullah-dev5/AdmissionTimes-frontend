@@ -10,6 +10,7 @@ import { watchlistsService } from '../services/watchlistsService'
 import { notificationsService } from '../services/notificationsService'
 import { transformAdmission, transformNotification } from '../utils/transformers'
 import { useToast } from './ToastContext'
+import { useAuth } from './AuthContext'
 
 interface StudentDataContextValue {
   admissions: StudentAdmission[]
@@ -51,11 +52,26 @@ export function StudentDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<StudentDataContextValue['stats']>(null)
   const { showError } = useToast()
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth()
 
-  // Fetch dashboard data on mount
+  // Fetch dashboard data only when authenticated
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
+    // Don't fetch if auth is still loading
+    if (authLoading) {
+      return
+    }
+
+    // Only fetch if user is authenticated and is a student
+    const userType = user?.role || user?.user_type;
+    if (isAuthenticated && userType === 'student') {
+      fetchDashboardData()
+    } else {
+      // Clear data and set as not loading if not authenticated
+      setAdmissions([])
+      setNotifications([])
+      setLoading(false)
+    }
+  }, [isAuthenticated, user?.role, user?.user_type, authLoading])
 
   const fetchDashboardData = useCallback(async () => {
     try {

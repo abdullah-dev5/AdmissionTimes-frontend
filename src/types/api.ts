@@ -128,7 +128,8 @@ export interface Watchlist {
 export interface User {
   id: string;
   email: string;
-  user_type: 'student' | 'university' | 'admin';
+  role: 'student' | 'university' | 'admin';  // Changed from user_type to role
+  user_type?: 'student' | 'university' | 'admin';  // Keep as optional for backward compatibility
   university_id: string | null;
   created_at: string;
   updated_at: string;
