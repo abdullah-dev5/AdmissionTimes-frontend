@@ -11,6 +11,7 @@ function SignIn() {
     password: '',
   })
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [apiError, setApiError] = useState<string>('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -48,18 +49,31 @@ function SignIn() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setApiError('')
 
     if (!validate()) {
       return
     }
 
     try {
+      console.log('[SignIn] Starting signin with email:', formData.email)
+      
       await signIn({
         email: formData.email,
         password: formData.password,
       })
-    } catch (error) {
-      // Error is handled by auth context
+      
+      console.log('[SignIn] Signin successful!')
+    } catch (error: any) {
+      console.error('[SignIn] Error occurred:', error)
+      
+      const errorMessage = 
+        error?.response?.data?.message || 
+        error?.message || 
+        'Failed to sign in. Please check your credentials.'
+      
+      console.error('[SignIn] Error message:', errorMessage)
+      setApiError(errorMessage)
     }
   }
 
@@ -80,6 +94,13 @@ function SignIn() {
 
           {/* Sign In Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* API Error Display */}
+            {apiError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 font-medium text-sm">Error: {apiError}</p>
+              </div>
+            )}
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: '#111827' }}>
                 Email Address *

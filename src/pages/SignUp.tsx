@@ -22,6 +22,7 @@ function SignUp() {
     display_name?: string
     university_id?: string
   }>({})
+  const [apiError, setApiError] = useState<string>('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -40,10 +41,11 @@ function SignUp() {
 
   const validate = (): boolean => {
     const newErrors: typeof errors = {}
+    const emailValue = formData.email.trim()
 
-    if (!formData.email) {
+    if (!emailValue) {
       newErrors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
       newErrors.email = 'Please enter a valid email address'
     }
 
@@ -73,21 +75,38 @@ function SignUp() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setApiError('')
 
     if (!validate()) {
       return
     }
 
     try {
+      console.log('[SignUp] Starting signup with:', { 
+        email: formData.email.trim(), 
+        user_type: formData.user_type 
+      })
+      
       await signUp({
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         user_type: formData.user_type,
         display_name: formData.display_name || undefined,
         university_id: formData.university_id || undefined,
       })
-    } catch (error) {
-      // Error is handled by auth context
+      
+      console.log('[SignUp] Signup successful!')
+    } catch (error: any) {
+      console.error('[SignUp] Error occurred:', error)
+      
+      // Extract error message
+      const errorMessage = 
+        error?.response?.data?.message || 
+        error?.message || 
+        'Failed to create account. Please try again.'
+      
+      console.error('[SignUp] Error message:', errorMessage)
+      setApiError(errorMessage)
     }
   }
 
@@ -108,6 +127,13 @@ function SignUp() {
 
           {/* Sign Up Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* API Error Display */}
+            {apiError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 font-medium text-sm">Error: {apiError}</p>
+              </div>
+            )}
+
             <div>
               <label htmlFor="user_type" className="block text-sm font-medium mb-2" style={{ color: '#111827' }}>
                 Account Type *

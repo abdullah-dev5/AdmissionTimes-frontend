@@ -49,8 +49,19 @@ function App() {
               </button>
             </nav>
             <div className="flex items-center gap-4">
-              <button className="text-sm font-medium text-gray-600 hover:text-gray-900 cursor-pointer transition-colors">Sign In</button>
-              <button className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" style={{ backgroundColor: '#2563EB' }}>Register</button>
+              <button 
+                onClick={() => navigate('/signin')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+              >
+                Sign In
+              </button>
+              <button 
+                onClick={() => navigate('/signup')}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
+                style={{ backgroundColor: '#2563EB' }}
+              >
+                Register
+              </button>
             </div>
           </div>
         </div>
