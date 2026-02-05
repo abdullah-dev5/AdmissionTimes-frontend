@@ -16,6 +16,7 @@ export interface SignUpData {
   user_type: 'student' | 'university' | 'admin';
   display_name?: string;
   university_id?: string; // Required for university users
+  auth_user_id?: string; // Supabase Auth UUID
 }
 
 export interface SignInData {

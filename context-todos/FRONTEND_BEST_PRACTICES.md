@@ -1,8 +1,19 @@
 # Frontend Design Patterns, System Design & Best Practices
 
 **Created:** January 18, 2026  
+**Last Updated:** February 6, 2026  
 **Purpose:** Comprehensive reference document for all design patterns, system design principles, and best practices followed in AdmissionTimes Frontend  
-**Status:** Active Reference Document
+**Status:** Active Reference Document - JWT Authentication Implemented
+
+---
+
+## 📝 Recent Updates
+
+### February 6, 2026 - JWT Authentication Complete
+- ✅ JWT Authentication patterns documented (ES256 tokens)
+- ✅ Auto-sync user provisioning implementation
+- ✅ Role consistency and database sync patterns
+- ✅ Complete authentication architecture in [AUTHENTICATION_ARCHITECTURE.md](../AUTHENTICATION_ARCHITECTURE.md)
 
 ---
 
@@ -1297,7 +1308,272 @@ apiClient.interceptors.response.use(
 
 ---
 
-### 3. Optimistic Update Pattern
+### 3. JWT Authentication Pattern
+
+**Purpose:** Secure API authentication using JWT tokens with automatic user provisioning.
+
+**Implementation:**
+- Supabase Auth for JWT token generation (ES256 algorithm)
+- Automatic JWT injection in API requests
+- Auto-sync user provisioning in database
+- Bidirectional role consistency between auth provider and database
+- Automatic token refresh
+
+**Architecture:**
+```typescript
+// JWT Token Structure (ES256)
+interface JWTPayload {
+  sub: string;              // Supabase User UUID
+  email: string;
+  user_metadata: {
+    role: 'student' | 'university' | 'admin';
+    university_id?: string;
+    display_name?: string;
+  };
+  exp: number;              // Expiration timestamp
+  iat: number;              // Issued at timestamp
+  iss: string;              // Issuer (Supabase URL)
+  aud: string;              // Audience ("authenticated")
+}
+```
+
+**API Client with JWT:**
+```typescript
+// src/services/apiClient.ts
+import { supabase } from './supabase';
+
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Request Interceptor - Automatic JWT Token Injection
+apiClient.interceptors.request.use(
+  async (config: InternalAxiosRequestConfig) => {
+    // Get fresh JWT token from Supabase
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.access_token && config.headers) {
+      // Attach JWT token to Authorization header
+      config.headers['Authorization'] = `Bearer ${session.access_token}`;
+      
+      if (import.meta.env.VITE_DEBUG_API === 'true') {
+        console.log('🔐 [API] JWT token attached to request');
+      }
+    }
+    
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor - Handle 401 Unauthorized
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid - sign out user
+      await supabase.auth.signOut();
+      window.location.href = '/signin';
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+**Authentication Service Pattern:**
+```typescript
+// src/services/authService.ts
+import { supabase } from './supabase';
+import { apiClient } from './apiClient';
+
+export const authService = {
+  // Sign Up - Creates user in Supabase Auth + Database
+  signUp: async (email: string, password: string, role: string) => {
+    // Step 1: Create user in Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          role,  // Stored in JWT user_metadata
+        },
+      },
+    });
+    
+    if (error) throw error;
+    
+    // Step 2: Create user in application database
+    // (Backend auto-creates via JWT middleware if missing)
+    
+    return data;
+  },
+  
+  // Sign In - Authenticates and gets JWT token
+  signIn: async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    if (error) throw error;
+    
+    // JWT token automatically stored in localStorage by Supabase
+    return data;
+  },
+  
+  // Get Current User - Fetches user details from database
+  getCurrentUser: async () => {
+    // JWT already attached by interceptor
+    const response = await apiClient.get('/auth/me');
+    return response.data.data;
+  },
+  
+  // Sign Out
+  signOut: async () => {
+    await supabase.auth.signOut();
+  },
+};
+```
+
+**Auth Context with JWT:**
+```typescript
+// src/contexts/AuthContext.tsx
+interface AuthContextValue {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, role: string) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  
+  // Listen for auth state changes
+  useEffect(() => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // User signed in - fetch full user details
+        try {
+          const userData = await authService.getCurrentUser();
+          setUser(userData);
+        } catch (error) {
+          console.error('Failed to fetch user:', error);
+          setUser(null);
+        }
+      } else {
+        // User signed out
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+  }, []);
+  
+  const signIn = async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      await authService.signIn(email, password);
+      const userData = await authService.getCurrentUser();
+      setUser(userData);
+      
+      // Navigate based on role
+      const dashboard = `/${userData.role}/dashboard`;
+      navigate(dashboard);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const signUp = async (email: string, password: string, role: string) => {
+    await authService.signUp(email, password, role);
+    // Show "Check email" message
+    navigate('/signin');
+  };
+  
+  const signOut = async () => {
+    await authService.signOut();
+    setUser(null);
+    navigate('/signin');
+  };
+  
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      isAuthenticated: !!user, 
+      isLoading,
+      signIn, 
+      signUp, 
+      signOut 
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+```
+
+**Protected Route Pattern:**
+```typescript
+// src/Router/ProtectedRoute.tsx
+function ProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: ReactNode;
+  allowedRoles: string[];
+}) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/signin" replace />;
+  }
+  
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+// Usage in router
+<Route
+  path="/student/dashboard"
+  element={
+    <ProtectedRoute allowedRoles={['student']}>
+      <StudentDashboard />
+    </ProtectedRoute>
+  }
+/>
+```
+
+**Key Patterns:**
+1. **Automatic Token Injection:** JWT automatically attached to all API requests
+2. **Auto-Sync Users:** Backend creates missing users on first authenticated request
+3. **Role Consistency:** Role synced from Supabase Auth (source of truth) to database
+4. **Token Refresh:** Automatic token refresh handled by Supabase client
+5. **Graceful Expiry:** 401 errors trigger automatic sign-out and redirect
+6. **Database ID Mapping:** JWT contains Supabase UUID, backend returns database ID
+
+**Benefits:**
+- ✅ Secure authentication with industry-standard ES256 algorithm
+- ✅ No orphan users (auto-sync prevents database inconsistencies)
+- ✅ Foreign key constraints always satisfied
+- ✅ Automatic token injection (no manual header management)
+- ✅ Bidirectional role sync between auth provider and database
+- ✅ Graceful token expiry handling
+
+**Complete Documentation:** See [AUTHENTICATION_ARCHITECTURE.md](../AUTHENTICATION_ARCHITECTURE.md)
+
+---
+
+### 4. Optimistic Update Pattern
 
 **Purpose:** Update UI immediately, rollback on error.
 

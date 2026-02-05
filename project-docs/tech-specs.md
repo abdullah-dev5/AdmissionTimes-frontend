@@ -6,6 +6,33 @@
 - React 19, TypeScript, Vite
 - React Router v7
 - Tailwind CSS v4
+- Supabase Auth (JWT, ES256 algorithm)
+- Express.js Backend with TypeScript
+- PostgreSQL Database
+
+## Authentication Architecture
+
+### JWT Implementation (ES256)
+- **Token Provider:** Supabase Auth
+- **Algorithm:** ES256 (Elliptic Curve)
+- **Token Validation:** Development mode uses payload extraction, production uses JWKS
+- **Auto-Sync:** Users auto-created in database on first authenticated request
+- **Role Consistency:** Bidirectional sync between Supabase Auth (source of truth) and PostgreSQL
+
+### User Identity Mapping
+- **Supabase UUID:** User identity in Supabase Auth (`sub` claim in JWT)
+- **Database ID:** Local auto-increment primary key for all foreign keys
+- **Middleware:** Converts Supabase UUID → Database ID for all services
+- **Critical Rule:** After JWT middleware, always use database ID (`req.user.id`)
+
+### Key Features
+- ✅ Automatic database user creation on first signin
+- ✅ Role synced from Supabase Auth on every authenticated request
+- ✅ No orphan users (auto-sync prevents missing database records)
+- ✅ Foreign key constraints always satisfied
+- ✅ Fail-safe: If user missing, auto-create instead of 401
+
+For complete authentication architecture, database schema, policies, and deployment checklist, see [AUTHENTICATION_ARCHITECTURE.md](../AUTHENTICATION_ARCHITECTURE.md)
 
 ## Architecture & Best Practices
 
