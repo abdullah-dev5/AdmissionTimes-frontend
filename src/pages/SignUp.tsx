@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { TEST_UNIVERSITIES, isDevelopmentMode } from '../constants/testUniversities'
 
 function SignUp() {
   const navigate = useNavigate()
@@ -65,9 +66,10 @@ function SignUp() {
       newErrors.user_type = 'Please select an account type'
     }
 
-    if (formData.user_type === 'university' && !formData.university_id) {
-      newErrors.university_id = 'University ID is required for university accounts'
-    }
+    // TODO: Enable university_id validation later
+    // if (formData.user_type === 'university' && !formData.university_id) {
+    //   newErrors.university_id = 'University ID is required for university accounts'
+    // }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -160,24 +162,54 @@ function SignUp() {
             {formData.user_type === 'university' && (
               <div>
                 <label htmlFor="university_id" className="block text-sm font-medium mb-2" style={{ color: '#111827' }}>
-                  University ID *
+                  {isDevelopmentMode() ? 'Select University (Optional)' : 'University ID (Optional)'}
                 </label>
-                <input
-                  type="text"
-                  id="university_id"
-                  name="university_id"
-                  value={formData.university_id}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                    errors.university_id
-                      ? 'border-red-500 focus:ring-red-500'
-                      : 'border-gray-300 focus:ring-blue-500'
-                  }`}
-                  placeholder="Enter your university ID"
-                  disabled={isLoading}
-                />
-                {errors.university_id && <p className="mt-1 text-sm text-red-600">{errors.university_id}</p>}
-                <p className="mt-1 text-xs text-gray-500">Contact admin to get your university ID</p>
+                {isDevelopmentMode() ? (
+                  <>
+                    <select
+                      id="university_id"
+                      name="university_id"
+                      value={formData.university_id}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                        errors.university_id
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
+                      disabled={isLoading}
+                    >
+                      <option value="">-- Select a University --</option>
+                      {TEST_UNIVERSITIES.map((university) => (
+                        <option key={university.id} value={university.id}>
+                          {university.name} ({university.country})
+                        </option>
+                      ))}
+                    </select>
+                    {errors.university_id && <p className="mt-1 text-sm text-red-600">{errors.university_id}</p>}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Optional for now - Select from available universities for testing
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      id="university_id"
+                      name="university_id"
+                      value={formData.university_id}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                        errors.university_id
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
+                      placeholder="Enter your university ID"
+                      disabled={isLoading}
+                    />
+                    {errors.university_id && <p className="mt-1 text-sm text-red-600">{errors.university_id}</p>}
+                    <p className="mt-1 text-xs text-gray-500">Optional for now - Contact admin to get your university ID</p>
+                  </>
+                )}
               </div>
             )}
 

@@ -10,10 +10,12 @@ import ProgramDetail from "../pages/ProgramDetail";
 import Notifications from "../pages/student/Notifications";
 import UniversityDashboard from "../pages/university/UniversityDashboard";
 import ManageAdmissions from "../pages/university/ManageAdmissions";
+import ViewAllAdmissions from "../pages/university/ViewAllAdmissions";
 import VerificationCenter from "../pages/university/VerificationCenter";
 import ChangeLogs from "../pages/university/ChangeLogs";
 import NotificationsCenter from "../pages/university/NotificationsCenter";
 import Settings from "../pages/university/Settings";
+import EditProfile from "../pages/university/EditProfile";
 import SearchAdmissions from "../pages/student/SearchAdmissions";
 import ComparePage from "../pages/student/ComparePage";
 import DeadlinePage from "../pages/student/DeadlinePage";
@@ -41,11 +43,13 @@ const AppRouter = () => {
             <Route path="/student/watchlist" element={<ProtectedRoute requiredRole="student"><WatchlistPage /></ProtectedRoute>} />
             <Route path="/student/notifications" element={<ProtectedRoute requiredRole="student"><Notifications /></ProtectedRoute>} />
             <Route path="/university/dashboard" element={<ProtectedRoute requiredRole="university"><UniversityDashboard /></ProtectedRoute>} />
+            <Route path="/university/admissions" element={<ProtectedRoute requiredRole="university"><ViewAllAdmissions /></ProtectedRoute>} />
             <Route path="/university/manage-admissions" element={<ProtectedRoute requiredRole="university"><ManageAdmissions /></ProtectedRoute>} />
             <Route path="/university/verification-center" element={<ProtectedRoute requiredRole="university"><VerificationCenter /></ProtectedRoute>} />
             <Route path="/university/change-logs" element={<ProtectedRoute requiredRole="university"><ChangeLogs /></ProtectedRoute>} />
             <Route path="/university/notifications-center" element={<ProtectedRoute requiredRole="university"><NotificationsCenter /></ProtectedRoute>} />
             <Route path="/university/settings" element={<ProtectedRoute requiredRole="university"><Settings /></ProtectedRoute>} />
+            <Route path="/university/settings/edit-profile" element={<ProtectedRoute requiredRole="university"><EditProfile /></ProtectedRoute>} />
             <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/verification" element={<ProtectedRoute requiredRole="admin"><AdminVerificationCenter /></ProtectedRoute>} />
             <Route path="/admin/notifications" element={<ProtectedRoute requiredRole="admin"><AdminNotificationsCenter /></ProtectedRoute>} />

@@ -123,7 +123,6 @@ export const deadlinesService = {
   // BACKEND API METHODS (Complex operations)
   // ============================================================
 
-export const deadlinesService = {
   /**
    * List deadlines with optional filters
    * 

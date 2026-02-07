@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor, type Admission } from '../../data/universityData'
 import { useUniversityData } from '../../contexts/UniversityDataContext'
+import { formatDateForInput, sanitizeAdmission } from '../../utils/admissionUtils'
 
 function ManageAdmissions() {
   const navigate = useNavigate()
@@ -13,17 +14,33 @@ function ManageAdmissions() {
   const { admissions, getAdmissionById, createOrUpdateAdmission, deleteAdmission } = useUniversityData()
   const existingAdmission = editId ? getAdmissionById(editId) : null
 
+  // Determine if we need to change status to pending on edit
+  const requiresStatusReset = useMemo(() => {
+    if (!existingAdmission) return false
+    // If admission is verified, rejected, or disputed, editing should reset to pending
+    return ['verified', 'rejected', 'disputed'].includes(existingAdmission.verification_status || '')
+  }, [existingAdmission])
+
   const [formData, setFormData] = useState({
-    programTitle: existingAdmission?.title || 'Bachelor of Science in Computer Science',
-    degreeType: existingAdmission?.degreeType || 'BS',
-    department: existingAdmission?.department || 'School of Engineering',
-    academicYear: existingAdmission?.academicYear || '2025-2026',
-    applicationDeadline: existingAdmission?.deadline || '',
-    fee: existingAdmission?.fee || '2500',
+    // REQUIRED: Program Title
+    programTitle: existingAdmission?.title || '',
+    
+    // OPTIONAL: Program Details (no defaults - leave empty if not provided)
+    degreeType: existingAdmission?.degreeType || '',
+    department: existingAdmission?.department || '',
+    academicYear: existingAdmission?.academicYear || '',
+    
+    // OPTIONAL: Application Details (no defaults)
+    applicationDeadline: formatDateForInput(existingAdmission?.deadline) || '',
+    fee: existingAdmission?.fee || '',
+    
+    // OPTIONAL: Descriptions (no defaults)
     overview: existingAdmission?.overview || '',
     eligibility: existingAdmission?.eligibility || '',
-    websiteUrl: existingAdmission?.websiteUrl || 'https://university.edu',
-    admissionPortalLink: existingAdmission?.admissionPortalLink || 'https://university.edu/admissions',
+    
+    // OPTIONAL: Web Links (no defaults - don't suggest URLs)
+    websiteUrl: existingAdmission?.websiteUrl || '',
+    admissionPortalLink: existingAdmission?.admissionPortalLink || '',
   })
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -34,17 +51,19 @@ function ManageAdmissions() {
 
   useEffect(() => {
     if (existingAdmission) {
+      // Ensure admission has all required fields with defaults
+      const sanitized = sanitizeAdmission(existingAdmission)
       setFormData({
-        programTitle: existingAdmission.title,
-        degreeType: existingAdmission.degreeType || 'BS',
-        department: existingAdmission.department || '',
-        academicYear: existingAdmission.academicYear || '2025-2026',
-        applicationDeadline: existingAdmission.deadline || '',
-        fee: existingAdmission.fee || '',
-        overview: existingAdmission.overview || '',
-        eligibility: existingAdmission.eligibility || '',
-        websiteUrl: existingAdmission.websiteUrl || '',
-        admissionPortalLink: existingAdmission.admissionPortalLink || '',
+        programTitle: sanitized.title,
+        degreeType: sanitized.degreeType || '',  // Empty if not provided
+        department: sanitized.department || '',  // Empty if not provided
+        academicYear: sanitized.academicYear || '', // Empty if not provided
+        applicationDeadline: formatDateForInput(sanitized.deadline) || '', // Empty if no deadline
+        fee: sanitized.fee || '', // Empty if no fee
+        overview: sanitized.overview || '',
+        eligibility: sanitized.eligibility || '',
+        websiteUrl: sanitized.websiteUrl || '', // Empty if no URL
+        admissionPortalLink: sanitized.admissionPortalLink || '', // Empty if no URL
       })
     }
   }, [existingAdmission])
@@ -200,36 +219,68 @@ function ManageAdmissions() {
       }))
   }
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     const draft = buildAdmissionPayload('Draft')
-    createOrUpdateAdmission(draft, { diff: computeDiff(existingAdmission ?? null, draft), modifiedBy: 'Rep_01' })
-    alert('Draft saved successfully!')
+    // Always set verification_status to 'draft' when saving as draft
+    const draftWithStatus = {
+      ...draft,
+      verification_status: 'draft' as const,
+    }
+    
+    console.log('🟡 [ManageAdmissions] Saving draft:', draftWithStatus)
+    console.log('🟡 [ManageAdmissions] Draft verification_status:', draftWithStatus.verification_status)
+    const result = await createOrUpdateAdmission(draftWithStatus, { diff: computeDiff(existingAdmission ?? null, draftWithStatus), modifiedBy: 'Rep_01' })
+    
+    if (result?.success) {
+      alert('Draft saved successfully!')
+    }
+    // Error alert is shown by context
   }
 
-  const handlePublish = () => {
-    if (!formData.programTitle || !formData.applicationDeadline) {
-      alert('Please fill in required fields: Program Title and Application Deadline')
+  const handlePublish = async () => {
+    // Only title is truly required - all other fields are optional
+    if (!formData.programTitle || !formData.programTitle.trim()) {
+      alert('Program Title is required')
       return
     }
 
-    const payload = buildAdmissionPayload()
-    const diff = computeDiff(existingAdmission ?? null, payload)
-
-    createOrUpdateAdmission(payload, { diff, modifiedBy: 'Rep_01' })
-
-    if (isEditMode) {
-      alert(`Admission "${formData.programTitle}" updated and published!`)
-    } else {
-      alert(`Admission "${formData.programTitle}" published successfully!`)
+    // Build the payload and set verification_status to 'pending'
+    const payload = buildAdmissionPayload('Pending Audit')
+    const payloadWithStatus = {
+      ...payload,
+      verification_status: 'pending' as const,
     }
+    const diff = computeDiff(existingAdmission ?? null, payloadWithStatus)
 
-    navigate('/university/dashboard')
+    console.log('🟡 [ManageAdmissions] Publishing admission:', payloadWithStatus)
+    console.log('🟡 [ManageAdmissions] Publish verification_status:', payloadWithStatus.verification_status)
+    console.log('🟡 [ManageAdmissions] Changes:', diff)
+    
+    // Show appropriate message based on whether editing verified/rejected/disputed admission
+    let successMessage = ''
+    if (isEditMode) {
+      if (requiresStatusReset) {
+        successMessage = `Admission "${formData.programTitle}" updated! Status changed to "Pending Audit" for re-verification.`
+      } else {
+        successMessage = `Admission "${formData.programTitle}" updated and submitted for review!`
+      }
+    } else {
+      successMessage = `Admission "${formData.programTitle}" created and submitted for review!`
+    }
+    
+    const result = await createOrUpdateAdmission(payloadWithStatus, { diff, modifiedBy: 'Rep_01' })
+
+    if (result?.success) {
+      alert(successMessage)
+      navigate('/university/admissions')
+    }
+    // Error alert is shown by context
   }
 
   const recentAdmissions = useMemo(() => {
     return [...admissions]
       .sort((a, b) => (b.lastAction || '').localeCompare(a.lastAction || ''))
-      .slice(0, 3)
+      // Show all admissions for this university, not just 3
   }, [admissions])
 
   const handleEditRecent = (id: string) => {
@@ -257,6 +308,24 @@ function ManageAdmissions() {
                     : 'Add new admissions or update existing listings. Records are auto-published as Pending Audit.'}
                 </p>
               </div>
+
+              {/* Alert banner for verified/rejected/disputed admissions that will reset to pending */}
+              {requiresStatusReset && (
+                <div className="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-blue-800">Status Will Change on Save</p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        This admission is currently <strong>{existingAdmission?.verification_status || 'verified'}</strong>. 
+                        When you save changes, the status will automatically change to <strong>"Pending Audit"</strong> for re-verification by admins.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
@@ -375,7 +444,7 @@ function ManageAdmissions() {
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Basic Details</h2>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Program Title</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Program Title <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           value={formData.programTitle}
@@ -444,15 +513,6 @@ function ManageAdmissions() {
                               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Last Updated</label>
-                          <input
-                            type="text"
-                            value="2025-11-05 20:31:46"
-                            disabled
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                          />
                         </div>
                       </div>
                     </div>
@@ -572,13 +632,13 @@ function ManageAdmissions() {
                     </Link>
                     <button 
                       onClick={handleSaveDraft}
-                      className="px-6 py-2 text-sm font-medium text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                      className="px-6 py-2 text-sm font-medium border rounded-lg transition-colors text-blue-600 border-blue-600 hover:bg-blue-50 cursor-pointer"
                     >
                       Save as Draft
                     </button>
                     <button 
                       onClick={handlePublish}
-                      className="px-6 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
+                      className="px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors cursor-pointer hover:opacity-90"
                       style={{ backgroundColor: '#2563EB' }}
                     >
                       {isEditMode ? 'Update & Publish' : 'Publish Admission'}

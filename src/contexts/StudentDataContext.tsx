@@ -94,7 +94,6 @@ export function StudentDataProvider({ children }: { children: ReactNode }) {
             location: prog.location,
             description: null,
             verification_status: prog.verification_status,
-            status: 'active',
             created_at: '',
             updated_at: '',
           },

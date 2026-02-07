@@ -9,18 +9,49 @@ export interface Admission {
 	title: string
 	deadline: string
 	status: AdmissionStatus
-	views: string
+	verification_status?: 'verified' | 'pending' | 'rejected' | 'draft' | 'disputed'
+	views?: string // Optional - may not be present in API data
 	verifiedBy?: string
 	lastAction?: string
 	remarks?: string
+	
+	// Program classification
 	degreeType?: string
+	program_type?: string
+	field_of_study?: string
+	
+	// Program details
 	department?: string
-	academicYear?: string
+	duration?: string
+	delivery_mode?: string
+	
+	// Financial
 	fee?: string
+	tuition_fee?: string
+	currency?: string
+	
+	// Descriptions
 	overview?: string
 	eligibility?: string
+	requirements?: Record<string, any>
+	
+	// Web presence
 	websiteUrl?: string
 	admissionPortalLink?: string
+	website_url?: string
+	admission_portal_link?: string
+	
+	// Status details
+	start_date?: string
+	created_at?: string
+	updated_at?: string
+	verified_at?: string
+	created_by?: string
+	university_id?: string
+	is_active?: boolean
+	
+	// Internal fields
+	academicYear?: string
 }
 
 export interface AuditItem {
@@ -57,6 +88,7 @@ export const sharedAdmissions: Admission[] = [
 		title: "BSCS Fall 2025",
 		deadline: "2025-07-15",
 		status: "Pending Audit",
+		verification_status: "pending",
 		views: "1.2k",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-07",
@@ -65,12 +97,15 @@ export const sharedAdmissions: Admission[] = [
 		department: "School of Engineering",
 		academicYear: "2025-2026",
 		fee: "5000",
+		created_at: "2025-02-01T10:00:00Z",
+		updated_at: "2025-02-07T15:30:00Z",
 	},
 	{
 		id: "2",
 		title: "MBA Executive",
 		deadline: "2025-08-10",
 		status: "Verified",
+		verification_status: "verified",
 		views: "890",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-05",
@@ -79,12 +114,15 @@ export const sharedAdmissions: Admission[] = [
 		department: "Business School",
 		academicYear: "2025-2026",
 		fee: "7500",
+		created_at: "2025-01-15T10:00:00Z",
+		updated_at: "2025-02-05T10:00:00Z",
 	},
 	{
 		id: "3",
 		title: "MS Data Science",
 		deadline: "2025-06-30",
 		status: "Rejected",
+		verification_status: "rejected",
 		views: "640",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-06",
@@ -93,12 +131,15 @@ export const sharedAdmissions: Admission[] = [
 		department: "School of Computing",
 		academicYear: "2025-2026",
 		fee: "6000",
+		created_at: "2025-01-20T10:00:00Z",
+		updated_at: "2025-02-06T10:00:00Z",
 	},
 	{
 		id: "4",
 		title: "PhD Physics",
 		deadline: "2025-09-01",
 		status: "Pending Audit",
+		verification_status: "pending",
 		views: "150",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-03",
@@ -107,12 +148,15 @@ export const sharedAdmissions: Admission[] = [
 		department: "School of Sciences",
 		academicYear: "2025-2026",
 		fee: "8000",
+		created_at: "2025-01-25T10:00:00Z",
+		updated_at: "2025-02-03T10:00:00Z",
 	},
 	{
 		id: "5",
 		title: "BBA Honors",
 		deadline: "2025-07-20",
 		status: "Disputed",
+		verification_status: "disputed",
 		views: "320",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-04",
@@ -121,6 +165,8 @@ export const sharedAdmissions: Admission[] = [
 		department: "Business School",
 		academicYear: "2025-2026",
 		fee: "4500",
+		created_at: "2025-01-30T10:00:00Z",
+		updated_at: "2025-02-04T10:00:00Z",
 	},
 ]
 
