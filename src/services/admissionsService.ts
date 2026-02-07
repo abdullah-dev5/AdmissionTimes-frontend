@@ -114,9 +114,11 @@ export const admissionsService = {
       const { data: admission, error } = await supabase
         .from('admissions')
         .insert({
+          university_id: (data as any).university_id,
           title: data.title,
           description: data.description,
           degree_level: data.degree_level,
+          program_type: (data as any).program_type,
           field_of_study: (data as any).field_of_study,
           duration: (data as any).duration,
           tuition_fee: (data as any).tuition_fee,
@@ -127,6 +129,7 @@ export const admissionsService = {
           location: data.location,
           delivery_mode: (data as any).delivery_mode,
           requirements: (data as any).requirements,
+          verification_status: (data as any).verification_status || 'pending',
           // RLS will automatically set created_by = auth.uid()
         })
         .select()
@@ -151,9 +154,38 @@ export const admissionsService = {
    */
   updateDirect: async (id: string, data: Partial<Admission>): Promise<Admission> => {
     try {
+      // Only send fields that exist in the database schema
+      const updatePayload: any = {};
+      
+      // Only include fields that are present in the data and exist in DB
+      const allowedFields = [
+        'university_id',
+        'title',
+        'description',
+        'program_type',
+        'degree_level',
+        'field_of_study',
+        'duration',
+        'tuition_fee',
+        'currency',
+        'application_fee',
+        'deadline',
+        'start_date',
+        'location',
+        'delivery_mode',
+        'requirements',
+        'verification_status',
+      ];
+      
+      for (const field of allowedFields) {
+        if (data.hasOwnProperty(field)) {
+          updatePayload[field] = (data as any)[field];
+        }
+      }
+      
       const { data: admission, error } = await supabase
         .from('admissions')
-        .update(data)
+        .update(updatePayload)
         .eq('id', id)
         .select()
         .single();
@@ -162,6 +194,28 @@ export const admissionsService = {
       return admission;
     } catch (error: any) {
       console.error('❌ Failed to update admission:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete admission directly from Supabase (Phase 1)
+   * 
+   * RLS policies enforce: only university that created it or admin can delete
+   * 
+   * @param id - Admission ID
+   * @returns Promise resolving when deletion completes
+   */
+  deleteDirect: async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('admissions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error: any) {
+      console.error('❌ Failed to delete admission:', error);
       throw error;
     }
   },
@@ -185,7 +239,7 @@ export const admissionsService = {
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<Admission>> => {
-    const response = await apiClient.get('/admissions', { params });
+    const response = await apiClient.get('/university/admissions', { params });
     return response.data;
   },
 
@@ -207,7 +261,7 @@ export const admissionsService = {
    * @returns Promise resolving to created admission
    */
   create: async (data: Partial<Admission>): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.post('/admissions', data);
+    const response = await apiClient.post('/university/admissions', data);
     return response.data;
   },
 
@@ -219,7 +273,7 @@ export const admissionsService = {
    * @returns Promise resolving to updated admission
    */
   update: async (id: string, data: Partial<Admission>): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.put(`/admissions/${id}`, data);
+    const response = await apiClient.put(`/university/admissions/${id}`, data);
     return response.data;
   },
 
@@ -230,7 +284,7 @@ export const admissionsService = {
    * @returns Promise resolving to success response
    */
   delete: async (id: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete(`/admissions/${id}`);
+    const response = await apiClient.delete(`/university/admissions/${id}`);
     return response.data;
   },
 
@@ -241,7 +295,7 @@ export const admissionsService = {
    * @returns Promise resolving to updated admission
    */
   submitForVerification: async (id: string): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.patch(`/admissions/${id}/submit`);
+    const response = await apiClient.post(`/university/admissions/${id}/request-verification`, {});
     return response.data;
   },
 
@@ -252,7 +306,10 @@ export const admissionsService = {
    * @returns Promise resolving to verified admission
    */
   verify: async (id: string): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.patch(`/admissions/${id}/verify`);
+    const response = await apiClient.post(`/admin/admissions/${id}/verify`, {
+      verification_status: 'verified',
+      notes: 'Verified by admin'
+    });
     return response.data;
   },
 
@@ -263,7 +320,11 @@ export const admissionsService = {
    * @returns Promise resolving to rejected admission
    */
   reject: async (id: string): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.patch(`/admissions/${id}/reject`);
+    const response = await apiClient.post(`/admin/admissions/${id}/verify`, {
+      verification_status: 'rejected',
+      notes: 'Rejected by admin',
+      rejection_reason: 'Does not meet requirements'
+    });
     return response.data;
   },
 

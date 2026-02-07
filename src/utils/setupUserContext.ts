@@ -35,16 +35,20 @@ export function setupUserContext(userType: 'student' | 'university' | 'admin', u
     ? { id: userId, role: userType, ...(userType === 'university' ? { universityId: userId } : {}) }
     : testUsers[userType];
 
-  localStorage.setItem('userId', user.id);
-  localStorage.setItem('userRole', user.role);
+  const userId_str = (user as any).id as string;
+  const userRole_str = (user as any).role as string;
+  const universityId_str = (user as any).universityId as string | undefined;
+
+  localStorage.setItem('userId', userId_str);
+  localStorage.setItem('userRole', userRole_str);
   
-  if (userType === 'university' && 'universityId' in user) {
-    localStorage.setItem('universityId', user.universityId);
+  if (userType === 'university' && universityId_str) {
+    localStorage.setItem('universityId', universityId_str);
   } else {
     localStorage.removeItem('universityId');
   }
 
-  console.log(`✅ User context set: ${userType} (${user.id})`);
+  console.log(`✅ User context set: ${userType} (${userId_str})`);
 }
 
 /**

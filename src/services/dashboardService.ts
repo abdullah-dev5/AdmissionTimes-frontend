@@ -29,7 +29,11 @@ export const dashboardService = {
    * @returns Promise resolving to university dashboard data
    */
   getUniversityDashboard: async (): Promise<ApiResponse<UniversityDashboard>> => {
+    console.log('🔵 [dashboardService] Fetching university dashboard...')
     const response = await apiClient.get('/university/dashboard');
+    console.log('🔵 [dashboardService] Raw API response:', response)
+    console.log('🔵 [dashboardService] Response data:', response.data)
+    console.log('🔵 [dashboardService] recent_admissions count:', response.data?.data?.recent_admissions?.length || 0)
     return response.data;
   },
 

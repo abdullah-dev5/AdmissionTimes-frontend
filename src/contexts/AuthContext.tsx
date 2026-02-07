@@ -58,7 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.access_token) {
         // Get current user from API using JWT
         const response = await authService.getCurrentUser();
-        setUser(response.data);
+        const userData = response.data;
+        
+        console.log('🔐 [AuthContext] checkAuth - User data:', userData)
+        console.log('🔐 [AuthContext] checkAuth - organization_id:', userData.organization_id)
+        
+        setUser(userData);
 
         // Sync with Zustand store
         useAuthStore.getState().login(response.data);
@@ -102,6 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Step 2: Fetch user from backend (ensures user exists in database via auto-sync)
       const response = await authService.getCurrentUser();
       const userData = response.data;
+      
+      console.log('🔐 [AuthContext] User data received:', userData)
+      console.log('🔐 [AuthContext] organization_id:', userData.organization_id)
+      console.log('🔐 [AuthContext] role:', userData.role)
 
       setUser(userData);
       useAuthStore.getState().login(userData);

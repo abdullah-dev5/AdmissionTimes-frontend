@@ -60,16 +60,17 @@ Student:
 University:
   Email: university@test.com
   Password: password123
+  
+  OR create your own (see University Signup Testing Guide below)
 
 Admin:
   Email: admin@test.com
   Password: password123
-  Password: (check with backend team)
-
-Admin:
-  Email: admin@test.com
-  Password: (check with backend team)
 ```
+
+**🎓 University Representative Signup:**  
+For testing university representative accounts, see [University Signup Testing Guide](./docs/UNIVERSITY_SIGNUP_TESTING_GUIDE.md).  
+This guide explains how to seed test universities and create university accounts.
 
 ---
 

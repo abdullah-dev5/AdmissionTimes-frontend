@@ -15,6 +15,8 @@ function UniversityDashboard() {
   const stats = useMemo(() => {
     const active = admissions.filter(a => a.status === 'Active' || a.status === 'Verified').length
     const totalViews = admissions.reduce((sum, a) => {
+      // Handle missing views field from API data
+      if (!a.views) return sum
       const views = parseInt(a.views.replace('k', '000').replace(/[^\d]/g, '')) || 0
       return sum + views
     }, 0)
@@ -55,8 +57,8 @@ function UniversityDashboard() {
       })
     } else if (sortBy === 'Most Views') {
       filtered.sort((a, b) => {
-        const viewsA = parseInt(a.views.replace('k', '000').replace(/[^\d]/g, '')) || 0
-        const viewsB = parseInt(b.views.replace('k', '000').replace(/[^\d]/g, '')) || 0
+        const viewsA = a.views ? parseInt(a.views.replace('k', '000').replace(/[^\d]/g, '')) || 0 : 0
+        const viewsB = b.views ? parseInt(b.views.replace('k', '000').replace(/[^\d]/g, '')) || 0 : 0
         return viewsB - viewsA
       })
     }

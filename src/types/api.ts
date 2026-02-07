@@ -43,20 +43,51 @@ export interface PaginatedResponse<T> {
 /**
  * Admission/Program entity
  * Represents a university admission program
+ * 
+ * FIELD REQUIREMENTS:
+ * - REQUIRED (user must provide): title
+ * - OPTIONAL (user may provide): all others except auto-set fields
+ * - AUTO-SET (system provides): id, verification_status, created_at, updated_at, is_active
+ * 
+ * Maps to database admissions table with 25 fields total
  */
 export interface Admission {
+  // Auto-set by backend (never ask user to provide)
   id: string;
-  university_id: string | null;
-  title: string;
-  degree_level: string;
-  deadline: string; // ISO 8601 format
-  application_fee: number;
-  location: string;
-  description: string | null;
-  verification_status: 'verified' | 'pending' | 'rejected';
-  status: 'active' | 'inactive' | 'closed';
+  verification_status: 'verified' | 'pending' | 'rejected' | 'draft' | 'disputed';
   created_at: string;
   updated_at: string;
+  
+  // REQUIRED: User must provide
+  title: string;
+  
+  // OPTIONAL: User may provide (all nullable)
+  description?: string | null;
+  program_type?: string | null;
+  degree_level?: string | null;
+  field_of_study?: string | null;
+  duration?: string | null;
+  delivery_mode?: string | null;
+  location?: string | null;
+  requirements?: Record<string, any> | null;
+  application_fee?: number | null;
+  tuition_fee?: number | null;
+  currency?: string | null;
+  deadline?: string | null;
+  start_date?: string | null;
+  website_url?: string | null;
+  admission_portal_link?: string | null;
+  
+  // ADMIN-ONLY: Never ask user to set these (admins only)
+  verified_at?: string | null;
+  verified_by?: string | null;
+  rejection_reason?: string | null;
+  dispute_reason?: string | null;
+  
+  // CONTEXT: Auto-set by system
+  created_by?: string | null;
+  university_id?: string | null;
+  is_active?: boolean;
 }
 
 /**
@@ -128,9 +159,11 @@ export interface Watchlist {
 export interface User {
   id: string;
   email: string;
+  display_name?: string;  // User's display name
   role: 'student' | 'university' | 'admin';  // Changed from user_type to role
   user_type?: 'student' | 'university' | 'admin';  // Keep as optional for backward compatibility
-  university_id: string | null;
+  organization_id?: string | null;  // For university users - maps to universities.id
+  university_id?: string | null;  // Backward compatibility
   created_at: string;
   updated_at: string;
 }
@@ -156,16 +189,21 @@ export interface StudentProfile {
 
 /**
  * University Profile entity
- * Extended user information for universities
+ * University profile details stored in universities table
  */
 export interface UniversityProfile {
   id: string;
-  user_id: string;
-  university_id: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  website: string | null;
+  logo_url: string | null;
+  description: string | null;
+  address: string | null;
   contact_name: string | null;
-  contact_phone: string | null;
   contact_email: string | null;
-  department: string | null;
+  contact_phone: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -270,8 +308,10 @@ export interface UniversityDashboard {
     verified_admissions: number;
     recent_changes: number;
     unread_notifications: number;
-  };
-  pending_verifications: Array<Admission & {
+  };  recent_admissions: Array<Admission & {
+    degree_level?: string;
+    field_of_study?: string;
+  }>;  pending_verifications: Array<Admission & {
     verification_requested_at: string;
     verification_notes: string | null;
   }>;
