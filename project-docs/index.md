@@ -1,14 +1,14 @@
 # AdmissionTimes Project Documentation Index
 
-- Date: 2026-02-06
-- **Status: Phase 1 Complete ✅ | JWT Authentication Fully Implemented**
+- Date: 2026-02-09
+- **Status: Phase 1 Complete ✅ | UI/Feature Enhancements in Progress ✨**
 
 ## 🎯 Current Status
-- **Backend:** 100% Ready (51 endpoints, ES256 JWT auth, auto-sync)
-- **Frontend:** 100% Complete (25+ pages, 50+ components, JWT integration)
+- **Frontend:** 100% Complete (25+ pages, 50+ components, UI enhancements applied)
+- **Backend:** 100% Ready (51 endpoints, analytics endpoints planned)
 - **Authentication:** ✅ 100% Complete (JWT tokens, auto-sync, role sync)
-- **Integration:** 100%+ Done (auth complete + student dashboard + docs)
-- **Documentation:** Comprehensive (new AUTHENTICATION_ARCHITECTURE.md + existing docs)
+- **Integration:** 100%+ Done (auth complete + all dashboards + analytics planned)
+- **Documentation:** Comprehensive (all modules documented + implementation plans)
 
 ## 📖 Main Documentation
 **START HERE:**
@@ -33,6 +33,7 @@
 - BACKEND_IMPLEMENTATION_PLAN.md — **UPDATED** Complete backend implementation plan with backend-frontend alignment plan, mock data to seeding data conversion strategy, all required endpoints, SQL queries, specifications, testing requirements, and 4-week timeline
 - BACKEND_IMPLEMENTATION_COMPLETE.md — **NEW** ✅ Backend completion report - All 5 critical endpoints implemented and ready for frontend integration
 - MOCK_DATA_TO_SEEDING_PLAN.md — **NEW** Detailed plan for converting frontend mock data files into backend database seeding scripts with mapping rules, conversion steps, and validation checklist
+- ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md — **NEW** Complete implementation roadmap for Views/Clicks/Reminders analytics (8-12 hour plan, backend + frontend + tracking)
 
 ## Integration Documentation
 - COMPLETE_GAP_ANALYSIS_AND_STRATEGY.md — **PRIMARY** Complete gap analysis with all backend changes required and frontend missing items, implementation strategy, priority matrix, and timeline
@@ -49,6 +50,11 @@
 - FRONTEND_BEST_PRACTICES.md — Comprehensive frontend design patterns, system design principles, and best practices
 
 ## Latest Updates
+- 2026-02-09: **UI Enhancements & Analytics Planning**
+  - Fixed: Active admissions counter now uses `is_active` field
+  - Fixed: Status filter consolidated (Disputed merged with Rejected)
+  - Added: Comprehensive Engagement Analytics implementation plan
+  - Impact: Cleaner UI (5 filters), accurate metrics, analytics roadmap ready
 - 2026-01-18: **Separate Implementation Plans Created** - Created `FRONTEND_IMPLEMENTATION_PLAN.md` (complete frontend plan with 8 missing pages, 15+ components, API integration, 6-week timeline) and `BACKEND_IMPLEMENTATION_PLAN.md` (complete backend plan with 5 required endpoints, SQL queries, specifications, 4-week timeline). Both plans are aligned and ready for implementation.
 - 2026-01-18: **Complete Gap Analysis Created** - Created `COMPLETE_GAP_ANALYSIS_AND_STRATEGY.md` with comprehensive list of all backend changes required (5 critical endpoints) and frontend missing items (8 pages, 15+ components, API client layer). Includes implementation strategy, priority matrix, and 10-week timeline.
 - 2026-01-18: **Approach B Selected** - Decided to implement aggregated dashboard endpoints. Created `BACKEND_DASHBOARD_ENDPOINTS_SPEC.md` with complete backend specification for `/api/v1/student/dashboard` and `/api/v1/university/dashboard` endpoints. Backend team can now implement these endpoints.
@@ -58,6 +64,7 @@
 - 2025-11-20: Added System Metrics cards (Total Users, Total Admissions, Total Alerts Sent) and AI Summary section to Admin Dashboard. Created Admin Analytics page for user activity tracking with filters and comprehensive event logging.
 - 2025-11-20: Added Admin Change Logs Viewer page with filters (Admission, Modified By, Change Type, Date Range), change logs table, and field-level diff viewer modal. Follows SDS Change_Log table and Scraper update flow sections.
 - 2025-11-20: Added Admin Scraper Jobs Monitor page with summary cards, scraper jobs table, job details drawer with logs and change detection, and retry/rerun controls. Follows SDS section 8.14 Scraper Update Flow.
+  - 2026-02-09: Active admissions fix, status filter consolidation, engagement analytics plan
 - 2025-11-20: Added Admin Notifications Center page with filter tabs, unread toggle, notification cards with type-based icons, and mark as read functionality. Follows SDS Alerts & Notification System sections.
 - 2025-11-20: Added Admin Verification Center page with filters, verification table, review modal with field-level diff view, and admin action panel (Verify/Reject/Dispute). Follows SDS sections 8.7, 8.8, 8.9.
 - 2025-11-20: Added Admin Dashboard page with pending verifications, recent actions log, notifications preview, and scraper activity snapshot. Created AdminLayout, AdminSidebar, and admin mock data.

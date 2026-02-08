@@ -13,7 +13,7 @@
  * @module contexts/ToastContext
  */
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { ToastContainer, type ToastType } from '../components/common/Toast';
 
 interface Toast {
@@ -82,16 +82,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [showToast]
   );
 
+  // Memoize the context value to prevent unnecessary re-renders of consumers
+  const value: ToastContextType = useMemo(() => ({
+    showToast,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
+  }), [showToast, showSuccess, showError, showWarning, showInfo]);
+
   return (
-    <ToastContext.Provider
-      value={{
-        showToast,
-        showSuccess,
-        showError,
-        showWarning,
-        showInfo,
-      }}
-    >
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </ToastContext.Provider>

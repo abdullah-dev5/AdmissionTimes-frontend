@@ -1,24 +1,53 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { useStudentStore } from '../../store/studentStore'
+import { useToast } from '../../contexts/ToastContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
+import { supabase } from '../../services/supabase'
 
 function SearchAdmissions() {
   const navigate = useNavigate()
-  const { admissions, toggleSaved } = useStudentData()
+  const { user } = useAuth()
+  const { showError } = useToast()
+  const toggleSaved = useStudentStore((state) => state.toggleSaved)
+  const { admissions, loading } = useStudentDashboardData()
   const [viewMode, setViewMode] = useState('grid')
   const [filtersCollapsed, setFiltersCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [universityFilter, setUniversityFilter] = useState('')
   const [cityFilter, setCityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
-  const [feeRange, setFeeRange] = useState([10000, 200000])
+  const [feeRange, setFeeRange] = useState([0, 500000])  // Changed from [10000, 200000] to [0, 500000]
   const [deadlineFilter, setDeadlineFilter] = useState('')
   const [programTitleFilter, setProgramTitleFilter] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
   const [sortBy, setSortBy] = useState('Relevance')
   const [compareIds, setCompareIds] = useState<string[]>([])
+
+  // DEBUG: Check what's in database
+  useEffect(() => {
+    const checkDB = async () => {
+      console.log('🔍 [DEBUG] Direct database check...');
+      const { data, error, count } = await supabase
+        .from('admissions')
+        .select('id, title, verification_status, is_active', { count: 'exact' })
+        .limit(10);
+      
+      console.log('🔍 [DEBUG] Total rows in admissions table:', count);
+      console.log('🔍 [DEBUG] Sample records:', data);
+      if (error) console.error('🔍 [DEBUG] Database error:', error);
+      
+      if (data && data.length > 0) {
+        const verified = data.filter(a => a.verification_status === 'verified').length;
+        const active = data.filter(a => a.is_active).length;
+        console.log(`🔍 [DEBUG] Verified: ${verified}, Active: ${active}`);
+      }
+    };
+    checkDB();
+  }, []);
 
   const savedIds = useMemo(() => admissions.filter(a => a.saved).map(a => a.id), [admissions])
 
@@ -40,7 +69,7 @@ function SearchAdmissions() {
   }
 
   const toggleSave = (id: string) => {
-    toggleSaved(id)
+    toggleSaved(id, { showError })
   }
 
   const handleResetFilters = () => {
@@ -48,7 +77,7 @@ function SearchAdmissions() {
     setUniversityFilter('')
     setCityFilter('')
     setDegreeFilter('')
-    setFeeRange([10000, 200000])
+    setFeeRange([0, 500000])  // Changed default
     setDeadlineFilter('')
     setProgramTitleFilter('')
     setSelectedStatus([])
@@ -56,6 +85,7 @@ function SearchAdmissions() {
 
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {
+    console.log('🔍 [Filter] Starting with', admissions.length, 'admissions');
     let filtered = [...admissions]
 
     // Search query
@@ -66,41 +96,51 @@ function SearchAdmissions() {
         a.program.toLowerCase().includes(query) ||
         a.degree.toLowerCase().includes(query)
       )
+      console.log('🔍 [Filter] After search query:', filtered.length);
     }
 
     // University filter
     if (universityFilter) {
       filtered = filtered.filter(a => a.university === universityFilter)
+      console.log('🔍 [Filter] After university filter:', filtered.length);
     }
 
     // City filter
     if (cityFilter) {
       filtered = filtered.filter(a => a.city === cityFilter)
+      console.log('🔍 [Filter] After city filter:', filtered.length);
     }
 
     // Degree filter
     if (degreeFilter) {
       filtered = filtered.filter(a => a.degreeType === degreeFilter)
+      console.log('🔍 [Filter] After degree filter:', filtered.length);
     }
 
     // Fee range filter
     filtered = filtered.filter(a => a.feeNumeric >= feeRange[0] && a.feeNumeric <= feeRange[1])
+    console.log('🔍 [Filter] After fee range filter:', filtered.length);
 
     // Deadline filter
     if (deadlineFilter) {
       filtered = filtered.filter(a => a.deadline <= deadlineFilter)
+      console.log('🔍 [Filter] After deadline filter:', filtered.length);
     }
 
     // Program title filter
     if (programTitleFilter.trim()) {
       const query = programTitleFilter.toLowerCase()
       filtered = filtered.filter(a => a.program.toLowerCase().includes(query))
+      console.log('🔍 [Filter] After program title filter:', filtered.length);
     }
 
     // Status filter
     if (selectedStatus.length > 0) {
       filtered = filtered.filter(a => selectedStatus.includes(a.status))
+      console.log('🔍 [Filter] After status filter:', filtered.length);
     }
+
+    console.log('🔍 [Filter] Final filtered count:', filtered.length);
 
     // Sort
     if (sortBy === 'Deadline') {
@@ -428,16 +468,36 @@ function SearchAdmissions() {
                     <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between mb-4 gap-3">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-12 h-12 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: admission.logoBg }}>
-                            {admission.university.substring(0, 2).toUpperCase()}
+                          <div className="w-12 h-12 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>
+                            {admission.universityLogo ? (
+                              <img src={admission.universityLogo} alt={admission.university} className="w-full h-full object-cover" />
+                            ) : (
+                              admission.university.substring(0, 2).toUpperCase()
+                            )}
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <p className="font-semibold text-sm truncate" style={{ color: '#111827' }} title={admission.university}>{admission.university}</p>
+                            {admission.universityCity && (
+                              <p className="text-xs text-gray-500 truncate">{admission.universityCity}, {admission.universityCountry}</p>
+                            )}
                           </div>
                         </div>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-                          {admission.status}
-                        </span>
+                        {/* Only show verification badge - removed duplicate status badge */}
+                        {admission.verificationStatus === 'verified' ? (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                            </svg>
+                            Pending
+                          </span>
+                        )}
                       </div>
                       <h3 className="font-semibold text-lg mb-2 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
                       <div className="space-y-2 mb-4">
@@ -503,8 +563,12 @@ function SearchAdmissions() {
                     <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <div className="w-16 h-16 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: admission.logoBg }}>
-                            {admission.university.substring(0, 2).toUpperCase()}
+                          <div className="w-16 h-16 rounded flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>
+                            {admission.universityLogo ? (
+                              <img src={admission.universityLogo} alt={admission.university} className="w-full h-full object-cover" />
+                            ) : (
+                              admission.university.substring(0, 2).toUpperCase()
+                            )}
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
@@ -512,9 +576,22 @@ function SearchAdmissions() {
                             <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
                               <span className={admission.daysRemaining <= 7 ? 'text-red-600 font-medium' : ''}>{admission.deadlineDisplay}</span>
                               <span>{admission.fee}</span>
-                              <span className="px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-                                {admission.status}
-                              </span>
+                              {/* Only show verification badge - removed duplicate status badge */}
+                              {admission.verificationStatus === 'verified' ? (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                  Verified
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                  </svg>
+                                  Pending
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

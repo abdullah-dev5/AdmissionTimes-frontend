@@ -1,7 +1,7 @@
 # Requirements & Features
 
-- Date: 2026-01-28
-- **Status: Phase 1 Complete ✅ | Phase 2 In Progress 🟡**
+- Date: 2026-02-09
+- **Status: Phase 1 Complete ✅ | Phase 2 In Progress 🔄 | Analytics Planning 📋**
 
 ## Current Implementation Status
 - **Backend:** ✅ 100% ready (51 endpoints)
@@ -13,14 +13,14 @@
 
 ## Verification Center (University)
 - View audits fetched from `/api/audits` (mocked for now).
-- Status filters: All, Pending, Verified, Rejected, Disputed.
+- Status filters: Pending, Verified, Rejected+Disputed (consolidated).
 - Search by admission title.
 - Table columns: Admission Title, Status, Verified By, Last Action Date, Remarks, Actions.
 - Status badges:
   - Pending: bg-yellow-100 text-yellow-700
   - Verified: bg-green-100 text-green-700
   - Rejected: bg-red-100 text-red-700
-  - Disputed: bg-orange-100 text-orange-700
+  - Disputed: bg-orange-100 text-orange-700 (still shown, but consolidated in filter)
 - Actions:
   - View Details: modal with admission info, admin comment, timestamp.
   - Download Log: mock download + toast confirmation (integrate later with `/api/verification/log/:id`).

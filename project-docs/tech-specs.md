@@ -1,6 +1,7 @@
 # Technical Specifications
 
-- Date: 2025-11-20
+- Date: 2026-02-09
+- **Latest Updates:** Active admissions counter fix, status filter consolidation
 
 ## Tech Stack
 - React 19, TypeScript, Vite
@@ -33,6 +34,25 @@
 - ✅ Fail-safe: If user missing, auto-create instead of 401
 
 For complete authentication architecture, database schema, policies, and deployment checklist, see [AUTHENTICATION_ARCHITECTURE.md](../AUTHENTICATION_ARCHITECTURE.md)
+
+## Recent Updates (Feb 9, 2026)
+
+### Active Admissions Metric
+- **Change**: Now uses `is_active === true` field instead of checking status
+- **Impact**: Dashboard accurately shows active admission count
+- **File**: `src/pages/university/UniversityDashboard.tsx`
+
+### Status Filter Consolidation
+- **Change**: "Disputed" merged with "Rejected" in UI filters
+- **Impact**: 5 status filters instead of 6; cleaner interface
+- **Files**: `src/pages/university/ViewAllAdmissions.tsx` (grid layout changed to `grid-cols-5`)
+
+### Analytics Architecture Planning
+- **Planned**: New engagement analytics with Views/Clicks/Reminders
+- **Timeline**: 8-12 hour implementation
+- **Plan**: `docs/ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md`
+
+---
 
 ## Architecture & Best Practices
 

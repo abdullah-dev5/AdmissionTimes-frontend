@@ -1,13 +1,14 @@
 import { Link, useParams, Navigate } from 'react-router-dom'
 import { useState, useMemo } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
-import { useStudentData } from '../contexts/StudentDataContext'
+import { useStudentStore } from '../store/studentStore'
 import { calculateDaysRemaining } from '../data/studentData'
 
 function ProgramDetail() {
   const { id } = useParams()
   const [activeTab, setActiveTab] = useState('Overview')
-  const { getAdmissionById, admissions } = useStudentData()
+  const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
+  const admissions = useStudentStore((state) => state.admissions)
 
   const program = id ? getAdmissionById(id) : undefined
   

@@ -1,9 +1,26 @@
 # University Module — User Stories & Technical Flows (V1)
 
 - **Date:** 2025-11-19  
+- **Latest Updates:** 2026-02-09 (Status filter consolidation, is_active field fix)
 - **Source Inputs:** SRS v1.5, SDS v1.4, Database Schema v5.0, finalized UI flows (Figma `University-V1`)  
 - **Scope:** All university representative-facing surfaces (Dashboard, Manage Admissions, Verification Center, Change Logs, Notifications Center, AI Assistant, Scraper Logs, Profile).  
 - **Data Consistency Layer:** `UniversityDataContext` (front-end) mirrors API contract described below; all UI mutations must call the context helpers so state stays identical across pages and matches backend responses once APIs arrive.
+
+---
+
+## 💼 Recent Changes (Feb 9, 2026)
+
+### Status Filter UI Update
+- **Before:** 6 status filter cards (Total, Draft, Pending, Verified, Rejected, Disputed)
+- **After:** 5 status filter cards (Total, Draft, Pending, Verified, Rejected+Disputed)
+- **Impact:** "Disputed" count merged with "Rejected"; individual admission cards still show actual status
+- **Files Updated:** `ViewAllAdmissions.tsx` (status filter logic, grid layout)
+
+### Active Admissions Metric Fix  
+- **Before:** "Active Admissions" showed 0 (checked `status === 'Active'`)
+- **After:** Correctly uses `is_active === true` field
+- **Impact:** Dashboard now shows accurate active admission count
+- **Files Updated:** `UniversityDashboard.tsx` (stats calculation)
 
 ---
 
@@ -54,8 +71,9 @@
 1. University rep logs in (role = "UniversityRep")
 2. Dashboard loads showing:
    - **Total Admissions** count
-   - **Pending Audit** count
-   - **Verified / Rejected / Disputed** counts
+   - **Pending Audit** count  
+   - **Verified Admissions** count
+   - **Rejected** count (includes disputed admissions)
    - **Recently updated admissions** (table/list)
    - **Recent verification feedback** (from notifications)
 3. Show quick actions:
@@ -63,7 +81,7 @@
    - "View Pending Audits" link
    - "View Change Logs" link
 4. Display admissions table with filters:
-   - Filter by status (All, Active, Verified, Pending Audit, Rejected, Disputed)
+   - Filter by status (All, Draft, Pending, Verified, Rejected+Disputed)
    - Sort by (Soonest to Close, Latest First, Most Views)
 5. Each admission card shows:
    - Title, deadline, status badge
@@ -81,7 +99,10 @@
   - `Alerts_Notifications` (recent notifications for rep, limit 5)
   - Associated `Universities` info
 - **No DB writes**
-- **Frontend:** `UniversityDashboard.tsx` uses `useUniversityData()` to fetch and display data
+- **Frontend:** `UniversityDashboard.tsx` + `ViewAllAdmissions.tsx`
+  - **Active admissions calculation:** `admissions.filter(a => a.is_active === true).length`
+  - **Rejected filter:** Includes both `status === 'Rejected'` AND `status === 'Disputed'`
+  - **UI:** 5 status filter cards (Total, Draft, Pending, Verified, Rejected)
 - **State Management:** Stats calculated via `useMemo` from admissions array
 
 **UI Components:**

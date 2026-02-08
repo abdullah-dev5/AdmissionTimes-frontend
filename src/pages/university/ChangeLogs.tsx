@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type ChangeLogItem } from "../../data/universityData"
-import { useUniversityData } from "../../contexts/UniversityDataContext"
+import { useUniversityStore } from "../../store/universityStore"
 
 function FilterBar({
 	from,
@@ -177,7 +177,8 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 }
 
 function ChangeLogs() {
-	const { changeLogs, admissions } = useUniversityData()
+	const changeLogs = useUniversityStore((state) => state.changeLogs)
+	const admissions = useUniversityStore((state) => state.admissions)
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
 	const [admission, setAdmission] = useState("All Admissions")

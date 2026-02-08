@@ -5,8 +5,6 @@ import './index.css'
 import AppRouter from './Router/router.tsx'
 import { AiProvider } from './contexts/AiContext'
 import { AuthProvider } from './contexts/AuthContext'
-import { StudentDataProvider } from './contexts/StudentDataContext'
-import { UniversityDataProvider } from './contexts/UniversityDataContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 
@@ -16,13 +14,9 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <ToastProvider>
           <AuthProvider>
-            <StudentDataProvider>
-              <UniversityDataProvider>
-                <AiProvider>
-                  <AppRouter />
-                </AiProvider>
-              </UniversityDataProvider>
-            </StudentDataProvider>
+            <AiProvider>
+              <AppRouter />
+            </AiProvider>
           </AuthProvider>
         </ToastProvider>
       </BrowserRouter>

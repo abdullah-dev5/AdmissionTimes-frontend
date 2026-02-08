@@ -98,9 +98,9 @@ export const deadlinesService = {
       const { data, error } = await supabase
         .from('deadlines')
         .select('*')
-        .lte('deadline_date', futureDate.toISOString())
-        .gte('deadline_date', new Date().toISOString())
-        .order('deadline_date', { ascending: true });
+        .lte('deadline_date', futureDate.toISOString())  // ✅ Changed from deadline
+        .gte('deadline_date', new Date().toISOString())  // ✅ Changed from deadline
+        .order('deadline_date', { ascending: true });    // ✅ Changed from deadline
 
       if (error) throw error;
       return data || [];
@@ -117,6 +117,57 @@ export const deadlinesService = {
    */
   getUrgentDirect: async (): Promise<Deadline[]> => {
     return deadlinesService.getUpcomingDirect(3);
+  },
+
+  /**
+   * Get deadlines for user's watchlist items (Phase 1)
+   * 
+   * NOTE: Deadlines don't have user_id - they're linked via:
+   * User → Watchlists → Admissions → Deadlines
+   * 
+   * @param userId - User ID to get deadlines for
+   * @param alertOptIn - If true, only get deadlines for items with alerts enabled
+   * @returns Promise resolving to user's relevant deadlines
+   */
+  getUserDeadlinesDirect: async (
+    userId: string,
+    alertOptIn: boolean = true
+  ): Promise<Deadline[]> => {
+    try {
+      // First get user's watchlist admission IDs
+      let watchlistQuery = supabase
+        .from('watchlists')
+        .select('admission_id')
+        .eq('user_id', userId);
+      
+      if (alertOptIn) {
+        watchlistQuery = watchlistQuery.eq('alert_opt_in', true);
+      }
+
+      const { data: watchlistData, error: watchlistError } = await watchlistQuery;
+
+      if (watchlistError) throw watchlistError;
+      
+      if (!watchlistData || watchlistData.length === 0) {
+        return [];
+      }
+
+      // Get deadlines for those admissions
+      const admissionIds = watchlistData.map(w => w.admission_id);
+      
+      const { data, error } = await supabase
+        .from('deadlines')
+        .select('*')
+        .in('admission_id', admissionIds)
+        .gte('deadline_date', new Date().toISOString())  // Only future deadlines
+        .order('deadline_date', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error('❌ Failed to fetch user deadlines:', error);
+      throw error;
+    }
   },
 
   // ============================================================

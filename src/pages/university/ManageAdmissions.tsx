@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor, type Admission } from '../../data/universityData'
-import { useUniversityData } from '../../contexts/UniversityDataContext'
+import { useUniversityStore } from '../../store/universityStore'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatDateForInput, sanitizeAdmission } from '../../utils/admissionUtils'
 
 function ManageAdmissions() {
@@ -11,7 +12,12 @@ function ManageAdmissions() {
   const editId = searchParams.get('edit')
   const isEditMode = !!editId
 
-  const { admissions, getAdmissionById, createOrUpdateAdmission, deleteAdmission } = useUniversityData()
+  const { user } = useAuth()
+  const universityId = user?.organization_id || user?.university_id || user?.id || null
+  const admissions = useUniversityStore((state) => state.admissions)
+  const getAdmissionById = useUniversityStore((state) => state.getAdmissionById)
+  const createOrUpdateAdmission = useUniversityStore((state) => state.createOrUpdateAdmission)
+  const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const existingAdmission = editId ? getAdmissionById(editId) : null
 
   // Determine if we need to change status to pending on edit
@@ -220,6 +226,11 @@ function ManageAdmissions() {
   }
 
   const handleSaveDraft = async () => {
+    if (!universityId) {
+      alert('University ID not found. Please re-login and try again.')
+      return
+    }
+
     const draft = buildAdmissionPayload('Draft')
     // Always set verification_status to 'draft' when saving as draft
     const draftWithStatus = {
@@ -229,7 +240,11 @@ function ManageAdmissions() {
     
     console.log('🟡 [ManageAdmissions] Saving draft:', draftWithStatus)
     console.log('🟡 [ManageAdmissions] Draft verification_status:', draftWithStatus.verification_status)
-    const result = await createOrUpdateAdmission(draftWithStatus, { diff: computeDiff(existingAdmission ?? null, draftWithStatus), modifiedBy: 'Rep_01' })
+    const result = await createOrUpdateAdmission(
+      draftWithStatus,
+      universityId,
+      { diff: computeDiff(existingAdmission ?? null, draftWithStatus), modifiedBy: 'Rep_01' }
+    )
     
     if (result?.success) {
       alert('Draft saved successfully!')
@@ -241,6 +256,11 @@ function ManageAdmissions() {
     // Only title is truly required - all other fields are optional
     if (!formData.programTitle || !formData.programTitle.trim()) {
       alert('Program Title is required')
+      return
+    }
+
+    if (!universityId) {
+      alert('University ID not found. Please re-login and try again.')
       return
     }
 
@@ -268,7 +288,11 @@ function ManageAdmissions() {
       successMessage = `Admission "${formData.programTitle}" created and submitted for review!`
     }
     
-    const result = await createOrUpdateAdmission(payloadWithStatus, { diff, modifiedBy: 'Rep_01' })
+    const result = await createOrUpdateAdmission(
+      payloadWithStatus,
+      universityId,
+      { diff, modifiedBy: 'Rep_01' }
+    )
 
     if (result?.success) {
       alert(successMessage)

@@ -2,18 +2,21 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
-import { useUniversityData } from '../../contexts/UniversityDataContext'
+import { useUniversityStore } from '../../store/universityStore'
 
 function UniversityDashboard() {
   const navigate = useNavigate()
-  const { admissions, deleteAdmission } = useUniversityData()
+  const admissions = useUniversityStore((state) => state.admissions)
+  const storeStats = useUniversityStore((state) => state.stats)
+  const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const [activeTab, setActiveTab] = useState('Views')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [sortBy, setSortBy] = useState('Soonest to Close')
 
   // Calculate stats from admissions
   const stats = useMemo(() => {
-    const active = admissions.filter(a => a.status === 'Active' || a.status === 'Verified').length
+    // Active admissions are those with is_active = true
+    const active = admissions.filter(a => a.is_active === true).length
     const totalViews = admissions.reduce((sum, a) => {
       // Handle missing views field from API data
       if (!a.views) return sum
@@ -27,11 +30,11 @@ function UniversityDashboard() {
       const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       return diffDays <= 7 && diffDays > 0
     }).length
-    const verified = admissions.filter(a => a.status === 'Verified').length
-    const total = admissions.length
+    const verified = storeStats?.verified_admissions ?? admissions.filter(a => a.status === 'Verified').length
+    const total = storeStats?.total_admissions ?? admissions.length
 
     return { active, totalViews, closingSoon, verified, total }
-  }, [admissions])
+  }, [admissions, storeStats])
 
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {

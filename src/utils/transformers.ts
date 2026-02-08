@@ -8,7 +8,7 @@
  * @module utils/transformers
  */
 
-import type { Admission, Watchlist, Notification } from '../types/api';
+import type { Admission, Watchlist, Notification, Deadline, DeadlineType } from '../types/api';
 import type { StudentAdmission, StudentNotification } from '../data/studentData';
 
 /**
@@ -24,9 +24,27 @@ export function transformAdmission(
   watchlist?: Watchlist,
   universityName?: string
 ): StudentAdmission {
+  // Get university name from different sources (in order of preference)
+  const finalUniversityName = 
+    universityName ||
+    (backend.universities?.name) ||
+    backend.university_id || 
+    'Unknown';
+  
+  // Debug logging for watchlist data
+  if (watchlist) {
+    console.log('🔄 [transformAdmission] Watchlist data for', backend.id, ':', {
+      watchlistId: watchlist.id,
+      alert_opt_in: watchlist.alert_opt_in,
+    });
+  }
+  
   return {
     id: backend.id,
-    university: universityName || backend.university_id || 'Unknown',
+    university: finalUniversityName,
+    universityLogo: backend.universities?.logo_url || undefined,  // University logo URL
+    universityCity: backend.universities?.city || undefined,      // University city
+    universityCountry: backend.universities?.country || undefined, // University country
     program: backend.title,
     degree: backend.degree_level,
     degreeType: mapDegreeType(backend.degree_level),
@@ -37,10 +55,12 @@ export function transformAdmission(
     location: backend.location,
     city: extractCity(backend.location),
     status: mapVerificationStatus(backend.verification_status),
+    verificationStatus: mapRawVerificationStatus(backend.verification_status),
     programStatus: calculateProgramStatus(backend.deadline),
     updated: formatRelativeTime(backend.updated_at),
     daysRemaining: calculateDaysRemaining(backend.deadline),
     saved: !!watchlist,
+    watchlistId: watchlist?.id,  // Store watchlist ID for delete operations
     alertEnabled: watchlist?.alert_opt_in || false,
     aiSummary: backend.description || undefined,
     logoBg: '#1F2937', // Default logo background color
@@ -80,6 +100,23 @@ function mapVerificationStatus(
     rejected: 'Closed',
   };
   return map[status.toLowerCase()] || 'Pending';
+}
+
+/**
+ * Map backend verification status to frontend enum values
+ */
+function mapRawVerificationStatus(
+  status: string | undefined
+): 'verified' | 'pending' | 'rejected' | 'under_review' {
+  const map: Record<string, 'verified' | 'pending' | 'rejected' | 'under_review'> = {
+    verified: 'verified',
+    pending: 'pending',
+    rejected: 'rejected',
+    draft: 'pending',  // Map draft to pending
+    disputed: 'under_review',  // Map disputed to under_review
+    under_review: 'under_review',
+  };
+  return map[(status || '').toLowerCase()] || 'pending';
 }
 
 /**
@@ -223,4 +260,106 @@ function getNotificationColor(priority: string): string {
     low: 'text-blue-600',
   };
   return map[priority.toLowerCase()] || 'text-gray-600';
+}
+
+/**
+ * Transform backend watchlist to frontend format
+ * 
+ * @param backend - Backend watchlist data
+ * @param admission - Optional admission details for this watchlist item
+ * @returns Transformed watchlist object with frontend naming conventions
+ */
+export function transformWatchlist(
+  backend: Watchlist,
+  admission?: any
+): any {
+  return {
+    id: backend.id,
+    admissionId: backend.admission_id,
+    userId: backend.user_id,
+    notes: backend.notes,
+    savedAt: backend.created_at,      // Map created_at to savedAt for display
+    createdAt: backend.created_at,
+    updatedAt: backend.updated_at,
+    alertEnabled: backend.alert_opt_in,
+    admission: admission || null,
+  };
+}
+
+/**
+ * Transform backend deadline to frontend format
+ * 
+ * @param backend - Backend deadline data
+ * @returns Transformed deadline object with calculated fields
+ */
+export function transformDeadline(backend: Deadline): any {
+  const daysRemaining = calculateDaysRemainingFromDate(backend.deadline_date);
+  const urgencyLevel = calculateDeadlineUrgency(daysRemaining);
+  
+  return {
+    id: backend.id,
+    admissionId: backend.admission_id,
+    deadlineType: backend.deadline_type,
+    deadlineDate: backend.deadline_date,
+    timezone: backend.timezone,
+    isFlexible: backend.is_flexible,
+    reminderSent: backend.reminder_sent,
+    createdAt: backend.created_at,
+    updatedAt: backend.updated_at,
+    
+    // Computed fields
+    daysRemaining,
+    urgencyLevel,
+    
+    // For backward compatibility with existing code
+    deadline: backend.deadline_date,
+  };
+}
+
+/**
+ * Calculate days remaining until a deadline
+ * 
+ * @param deadlineDate - ISO 8601 deadline date string
+ * @returns Number of days remaining (negative if past deadline)
+ */
+export function calculateDaysRemainingFromDate(deadlineDate: string): number {
+  const now = new Date();
+  const deadline = new Date(deadlineDate);
+  const diffTime = deadline.getTime() - now.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculate urgency level based on days remaining
+ * 
+ * @param daysRemaining - Number of days until deadline
+ * @returns Urgency level classification
+ */
+export function calculateDeadlineUrgency(
+  daysRemaining: number
+): 'low' | 'medium' | 'high' | 'urgent' {
+  if (daysRemaining < 0) return 'low';      // Past deadline
+  if (daysRemaining <= 3) return 'urgent';  // Within 3 days
+  if (daysRemaining <= 7) return 'high';    // Within a week
+  if (daysRemaining <= 14) return 'medium'; // Within 2 weeks
+  return 'low';                             // More than 2 weeks
+}
+
+/**
+ * Format deadline type for display
+ * 
+ * @param deadlineType - Deadline type enum value
+ * @returns Human-readable deadline type label
+ */
+export function formatDeadlineType(deadlineType: DeadlineType): string {
+  const map: Record<DeadlineType, string> = {
+    application: 'Application Deadline',
+    decision: 'Decision Date',
+    enrollment: 'Enrollment Deadline',
+    document: 'Document Submission',
+    interview: 'Interview Deadline',
+    payment: 'Payment Deadline',
+    orientation: 'Orientation Date',
+  };
+  return map[deadlineType] || deadlineType;
 }
