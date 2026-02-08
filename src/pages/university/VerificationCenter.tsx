@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type AuditItem, type AuditStatus } from "../../data/universityData"
-import { useUniversityData } from "../../contexts/UniversityDataContext"
+import { useUniversityStore } from "../../store/universityStore"
 
 const STATUS_OPTIONS: Array<"All" | AuditStatus> = ["All", "Pending", "Verified", "Rejected", "Disputed"]
 
@@ -204,7 +204,7 @@ function VerificationCenter() {
 	const [audits, setAudits] = useState<AuditItem[]>([])
 	const [selected, setSelected] = useState<AuditItem | null>(null)
 	const [toast, setToast] = useState<string | null>(null)
-	const { audits: sharedAudits } = useUniversityData()
+	const sharedAudits = useUniversityStore((state) => state.audits)
 
 	useEffect(() => {
 		// Simulate fetch from /api/audits

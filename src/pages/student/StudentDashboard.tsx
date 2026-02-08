@@ -2,8 +2,10 @@ import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { useStudentStore } from '../../store/studentStore'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
+import { useAuth } from '../../contexts/AuthContext'
+import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -17,48 +19,70 @@ function getMatchLabel(matchNumeric?: number): string {
 
 function StudentDashboard() {
   const navigate = useNavigate()
-  const { admissions, savedAdmissions, notifications, loading, error, stats: apiStats } = useStudentData()
+  const { user } = useAuth()
+  
+  // Use custom hook for data fetching (handles loading logic)
+  const { admissions, loading, error } = useStudentDashboardData()
+  const allAdmissions = useStudentStore((state) => state.admissions)
+  const notifications = useStudentStore((state) => state.notifications)
+  
+  // Memoize saved admissions to prevent unnecessary calculations
+  const savedAdmissions = useMemo(
+    () => allAdmissions.filter((a) => a.saved),
+    [allAdmissions]
+  )
+  
+  const displayName = user?.display_name?.trim() || 'Student'
 
-  // Use API stats if available, otherwise calculate from data
+  // Use API stats if complete, otherwise calculate from actual data
   // NOTE: All hooks must be called before any conditional returns
   const stats = useMemo(() => {
-    // If API stats are available, use them
-    if (apiStats) {
-      return {
-        active: apiStats.active_admissions,
-        saved: apiStats.saved_count,
-        upcoming: apiStats.upcoming_deadlines,
-        recommendations: apiStats.recommendations_count,
-        urgent: apiStats.urgent_deadlines,
-      }
-    }
-
-    // Fallback: Calculate stats from shared data with dynamic calculations
+    // Calculate stats from actual data (source of truth)
     const upcoming = admissions.filter(a => {
       const daysRemaining = calculateDaysRemaining(a.deadline)
       return (a.programStatus === 'Open' || a.programStatus === 'Closing Soon') && daysRemaining >= 0 && daysRemaining <= 7
     }).length
+    
     const active = admissions.filter(a => {
       const daysRemaining = calculateDaysRemaining(a.deadline)
       return (a.programStatus === 'Open' || a.programStatus === 'Closing Soon') && daysRemaining >= 0
     }).length
+    
     const recommendations = admissions.filter(a => {
       const daysRemaining = calculateDaysRemaining(a.deadline)
       return a.matchNumeric && a.matchNumeric >= 85 && daysRemaining >= 0 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
     }).length
+    
     const urgent = admissions.filter(a => {
       const daysRemaining = calculateDaysRemaining(a.deadline)
       return daysRemaining >= 0 && daysRemaining <= 7 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
     }).length
 
-    return {
+    const calculatedStats = {
       active,
       saved: savedAdmissions.length,
       upcoming,
       recommendations,
       urgent,
     }
-  }, [admissions, savedAdmissions, apiStats])
+
+    console.log('📊 [Dashboard Stats] Calculated from data:', calculatedStats)
+    console.log('📊 [Dashboard] Total admissions:', admissions.length, 'Saved:', savedAdmissions.length)
+    
+    // Debug: Show which admissions are counted
+    if (admissions.length > 0) {
+      const openPrograms = admissions.filter(a => a.programStatus === 'Open' || a.programStatus === 'Closing Soon');
+      console.log(`📊 [Dashboard] Open/ClosingSoon programs: ${openPrograms.length}/${admissions.length}`);
+      
+      const withValidDeadline = admissions.filter(a => {
+        const daysRemaining = calculateDaysRemaining(a.deadline);
+        return daysRemaining >= 0;
+      });
+      console.log(`📊 [Dashboard] With valid deadline (not closed): ${withValidDeadline.length}/${admissions.length}`);
+    }
+
+    return calculatedStats
+  }, [admissions, savedAdmissions])
 
   // Get recommended programs (high match, open status, not past deadline)
   const recommendedPrograms = useMemo(() => {
@@ -159,7 +183,7 @@ function StudentDashboard() {
       <div className="p-6">
             <div className="mb-6 rounded-lg p-8 text-white relative overflow-hidden" style={{ backgroundColor: '#2563EB' }}>
               <div className="relative z-10">
-                <h1 className="text-3xl font-bold mb-2">Welcome back, Aryan!</h1>
+                <h1 className="text-3xl font-bold mb-2">Welcome back, {displayName}!</h1>
                 <p className="text-lg mb-6 opacity-90">Track your admission progress and discover new opportunities.</p>
                 <div className="flex gap-4">
                   <button 
@@ -253,9 +277,21 @@ function StudentDashboard() {
                         className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md cursor-pointer transition-all"
                       >
                         <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold mb-1 text-lg" style={{ color: '#111827' }}>{admission.program}</h3>
-                            <p className="text-sm text-gray-600">{admission.university}</p>
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="w-10 h-10 rounded flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>
+                              {admission.universityLogo ? (
+                                <img src={admission.universityLogo} alt={admission.university} className="w-full h-full object-cover" />
+                              ) : (
+                                admission.university.substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold mb-1 text-lg" style={{ color: '#111827' }}>{admission.program}</h3>
+                              <p className="text-sm text-gray-600">{admission.university}</p>
+                              {admission.universityCity && (
+                                <p className="text-xs text-gray-500">{admission.universityCity}, {admission.universityCountry}</p>
+                              )}
+                            </div>
                           </div>
                           <span className="text-sm font-medium px-2 py-1 rounded" style={{ color: '#10B981', backgroundColor: '#D1FAE5' }}>
                             {getMatchLabel(admission.matchNumeric)}

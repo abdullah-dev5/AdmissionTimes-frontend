@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { useStudentStore } from '../../store/studentStore'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -144,7 +144,14 @@ const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) =
 
 function ComparePage() {
   const [searchParams] = useSearchParams()
-  const { getAdmissionById, savedAdmissions } = useStudentData()
+  const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
+  const allAdmissions = useStudentStore((state) => state.admissions)
+  
+  // Memoize saved admissions to prevent unnecessary calculations
+  const savedAdmissions = useMemo(
+    () => allAdmissions.filter((a) => a.saved),
+    [allAdmissions]
+  )
   const idsParam = searchParams.get('ids')
   
   const selectedAdmissions = useMemo(() => {

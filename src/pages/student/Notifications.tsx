@@ -1,16 +1,68 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { type StudentNotification } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { useStudentStore } from '../../store/studentStore'
+import { preferencesService } from '../../services/preferencesService'
+import type { UserPreferences } from '../../types/api'
+import { useToast } from '../../contexts/ToastContext'
 
 function Notifications() {
   const navigate = useNavigate()
-  const { notifications, markNotificationRead, markAllNotificationsRead, refreshNotifications } = useStudentData()
+  const notifications = useStudentStore((state) => state.notifications)
+  const markNotificationRead = useStudentStore((state) => state.markNotificationRead)
+  const markAllNotificationsRead = useStudentStore((state) => state.markAllNotificationsRead)
+  const { showError, showSuccess } = useToast()
   const [activeTab, setActiveTab] = useState<'All' | 'alert' | 'system' | 'admission'>('All')
-  const [emailAlerts, setEmailAlerts] = useState(true)
-  const [inAppAlerts, setInAppAlerts] = useState(true)
-  const [weeklyDigest, setWeeklyDigest] = useState(false)
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null)
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchPreferences = async () => {
+      try {
+        setIsLoadingPrefs(true)
+        const response = await preferencesService.get()
+        if (isMounted) {
+          setPreferences(response.data)
+        }
+      } catch (err: any) {
+        console.error('Failed to load preferences:', err)
+        if (isMounted) {
+          showError('Failed to load notification preferences.')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingPrefs(false)
+        }
+      }
+    }
+
+    fetchPreferences()
+    return () => {
+      isMounted = false
+    }
+  }, []) // No dependencies - fetch once on mount
+
+  const emailAlerts = preferences?.email_notifications_enabled ?? true
+  const inAppAlerts = preferences?.push_notifications_enabled ?? true
+  const weeklyDigest = (preferences?.email_frequency ?? 'immediate') === 'weekly'
+
+  const updateNotificationPreferences = async (patch: Partial<UserPreferences>) => {
+    try {
+      setIsSavingPrefs(true)
+      const response = await preferencesService.updateNotifications(patch)
+      setPreferences(response.data)
+      showSuccess('Notification preferences updated.')
+    } catch (err: any) {
+      console.error('Failed to update preferences:', err)
+      showError('Failed to update notification preferences.')
+    } finally {
+      setIsSavingPrefs(false)
+    }
+  }
 
   const filteredNotifications = useMemo(() => {
     if (activeTab === 'All') {
@@ -35,8 +87,35 @@ function Notifications() {
   }
 
   const handleRefresh = () => {
-    refreshNotifications()
-    alert('Notifications refreshed!')
+    // Notifications are managed by the store and update automatically
+    // No need to manually refresh - just provide user feedback
+    showSuccess('Notifications are up to date!')
+  }
+
+  const handleToggleEmail = () => {
+    const nextEnabled = !emailAlerts
+    const nextFrequency = nextEnabled
+      ? (weeklyDigest ? 'weekly' : 'immediate')
+      : 'never'
+
+    updateNotificationPreferences({
+      email_notifications_enabled: nextEnabled,
+      email_frequency: nextFrequency,
+    })
+  }
+
+  const handleToggleInApp = () => {
+    updateNotificationPreferences({
+      push_notifications_enabled: !inAppAlerts,
+    })
+  }
+
+  const handleToggleWeeklyDigest = () => {
+    const nextWeekly = !weeklyDigest
+    updateNotificationPreferences({
+      email_notifications_enabled: true,
+      email_frequency: nextWeekly ? 'weekly' : 'immediate',
+    })
   }
 
   return (
@@ -134,6 +213,10 @@ function Notifications() {
                   <h2 className="text-xl font-semibold mb-2" style={{ color: '#111827' }}>Notification Preferences</h2>
                   <p className="text-sm text-gray-600 mb-6">Manage how you receive alerts.</p>
 
+                  {isLoadingPrefs && (
+                    <p className="text-xs text-gray-500 mb-4">Loading preferences...</p>
+                  )}
+
                   <div className="space-y-6 mb-6">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -141,10 +224,11 @@ function Notifications() {
                         <p className="text-xs text-gray-500">Get important updates in your inbox.</p>
                       </div>
                       <button
-                        onClick={() => setEmailAlerts(!emailAlerts)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors ${
+                        onClick={handleToggleEmail}
+                        disabled={isLoadingPrefs || isSavingPrefs}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           emailAlerts ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
+                        } ${isLoadingPrefs || isSavingPrefs ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -160,10 +244,11 @@ function Notifications() {
                         <p className="text-xs text-gray-500">Push notifications on this device.</p>
                       </div>
                       <button
-                        onClick={() => setInAppAlerts(!inAppAlerts)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors ${
+                        onClick={handleToggleInApp}
+                        disabled={isLoadingPrefs || isSavingPrefs}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           inAppAlerts ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
+                        } ${isLoadingPrefs || isSavingPrefs ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -179,10 +264,11 @@ function Notifications() {
                         <p className="text-xs text-gray-500">A summary of your week's activity.</p>
                       </div>
                       <button
-                        onClick={() => setWeeklyDigest(!weeklyDigest)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors ${
+                        onClick={handleToggleWeeklyDigest}
+                        disabled={isLoadingPrefs || isSavingPrefs}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           weeklyDigest ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
+                        } ${isLoadingPrefs || isSavingPrefs ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${

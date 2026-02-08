@@ -88,6 +88,9 @@ export interface Admission {
   created_by?: string | null;
   university_id?: string | null;
   is_active?: boolean;
+  
+  // RELATIONSHIPS: Populated when joining with other tables
+  universities?: University | null;  // Populated from university_id join
 }
 
 /**
@@ -126,30 +129,56 @@ export interface Notification {
 }
 
 /**
+ * Deadline Type Enum
+ * Types of deadlines in the admission process
+ */
+export type DeadlineType = 
+  | 'application'    // Application submission deadline
+  | 'decision'       // Decision notification date
+  | 'enrollment'     // Enrollment confirmation deadline
+  | 'document'       // Document submission deadline
+  | 'interview'      // Interview scheduling deadline
+  | 'payment'        // Fee payment deadline
+  | 'orientation';   // Orientation date
+
+/**
  * Deadline entity
  * Represents a deadline for a specific admission program
+ * 
+ * NOTE: Deadlines are linked to admissions, not directly to users.
+ * To get user deadlines, join through watchlists:
+ * User → Watchlists → Admissions → Deadlines
  */
 export interface Deadline {
   id: string;
   admission_id: string;
-  user_id: string;
-  deadline: string; // ISO 8601 format
-  days_remaining: number;
-  urgency_level: 'low' | 'medium' | 'high' | 'urgent';
+  deadline_type: DeadlineType;      // Type of deadline (application, decision, etc.)
+  deadline_date: string;            // ISO 8601 format - actual deadline timestamp
+  timezone: string;                 // Timezone for deadline (default: "UTC")
+  is_flexible: boolean;             // Whether deadline can be extended
+  reminder_sent: boolean;           // Whether reminder notification was sent
   created_at: string;
+  updated_at: string;
+  
+  // Optional: Computed fields (not in database, calculated on frontend)
+  days_remaining?: number;          // Calculated from deadline_date
+  urgency_level?: 'low' | 'medium' | 'high' | 'urgent';  // Calculated
 }
 
 /**
  * Watchlist entity
  * Represents a saved/favorited admission program
+ * 
+ * NOTE: Unique constraint on (user_id, admission_id) - user can only save each admission once
  */
 export interface Watchlist {
   id: string;
   user_id: string;
   admission_id: string;
-  saved_at: string;
-  alert_opt_in: boolean;
   notes: string | null;
+  created_at: string;               // When item was added to watchlist
+  updated_at: string;               // Last modification time
+  alert_opt_in: boolean;            // Whether user wants deadline reminders
 }
 
 /**
@@ -215,18 +244,18 @@ export interface UniversityProfile {
 export interface UserPreferences {
   id: string;
   user_id: string;
-  notification_preferences: {
-    email: boolean;
-    push: boolean;
-    deadline_alerts: boolean;
+  email_notifications_enabled: boolean;
+  email_frequency: 'immediate' | 'daily' | 'weekly' | 'never';
+  push_notifications_enabled: boolean;
+  notification_categories: {
+    system: boolean;
+    update: boolean;
+    deadline: boolean;
+    verification: boolean;
   };
-  display_preferences: {
-    theme: 'light' | 'dark';
-    language: string;
-  };
-  search_preferences: {
-    default_filters: Record<string, any>;
-  };
+  language: 'en' | 'ar' | 'fr' | 'es';
+  timezone: string;
+  theme: 'light' | 'dark' | 'auto';
   created_at: string;
   updated_at: string;
 }

@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
+import { useStudentStore } from '../../store/studentStore'
+import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../contexts/ToastContext'
+import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -373,7 +376,11 @@ const EmptyState = () => {
 
 function WatchlistPage() {
   const navigate = useNavigate()
-  const { admissions, toggleSaved, toggleAlert } = useStudentData()
+  const { user } = useAuth()
+  const { showError, showSuccess } = useToast()
+  const toggleSaved = useStudentStore((state) => state.toggleSaved)
+  const toggleAlert = useStudentStore((state) => state.toggleAlert)
+  const { admissions } = useStudentDashboardData()
   const [searchQuery, setSearchQuery] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -382,12 +389,14 @@ function WatchlistPage() {
 
   // Get saved programs from shared data
   const savedPrograms = useMemo(() => {
-    return admissions
+    const saved = admissions
       .filter(a => a.saved)
       .map(a => ({
         ...a,
         daysRemaining: calculateDaysRemaining(a.deadline),
       }))
+    console.log('📚 [WatchlistPage] Filtered saved programs:', saved.length);
+    return saved;
   }, [admissions])
 
   // Get recommendations (not saved, high match)
@@ -405,17 +414,17 @@ function WatchlistPage() {
   }
 
   const handleAlertToggle = (id: string) => {
-    toggleAlert(id)
+    toggleAlert(id, { showError, showSuccess })
   }
 
   const handleRemove = (id: string) => {
     if (window.confirm('Remove this program from your watchlist?')) {
       const program = savedPrograms.find(program => program.id === id)
       if (program?.alertEnabled) {
-        toggleAlert(id)
+        toggleAlert(id, { showError, showSuccess })
       }
       if (program) {
-        toggleSaved(id)
+        toggleSaved(id, { showError })
       }
       setSelectedIds(prev => prev.filter(i => i !== id))
     }
@@ -434,7 +443,7 @@ function WatchlistPage() {
   const handleSaveRecommendation = (id: string) => {
     const isSaved = savedPrograms.some(program => program.id === id)
     if (!isSaved) {
-      toggleSaved(id)
+      toggleSaved(id, { showError })
       alert('Program saved to watchlist!')
     } else {
       alert('Program already saved to watchlist.')

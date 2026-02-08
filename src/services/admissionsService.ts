@@ -15,6 +15,10 @@ import apiClient from './apiClient';
 import { supabase } from './supabase';
 import type { ApiResponse, PaginatedResponse, Admission } from '../types/api';
 
+// ⚡ Performance: In-memory cache for universities (5 min TTL)
+const universityCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export const admissionsService = {
   // ============================================================
   // DIRECT SUPABASE QUERIES (Phase 1 - Fast Read Operations)
@@ -42,33 +46,105 @@ export const admissionsService = {
     limit: number;
   }> => {
     try {
-      let query = supabase.from('admissions').select('*', { count: 'exact' });
+      console.log('📊 [listDirect] Fetching admissions with params:', params);
+      
+      // Select admission data (universities will be fetched separately if needed)
+      let query = supabase
+        .from('admissions')
+        .select('*', { count: 'exact' });
+
+      // Only show active admissions (if specified)
+      if (params?.verification_status !== undefined) {
+        console.log('🔍 Filtering by is_active: true');
+        query = query.eq('is_active', true);
+      }
 
       // Apply filters
       if (params?.degree_level) {
+        console.log('🔍 Filtering by degree_level:', params.degree_level);
         query = query.eq('degree_level', params.degree_level);
       }
       if (params?.verification_status) {
+        console.log('🔍 Filtering by verification_status:', params.verification_status);
         query = query.eq('verification_status', params.verification_status);
       }
       if (params?.search) {
+        console.log('🔍 Searching for:', params.search);
         query = query.or(
           `title.ilike.%${params.search}%,description.ilike.%${params.search}%,field_of_study.ilike.%${params.search}%`
         );
       }
 
-      // Apply pagination
+      // Apply pagination - use higher default limit for student search
       const page = params?.page || 1;
-      const limit = params?.limit || 20;
+      const limit = params?.limit || 1000;  // Higher default to fetch all admissions
       const start = (page - 1) * limit;
       query = query.range(start, start + limit - 1);
 
       const { data, count, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Supabase query error:', error);
+        throw error;
+      }
+
+      console.log(`✅ [listDirect] Retrieved ${data?.length || 0} admissions (total count: ${count})`);
+      
+      // ⚡ Fetch universities for admissions that have university_id (with caching)
+      let admissionsWithUniversities = data || [];
+      if (data && data.length > 0) {
+        console.log('📋 Sample admission:', data[0]);
+        
+        // Get unique university IDs
+        const universityIds = [...new Set(data.map(a => a.university_id).filter(Boolean))];
+        
+        if (universityIds.length > 0) {
+          const now = Date.now();
+          const universityMap = new Map();
+          const uncachedIds: string[] = [];
+          
+          // Check cache first
+          universityIds.forEach(id => {
+            const cached = universityCache.get(id);
+            if (cached && (now - cached.timestamp) < CACHE_TTL) {
+              universityMap.set(id, cached.data);
+            } else {
+              uncachedIds.push(id);
+            }
+          });
+          
+          console.log(`🏛️ Universities: ${universityIds.length - uncachedIds.length} cached, ${uncachedIds.length} to fetch`);
+          
+          // Fetch only uncached universities
+          if (uncachedIds.length > 0) {
+            const { data: universities, error: univError } = await supabase
+              .from('universities')
+              .select('id, name, logo_url, city, country')
+              .in('id', uncachedIds);
+            
+            if (!univError && universities) {
+              console.log('✅ Fetched', universities.length, 'universities from database');
+              
+              // Add to cache and map
+              universities.forEach(u => {
+                universityCache.set(u.id, { data: u, timestamp: now });
+                universityMap.set(u.id, u);
+              });
+            } else {
+              console.warn('⚠️ Failed to fetch universities:', univError);
+            }
+          }
+          
+          // Attach university data to each admission
+          admissionsWithUniversities = data.map(admission => ({
+            ...admission,
+            universities: admission.university_id ? universityMap.get(admission.university_id) || null : null
+          }));
+        }
+      }
 
       return {
-        data: data || [],
+        data: admissionsWithUniversities,
         count: count || 0,
         page,
         limit,

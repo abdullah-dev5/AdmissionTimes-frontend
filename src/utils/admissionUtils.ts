@@ -52,6 +52,78 @@ export function formatDateForInput(dateString: string | undefined): string {
 }
 
 /**
+ * Transform API Admission format to frontend format
+ * Converts database API format to the format expected by frontend components
+ * 
+ * @param apiAdmission - Admission in API/database format
+ * @returns Admission in frontend format with all required fields
+ */
+export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Admission {
+  // Determine frontend status based on verification_status
+  let status: Admission['status'] = 'Draft'
+  const verificationStatus = apiAdmission.verification_status
+  
+  if (verificationStatus === 'verified') {
+    status = 'Verified'
+  } else if (verificationStatus === 'rejected') {
+    status = 'Rejected'
+  } else if (verificationStatus === 'disputed') {
+    status = 'Disputed'
+  } else if (verificationStatus === 'pending') {
+    status = 'Pending Audit'
+  } else if (verificationStatus === 'draft') {
+    status = 'Draft'
+  }
+
+  return {
+    id: apiAdmission.id,
+    title: apiAdmission.title || 'Unknown Program',
+    deadline: apiAdmission.deadline || new Date().toISOString(),
+    status,
+    verification_status: verificationStatus,
+    views: '0',
+    verifiedBy: apiAdmission.verified_by,
+    lastAction: apiAdmission.updated_at || apiAdmission.created_at || new Date().toISOString(),
+    remarks: apiAdmission.dispute_reason || '',
+    
+    // Program classification
+    degreeType: apiAdmission.degree_level || '',
+    program_type: apiAdmission.program_type || '',
+    field_of_study: apiAdmission.field_of_study || '',
+    
+    // Program details
+    department: apiAdmission.location || '',
+    duration: apiAdmission.duration || '',
+    delivery_mode: apiAdmission.delivery_mode || '',
+    
+    // Financial
+    fee: apiAdmission.application_fee?.toString() || '0',
+    tuition_fee: apiAdmission.tuition_fee?.toString(),
+    currency: apiAdmission.currency || 'USD',
+    
+    // Descriptions
+    overview: apiAdmission.description || '',
+    eligibility: '',
+    requirements: apiAdmission.requirements,
+    
+    // Web presence
+    websiteUrl: apiAdmission.website_url || '',
+    admissionPortalLink: apiAdmission.admission_portal_link || '',
+    website_url: apiAdmission.website_url,
+    admission_portal_link: apiAdmission.admission_portal_link,
+    
+    // Metadata
+    start_date: apiAdmission.start_date,
+    created_at: apiAdmission.created_at,
+    updated_at: apiAdmission.updated_at,
+    verified_at: apiAdmission.verified_at,
+    created_by: apiAdmission.created_by,
+    university_id: apiAdmission.university_id,
+    is_active: apiAdmission.is_active,
+  }
+}
+
+/**
  * Transform frontend Admission format to backend API format
  * Maps all 25 frontend fields to backend database fields
  * 

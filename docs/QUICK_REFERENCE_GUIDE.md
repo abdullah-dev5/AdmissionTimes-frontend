@@ -1,6 +1,33 @@
-# Quick Reference Guide - Consistency Issues & Solutions
+# Quick Reference Guide - Changes, Fixes & Current State
+**Last Updated:** February 9, 2026
 
-## 🔍 The 5 Critical Issues
+## 🔄 Latest Session Changes (Feb 9)
+
+### Change #1: Active Admissions Counter Fixed ✅
+**Problem**: Dashboard showed "Active Admissions: 0"  
+**Root Cause**: Checking `status === 'Active'` but API returns `is_active` boolean  
+**Solution**: Changed to `is_active === true`  
+**File**: `src/pages/university/UniversityDashboard.tsx` (line 18-27)
+**Impact**: Dashboard now shows accurate active admission count
+
+### Change #2: Status Filter Consolidated ✅  
+**Problem**: 6 status filters cluttered UI (Total, Draft, Pending, Verified, Rejected, Disputed)  
+**Solution**: Merged "Disputed" with "Rejected" count → 5 filters total  
+**File**: `src/pages/university/ViewAllAdmissions.tsx`  
+**Impact**: 
+  - Type changed: `type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected'`
+  - Filter logic: `rejected: ['Rejected', 'Disputed']`
+  - Grid: `grid-cols-5` (was `grid-cols-6`)
+  - Individual cards still show actual status (red=rejected, orange=disputed)
+
+### Plan #1: Engagement Analytics 📋
+**Objective**: Add Views/Clicks/Reminders charts to university dashboard  
+**Timeline**: 8-12 hours  
+**Implementation**: See `docs/ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md`
+
+---
+
+## 🔍 Previous Critical Issues (Already Fixed)
 
 ### Issue #1: Frontend Types Were Incomplete ❌ → ✅ FIXED
 **Problem**: Frontend could only access 12 of 25 database fields  
@@ -29,7 +56,7 @@ interface Admission {
 
 ---
 
-### Issue #2: Dashboard Transformer Missing Fields ❌ → ✅ FIXED
+## 🔍 All Known Issues Status
 **Problem**: Transformer only mapped 12 of 18 fields returned by API  
 **Root Cause**: API response structure not fully mapped  
 **Solution**: Updated transformer to map all available fields  

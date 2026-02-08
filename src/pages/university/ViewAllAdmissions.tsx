@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
-import { useUniversityData } from '../../contexts/UniversityDataContext'
+import { useUniversityStore } from '../../store/universityStore'
 
-type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected' | 'disputed'
+type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected'
 
 function ViewAllAdmissions() {
   const navigate = useNavigate()
-  const { admissions, deleteAdmission } = useUniversityData()
+  const admissions = useUniversityStore((state) => state.admissions)
+  const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -26,8 +27,7 @@ function ViewAllAdmissions() {
         draft: ['Draft'],
         pending: ['Pending Audit'],
         verified: ['Verified'],
-        rejected: ['Rejected'],
-        disputed: ['Disputed'],
+        rejected: ['Rejected', 'Disputed'], // Includes both rejected and disputed
       }
       const targetStatuses = statusMap[statusFilter] || []
       filtered = filtered.filter((adm) => targetStatuses.includes(adm.status))
@@ -75,8 +75,7 @@ function ViewAllAdmissions() {
       draft: admissions.filter((a) => a.status === 'Draft').length,
       pending: admissions.filter((a) => a.status === 'Pending Audit').length,
       verified: admissions.filter((a) => a.status === 'Verified').length,
-      rejected: admissions.filter((a) => a.status === 'Rejected').length,
-      disputed: admissions.filter((a) => a.status === 'Disputed').length,
+      rejected: admissions.filter((a) => a.status === 'Rejected' || a.status === 'Disputed').length, // Combined count
     }
   }, [admissions])
 
@@ -106,7 +105,7 @@ function ViewAllAdmissions() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div
               className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                 statusFilter === 'all' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'
@@ -155,17 +154,6 @@ function ViewAllAdmissions() {
             >
               <div className="text-2xl font-bold text-red-700">{statusCounts.rejected}</div>
               <div className="text-sm text-gray-600">Rejected</div>
-            </div>
-            <div
-              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                statusFilter === 'disputed'
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 bg-white hover:border-orange-300'
-              }`}
-              onClick={() => setStatusFilter('disputed')}
-            >
-              <div className="text-2xl font-bold text-orange-700">{statusCounts.disputed}</div>
-              <div className="text-sm text-gray-600">Disputed</div>
             </div>
           </div>
 

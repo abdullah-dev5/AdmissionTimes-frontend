@@ -7,6 +7,9 @@ export type NotificationType = 'alert' | 'system' | 'admission'
 export interface StudentAdmission {
   id: string
   university: string
+  universityLogo?: string | null  // University logo URL
+  universityCity?: string  // University city
+  universityCountry?: string  // University country
   program: string
   degree: string
   degreeType: 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA' | 'MD' | 'MPhil'
@@ -17,6 +20,7 @@ export interface StudentAdmission {
   location: string
   city: string
   status: AdmissionStatus
+  verificationStatus?: 'verified' | 'pending' | 'rejected' | 'under_review'  // Raw verification status for badges
   programStatus: ProgramStatus
   updated: string
   daysRemaining: number
@@ -27,6 +31,7 @@ export interface StudentAdmission {
   officialUrl?: string
   alertEnabled?: boolean
   saved?: boolean
+  watchlistId?: string  // Watchlist ID for managing saved state
 }
 
 export interface StudentNotification {

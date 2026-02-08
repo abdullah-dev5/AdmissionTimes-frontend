@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type NotificationItem } from "../../data/universityData"
-import { useUniversityData } from "../../contexts/UniversityDataContext"
+import { useUniversityStore } from "../../store/universityStore"
 
 type NotificationType = NotificationItem["type"]
 
@@ -121,7 +121,9 @@ function NotificationCard({
 
 function NotificationsCenter() {
 	const navigate = useNavigate()
-	const { notifications, markNotificationRead, markAllNotificationsRead } = useUniversityData()
+	const notifications = useUniversityStore((state) => state.notifications)
+	const markNotificationRead = useUniversityStore((state) => state.markNotificationRead)
+	const markAllNotificationsRead = useUniversityStore((state) => state.markAllNotificationsRead)
 	const [tab, setTab] = useState<"All" | NotificationType>("All")
 	const [query, setQuery] = useState("")
 

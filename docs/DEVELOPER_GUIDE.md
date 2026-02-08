@@ -1,8 +1,25 @@
 ﻿# 📘 AdmissionTimes - Developer Guide
 **Quick Start & Documentation Index**  
-**Last Updated:** January 27, 2026
+**Last Updated:** February 9, 2026
 
 ---
+
+## 🌟 Latest Updates This Session
+
+### ✅ Active Admissions Counter Fixed
+- File: `src/pages/university/UniversityDashboard.tsx`
+- Change: Uses `is_active === true` instead of `status === 'Active'`
+- Impact: Dashboard now shows correct active admission counts
+
+### ✅ Status Filter Consolidation
+- File: `src/pages/university/ViewAllAdmissions.tsx`
+- Change: Merged "Disputed" into "Rejected" count (5 filters, not 6)
+- Impact: Cleaner UI, individual cards still show actual status
+
+### 📋 Engagement Analytics Planned
+- Plan: `docs/ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md`
+- Timeline: 8-12 hours implementation
+- Features: Views/Clicks/Reminders tracking with real data
 
 ## 🚀 Absolute Quickest Start (5 Minutes)
 

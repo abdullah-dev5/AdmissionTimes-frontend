@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
-import { useStudentData } from '../../contexts/StudentDataContext'
+import { useStudentStore } from '../../store/studentStore'
+import { useToast } from '../../contexts/ToastContext'
+import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 
 const DeadlineHeader = ({ 
   onUniversityFilter, 
@@ -220,6 +222,14 @@ const AiSummaryBox = ({ count }: { count: number }) => {
 const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (StudentAdmission & { daysRemaining: number })[]; selectedDate: string | null; onDateSelect: (date: string | null) => void }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   
+  // Debug: Log deadlines passed to calendar
+  useEffect(() => {
+    if (deadlines.length > 0) {
+      console.log('📅 [CalendarView] Received deadlines:', deadlines.length)
+      console.log('📅 [CalendarView] Sample deadlines:', deadlines.slice(0, 2).map(d => d.deadline))
+    }
+  }, [deadlines])
+  
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -240,14 +250,34 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
     return `${year}-${month}-${day}`
   }
 
+  const normalizeDeadlineDate = (deadline: string) => {
+    // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:mm:ss" formats
+    if (!deadline) return ''
+    // Extract just the date part (first 10 characters: YYYY-MM-DD)
+    return deadline.substring(0, 10)
+  }
+
   const getDeadlineCountForDate = (date: Date) => {
     const dateStr = formatDateForComparison(date)
-    return deadlines.filter(d => d.deadline === dateStr).length
+    const count = deadlines.filter(d => {
+      if (d.deadline) {
+        const normalizedDeadline = normalizeDeadlineDate(d.deadline)
+        return normalizedDeadline === dateStr
+      }
+      return false
+    }).length
+    return count
   }
 
   const getDeadlineStatusForDate = (date: Date) => {
     const dateStr = formatDateForComparison(date)
-    const dateDeadlines = deadlines.filter(d => d.deadline === dateStr)
+    const dateDeadlines = deadlines.filter(d => {
+      if (d.deadline) {
+        const normalizedDeadline = normalizeDeadlineDate(d.deadline)
+        return normalizedDeadline === dateStr
+      }
+      return false
+    })
     if (dateDeadlines.length === 0) return null
     if (dateDeadlines.some(d => d.status === 'Closed' || d.daysRemaining < 0)) return 'closed'
     if (dateDeadlines.some(d => d.daysRemaining <= 7)) return 'urgent'
@@ -416,7 +446,9 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
 }
 
 function DeadlinePage() {
-  const { admissions, toggleAlert } = useStudentData()
+  const { admissions } = useStudentDashboardData()
+  const { showError, showSuccess } = useToast()
+  const toggleAlert = useStudentStore((state) => state.toggleAlert)
   const [universityFilter, setUniversityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [dateRangeFilter, setDateRangeFilter] = useState('')
@@ -436,8 +468,20 @@ function DeadlinePage() {
     }))
   }, [admissions])
 
+  // Debug: Log deadline dates format
+  useEffect(() => {
+    if (deadlines.length > 0) {
+      console.log('📅 [DeadlinePage] Sample deadline dates:', deadlines.slice(0, 3).map(d => ({
+        program: d.program,
+        deadline: d.deadline,
+        daysRemaining: d.daysRemaining
+      })))
+      console.log('📅 [DeadlinePage] Total deadlines with dates:', deadlines.filter(d => d.deadline).length)
+    }
+  }, [deadlines])
+
   const handleAlertToggle = (id: string) => {
-    toggleAlert(id)
+    toggleAlert(id, { showError, showSuccess })
   }
 
   const filteredDeadlines = useMemo(() => {
@@ -445,7 +489,11 @@ function DeadlinePage() {
       if (universityFilter && !deadline.university.includes(universityFilter)) return false
       if (degreeFilter && deadline.degreeType !== degreeFilter) return false
       if (searchQuery && !deadline.university.toLowerCase().includes(searchQuery.toLowerCase()) && !deadline.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
-      if (selectedDate && deadline.deadline !== selectedDate) return false
+      if (selectedDate) {
+        // Normalize both dates for comparison (handle ISO format)
+        const normalizedDeadline = deadline.deadline ? deadline.deadline.substring(0, 10) : ''
+        if (normalizedDeadline !== selectedDate) return false
+      }
       if (dateRangeFilter === 'week') {
         return deadline.daysRemaining >= 0 && deadline.daysRemaining <= 7
       }
