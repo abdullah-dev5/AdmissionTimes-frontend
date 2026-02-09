@@ -6,6 +6,53 @@ interface ChangeLogTableProps {
 	onViewDiff: (log: AdminChangeLog) => void
 }
 
+const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+const splitBySeparator = (value: string) => {
+	const parts = value.split(/\s[•|]\s|\s-\s/)
+	return parts[0] ?? value
+}
+
+const sanitizeActor = (value?: string) => {
+	if (!value) return "—"
+	let cleaned = splitBySeparator(value)
+	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
+	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
+	if (!cleaned || isUuid(cleaned)) return "System"
+	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	return cleaned
+}
+
+const normalizeValue = (value: unknown) => {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+			try {
+				return JSON.parse(trimmed)
+			} catch {
+				return value
+			}
+		}
+	}
+	return value
+}
+
+const formatInline = (value: unknown): string => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatInline(item)).join(", ")
+	}
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${key.replace(/_/g, " ")}: ${formatInline(val)}`)
+			.join(", ")
+	}
+	return String(normalized)
+}
+
 /**
  * Table component for displaying change logs
  */
@@ -34,7 +81,7 @@ export default function ChangeLogTable({ logs, onViewDiff }: ChangeLogTableProps
 									</p>
 								</td>
 								<td className="py-4 px-4">
-									<p className="text-sm text-gray-600">{log.modifiedBy}</p>
+									<p className="text-sm text-gray-600">{sanitizeActor(log.modifiedBy)}</p>
 								</td>
 								<td className="py-4 px-4">
 									<span
@@ -45,7 +92,7 @@ export default function ChangeLogTable({ logs, onViewDiff }: ChangeLogTableProps
 									</span>
 								</td>
 								<td className="py-4 px-4">
-									<p className="text-sm text-gray-600">{log.summary}</p>
+									<p className="text-sm text-gray-600">{formatInline(log.summary)}</p>
 								</td>
 								<td className="py-4 px-4">
 									<p className="text-sm text-gray-600">{formatDateTime(log.timestamp)}</p>

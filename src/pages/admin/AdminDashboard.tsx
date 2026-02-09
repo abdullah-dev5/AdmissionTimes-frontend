@@ -117,7 +117,12 @@ function AdminDashboard() {
 	const displayRecentActions = (apiDashboard?.recent_actions || recentAdminActions).slice(0, 5)
 	const displayNotifications = (apiDashboard?.notifications || adminNotifications).slice(0, 4)
 	const displayScraperActivities = (apiDashboard?.scraper_activity || scraperActivities).slice(0, 4)
-	const metrics = apiDashboard?.stats || systemMetrics
+	const metrics = {
+		totalUsers: apiDashboard?.stats?.totalUsers ?? systemMetrics.totalUsers ?? 0,
+		totalAdmissions: apiDashboard?.stats?.totalAdmissions ?? systemMetrics.totalAdmissions ?? 0,
+		totalAlertsSent: apiDashboard?.stats?.totalAlertsSent ?? systemMetrics.totalAlertsSent ?? 0,
+		aiSummary: apiDashboard?.stats?.aiSummary ?? systemMetrics.aiSummary,
+	}
 	const analytics = apiDashboard?.analytics || admissionAnalytics
 
 	return (

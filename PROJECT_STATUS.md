@@ -241,7 +241,7 @@ rejected: admissions.filter((a) =>
 ### 3. Engagement Analytics Implementation Planned
 **Objective**: Add Views/Clicks/Reminders analytics to University Dashboard engagement chart
 
-**Plan Created**: `docs/ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md` (Comprehensive 12-hour plan)
+**Plan**: Engagement analytics scoped, no separate plan doc retained after documentation cleanup.
 
 **Components**:
 - Backend: New `/university/analytics/engagement` endpoint with trend data
@@ -311,7 +311,7 @@ rejected: admissions.filter((a) =>
 3. **Added field whitelist** - `updateDirect()` now filters to valid columns only
 4. **Added missing fields** - `createDirect()` now includes `university_id`, `program_type`, `verification_status`
 5. **Created migration** - Auto-create universities table entries on signup
-6. **Documented Phase 1** - Created ARCHITECTURE_ALIGNMENT_PHASE1.md
+6. **Documented Phase 1** - See docs/FRONTEND_BACKEND_GAP_REPORT.md for alignment summary
 
 ---
 

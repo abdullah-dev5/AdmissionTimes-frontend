@@ -2,6 +2,101 @@ import { useMemo, useState } from "react"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type ChangeLogItem } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
+import { formatDateTime } from "../../utils/dateUtils"
+
+const formatLabel = (value: string) =>
+	value
+		.replace(/_/g, " ")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/\b\w/g, (char) => char.toUpperCase())
+
+const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+const splitBySeparator = (value: string) => {
+	const parts = value.split(/\s[•|]\s|\s-\s/)
+	return parts[0] ?? value
+}
+
+const sanitizeActor = (value?: string) => {
+	if (!value) return "—"
+	let cleaned = splitBySeparator(value)
+	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
+	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
+	if (!cleaned || isUuid(cleaned)) return "System"
+	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	return cleaned
+}
+
+const formatDateTimeSafe = (value: string) => {
+	if (!value) return "—"
+	const trimmed = splitBySeparator(value)
+	const parsed = new Date(trimmed)
+	if (Number.isNaN(parsed.getTime())) {
+		return trimmed
+	}
+	return formatDateTime(parsed.toISOString())
+}
+
+const normalizeValue = (value: unknown) => {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+			try {
+				return JSON.parse(trimmed)
+			} catch {
+				return value
+			}
+		}
+	}
+	return value
+}
+
+const formatInline = (value: unknown): string => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatInline(item)).join(", ")
+	}
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${formatLabel(key)}: ${formatInline(val)}`)
+			.join(", ")
+	}
+	return String(normalized)
+}
+
+const renderValue = (value: unknown) => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return <span className="text-gray-400 italic">(empty)</span>
+	}
+	if (Array.isArray(normalized)) {
+		return (
+			<div className="flex flex-wrap gap-2">
+				{normalized.map((item, idx) => (
+					<span key={idx} className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
+						{formatInline(item)}
+					</span>
+				))}
+			</div>
+		)
+	}
+	if (typeof normalized === "object") {
+		return (
+			<div className="space-y-1">
+				{Object.entries(normalized as Record<string, unknown>).map(([key, val]) => (
+					<div key={key} className="flex items-start gap-3">
+						<span className="text-xs text-gray-500 min-w-[120px]">{formatLabel(key)}</span>
+						<span className="text-sm text-gray-800 break-words">{formatInline(val)}</span>
+					</div>
+				))}
+			</div>
+		)
+	}
+	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
+}
 
 function FilterBar({
 	from,
@@ -102,15 +197,19 @@ function ChangeTable({
 								<p className="font-medium text-gray-900">{row.admission}</p>
 							</td>
 							<td className="py-4 px-4">
-								<p className="text-sm text-gray-700">{row.modifiedBy}</p>
+								<p className="text-sm text-gray-700">{sanitizeActor(row.modifiedBy)}</p>
 							</td>
 							<td className="py-4 px-4">
-								<p className="text-sm text-gray-700">{row.date}</p>
+								<p className="text-sm text-gray-700">{formatDateTimeSafe(row.date)}</p>
 							</td>
 							<td className="py-4 px-4">
-								<p className="text-sm text-gray-600 truncate max-w-[260px]">
-									{row.diff.map((d) => `${d.field}: ${d.old} → ${d.new}`).join("; ")}
-								</p>
+								<div className="flex flex-wrap gap-2 max-w-[260px]">
+									{row.diff.map((d) => (
+										<span key={d.field} className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+											{d.field}
+										</span>
+									))}
+								</div>
 							</td>
 							<td className="py-4 px-4">
 								<button
@@ -144,7 +243,7 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 					<div>
 						<h3 className="text-lg font-semibold text-blue-800">Field-level Differences</h3>
 						<p className="text-sm text-gray-600 mt-1">
-							{item.admission} • {item.date} • {item.modifiedBy}
+							{item.admission} • {formatDateTimeSafe(item.date)} • {sanitizeActor(item.modifiedBy)}
 						</p>
 					</div>
 					<button onClick={onClose} className="p-2 rounded hover:bg-gray-100">
@@ -158,9 +257,15 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 						{item.diff.map((d, idx) => (
 							<li key={idx} className="border border-gray-200 rounded-lg p-3">
 								<p className="text-sm font-medium text-gray-900">{d.field}</p>
-								<div className="mt-1 text-sm">
-									<p className="text-red-600">Old: {d.old}</p>
-									<p className="text-green-600">New: {d.new}</p>
+								<div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+									<div className="rounded-lg border border-red-100 bg-red-50/40 p-2">
+										<p className="text-xs font-semibold text-red-600 mb-1">Old</p>
+										{renderValue(d.old)}
+									</div>
+									<div className="rounded-lg border border-green-100 bg-green-50/40 p-2">
+										<p className="text-xs font-semibold text-green-600 mb-1">New</p>
+										{renderValue(d.new)}
+									</div>
 								</div>
 							</li>
 						))}
