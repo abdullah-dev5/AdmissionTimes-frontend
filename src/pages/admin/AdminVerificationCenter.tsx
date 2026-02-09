@@ -8,6 +8,73 @@ import {
 	type VerificationStatus,
 } from "../../data/adminData"
 
+const formatLabel = (value: string) =>
+	value
+		.replace(/_/g, " ")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/\b\w/g, (char) => char.toUpperCase())
+
+const normalizeValue = (value: unknown) => {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+			try {
+				return JSON.parse(trimmed)
+			} catch {
+				return value
+			}
+		}
+	}
+	return value
+}
+
+const formatInline = (value: unknown): string => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatInline(item)).join(", ")
+	}
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${formatLabel(key)}: ${formatInline(val)}`)
+			.join(", ")
+	}
+	return String(normalized)
+}
+
+const renderValue = (value: unknown) => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return <span className="text-gray-400 italic">(empty)</span>
+	}
+	if (Array.isArray(normalized)) {
+		return (
+			<div className="flex flex-wrap gap-2">
+				{normalized.map((item, idx) => (
+					<span key={idx} className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
+						{formatInline(item)}
+					</span>
+				))}
+			</div>
+		)
+	}
+	if (typeof normalized === "object") {
+		return (
+			<div className="space-y-1">
+				{Object.entries(normalized as Record<string, unknown>).map(([key, val]) => (
+					<div key={key} className="flex items-start gap-3">
+						<span className="text-xs text-gray-500 min-w-[120px]">{formatLabel(key)}</span>
+						<span className="text-sm text-gray-800 break-words">{formatInline(val)}</span>
+					</div>
+				))}
+			</div>
+		)
+	}
+	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
+}
+
 function AdminVerificationCenter() {
 	const [statusFilter, setStatusFilter] = useState<VerificationStatus | "All">("All")
 	const [universityFilter, setUniversityFilter] = useState<string>("All")
@@ -347,13 +414,13 @@ function AdminVerificationCenter() {
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Degree</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.degree || "—"}
+												{formatInline(selectedItem.metadata?.degree)}
 											</p>
 										</div>
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Program</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.program || "—"}
+												{formatInline(selectedItem.metadata?.program)}
 											</p>
 										</div>
 										<div>
@@ -365,13 +432,13 @@ function AdminVerificationCenter() {
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Deadline</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.deadline || "—"}
+												{formatInline(selectedItem.metadata?.deadline)}
 											</p>
 										</div>
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Academic Year</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.academicYear || "—"}
+												{formatInline(selectedItem.metadata?.academicYear)}
 											</p>
 										</div>
 										<div>
@@ -397,24 +464,24 @@ function AdminVerificationCenter() {
 										<div className="mt-4">
 											<p className="text-sm text-gray-500 mb-1">Department</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata.department}
+													{formatInline(selectedItem.metadata.department)}
 											</p>
 										</div>
 									)}
 									{selectedItem.metadata?.overview && (
 										<div className="mt-4">
 											<p className="text-sm text-gray-500 mb-1">Overview</p>
-											<p className="text-sm" style={{ color: "#111827" }}>
-												{selectedItem.metadata.overview}
-											</p>
+												<div className="text-sm" style={{ color: "#111827" }}>
+													{renderValue(selectedItem.metadata.overview)}
+												</div>
 										</div>
 									)}
 									{selectedItem.metadata?.eligibility && (
 										<div className="mt-4">
 											<p className="text-sm text-gray-500 mb-1">Eligibility</p>
-											<p className="text-sm" style={{ color: "#111827" }}>
-												{selectedItem.metadata.eligibility}
-											</p>
+												<div className="text-sm" style={{ color: "#111827" }}>
+													{renderValue(selectedItem.metadata.eligibility)}
+												</div>
 										</div>
 									)}
 								</div>
@@ -436,11 +503,11 @@ function AdminVerificationCenter() {
 													<div className="p-3 text-sm font-medium" style={{ color: "#111827" }}>
 														{diff.field}
 													</div>
-													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#EF4444" }}>
-														{diff.oldValue}
+													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#B91C1C" }}>
+														{renderValue(diff.oldValue)}
 													</div>
-													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#10B981" }}>
-														{diff.newValue}
+													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#15803D" }}>
+														{renderValue(diff.newValue)}
 													</div>
 												</div>
 											))}

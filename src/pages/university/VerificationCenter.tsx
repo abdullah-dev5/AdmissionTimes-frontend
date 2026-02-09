@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type AuditItem, type AuditStatus } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
+import { formatDateTime } from "../../utils/dateUtils"
 
 const STATUS_OPTIONS: Array<"All" | AuditStatus> = ["All", "Pending", "Verified", "Rejected", "Disputed"]
 
@@ -10,6 +11,94 @@ const STATUS_STYLES: Record<AuditStatus, { bg: string; text: string }> = {
 	Verified: { bg: "bg-green-100", text: "text-green-700" },
 	Rejected: { bg: "bg-red-100", text: "text-red-700" },
 	Disputed: { bg: "bg-orange-100", text: "text-orange-700" },
+}
+
+const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+const splitBySeparator = (value: string) => {
+	const parts = value.split(/\s[•|]\s|\s-\s/)
+	return parts[0] ?? value
+}
+
+const sanitizeActor = (value?: string) => {
+	if (!value) return "—"
+	let cleaned = splitBySeparator(value)
+	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
+	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
+	if (!cleaned || isUuid(cleaned)) return "System"
+	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	return cleaned
+}
+
+const formatDateTimeSafe = (value: string) => {
+	if (!value) return "—"
+	const trimmed = splitBySeparator(value)
+	const parsed = new Date(trimmed)
+	if (Number.isNaN(parsed.getTime())) {
+		return trimmed
+	}
+	return formatDateTime(parsed.toISOString())
+}
+
+const normalizeValue = (value: unknown) => {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+			try {
+				return JSON.parse(trimmed)
+			} catch {
+				return value
+			}
+		}
+	}
+	return value
+}
+
+const formatInline = (value: unknown): string => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatInline(item)).join(", ")
+	}
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${key.replace(/_/g, " ")}: ${formatInline(val)}`)
+			.join(", ")
+	}
+	return String(normalized)
+}
+
+const renderValue = (value: unknown) => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return <span className="text-gray-400 italic">(empty)</span>
+	}
+	if (Array.isArray(normalized)) {
+		return (
+			<div className="flex flex-wrap gap-2">
+				{normalized.map((item, idx) => (
+					<span key={idx} className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
+						{formatInline(item)}
+					</span>
+				))}
+			</div>
+		)
+	}
+	if (typeof normalized === "object") {
+		return (
+			<div className="space-y-1">
+				{Object.entries(normalized as Record<string, unknown>).map(([key, val]) => (
+					<div key={key} className="flex items-start gap-3">
+						<span className="text-xs text-gray-500 min-w-[120px]">{key.replace(/_/g, " ")}</span>
+						<span className="text-sm text-gray-800 break-words">{formatInline(val)}</span>
+					</div>
+				))}
+			</div>
+		)
+	}
+	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
 }
 
 function FilterBar({
@@ -89,14 +178,15 @@ function AuditTable({
 									<span className={`px-2 py-1 rounded-full text-xs font-medium ${styles.bg} ${styles.text}`}>{row.status}</span>
 								</td>
 								<td className="py-4 px-4">
-									<p className="text-sm text-gray-700">{row.verifiedBy || "—"}</p>
+									<p className="text-sm text-gray-700">{sanitizeActor(row.verifiedBy)}</p>
 								</td>
 								<td className="py-4 px-4">
-									<p className="text-sm text-gray-700">{row.lastAction}</p>
+									<p className="text-sm text-gray-700">{formatDateTimeSafe(row.lastAction)}</p>
 								</td>
 								<td className="py-4 px-4">
-									<p className="text-sm text-gray-600 truncate max-w-[240px]" title={row.remarks || ""}>
-										{row.remarks || "—"}
+									<p className="text-sm text-gray-600 truncate max-w-[240px]" title={formatInline(row.remarks || "")}
+									>
+										{formatInline(row.remarks || "")}
 									</p>
 								</td>
 								<td className="py-4 px-4">
@@ -165,15 +255,15 @@ function AuditModal({
 					</div>
 					<div className="flex items-center gap-2">
 						<p className="text-sm text-gray-500">Verified By</p>
-						<p className="text-sm font-medium text-gray-900">{audit.verifiedBy || "—"}</p>
+						<p className="text-sm font-medium text-gray-900">{sanitizeActor(audit.verifiedBy)}</p>
 					</div>
 					<div className="flex items-center gap-2">
 						<p className="text-sm text-gray-500">Last Action</p>
-						<p className="text-sm font-medium text-gray-900">{audit.lastAction}</p>
+						<p className="text-sm font-medium text-gray-900">{formatDateTimeSafe(audit.lastAction)}</p>
 					</div>
 					<div>
 						<p className="text-sm text-gray-500 mb-1">Remarks</p>
-						<p className="text-sm text-gray-800">{audit.remarks || "—"}</p>
+						<div className="text-sm text-gray-800">{renderValue(audit.remarks)}</div>
 					</div>
 				</div>
 				<div className="mt-5 flex justify-end">

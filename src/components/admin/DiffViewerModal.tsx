@@ -7,6 +7,90 @@ interface DiffViewerModalProps {
 	onClose: () => void
 }
 
+const formatLabel = (value: string) =>
+	value
+		.replace(/_/g, " ")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/\b\w/g, (char) => char.toUpperCase())
+
+const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+const splitBySeparator = (value: string) => {
+	const parts = value.split(/\s[•|]\s|\s-\s/)
+	return parts[0] ?? value
+}
+
+const sanitizeActor = (value?: string) => {
+	if (!value) return "—"
+	let cleaned = splitBySeparator(value)
+	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
+	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
+	if (!cleaned || isUuid(cleaned)) return "System"
+	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	return cleaned
+}
+
+const normalizeValue = (value: unknown) => {
+	if (typeof value === "string") {
+		const trimmed = value.trim()
+		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+			try {
+				return JSON.parse(trimmed)
+			} catch {
+				return value
+			}
+		}
+	}
+	return value
+}
+
+const formatInline = (value: unknown): string => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatInline(item)).join(", ")
+	}
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${formatLabel(key)}: ${formatInline(val)}`)
+			.join(", ")
+	}
+	return String(normalized)
+}
+
+const renderValue = (value: unknown) => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return <span className="text-gray-400 italic">(empty)</span>
+	}
+	if (Array.isArray(normalized)) {
+		return (
+			<div className="flex flex-wrap gap-2">
+				{normalized.map((item, idx) => (
+					<span key={idx} className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
+						{formatInline(item)}
+					</span>
+				))}
+			</div>
+		)
+	}
+	if (typeof normalized === "object") {
+		return (
+			<div className="space-y-1">
+				{Object.entries(normalized as Record<string, unknown>).map(([key, val]) => (
+					<div key={key} className="flex items-start gap-3">
+						<span className="text-xs text-gray-500 min-w-[120px]">{formatLabel(key)}</span>
+						<span className="text-sm text-gray-800 break-words">{formatInline(val)}</span>
+					</div>
+				))}
+			</div>
+		)
+	}
+	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
+}
+
 /**
  * Modal component for viewing change log details and field-level diffs
  */
@@ -53,7 +137,7 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 							<div>
 								<p className="text-sm text-gray-500 mb-1">Modified By</p>
 								<p className="text-sm font-medium" style={{ color: "#111827" }}>
-									{log.modifiedBy}
+									{sanitizeActor(log.modifiedBy)}
 								</p>
 							</div>
 							<div>
@@ -111,11 +195,11 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 									<div className="p-3 text-sm font-medium" style={{ color: "#111827" }}>
 										{change.field}
 									</div>
-									<div className="p-3 text-sm border-l border-gray-200 break-words" style={{ color: "#EF4444" }}>
-										{change.oldValue || <span className="text-gray-400 italic">(empty)</span>}
+									<div className="p-3 text-sm border-l border-gray-200 break-words" style={{ color: "#B91C1C" }}>
+										{renderValue(change.oldValue)}
 									</div>
-									<div className="p-3 text-sm border-l border-gray-200 break-words" style={{ color: "#10B981" }}>
-										{change.newValue || <span className="text-gray-400 italic">(empty)</span>}
+									<div className="p-3 text-sm border-l border-gray-200 break-words" style={{ color: "#15803D" }}>
+										{renderValue(change.newValue)}
 									</div>
 								</div>
 							))}

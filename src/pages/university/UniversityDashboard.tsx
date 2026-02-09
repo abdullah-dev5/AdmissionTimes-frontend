@@ -3,6 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
+import { formatDateTime } from '../../utils/dateUtils'
+
+const formatDateTimeSafe = (value?: string) => {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return formatDateTime(parsed.toISOString())
+}
 
 function UniversityDashboard() {
   const navigate = useNavigate()
@@ -12,6 +20,26 @@ function UniversityDashboard() {
   const [activeTab, setActiveTab] = useState('Views')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [sortBy, setSortBy] = useState('Soonest to Close')
+
+  const statusBreakdown = useMemo(() => {
+    const segments = [
+      { label: 'Active', statuses: ['Active', 'Closing Soon'], color: '#10B981' },
+      { label: 'Pending', statuses: ['Pending Audit'], color: '#F59E0B' },
+      { label: 'Verified', statuses: ['Verified'], color: '#2563EB' },
+      { label: 'Rejected', statuses: ['Rejected', 'Disputed'], color: '#EF4444' },
+      { label: 'Draft', statuses: ['Draft'], color: '#9CA3AF' },
+      { label: 'Closed', statuses: ['Closed'], color: '#6B7280' },
+    ]
+
+    const total = admissions.length
+    const items = segments.map((segment) => {
+      const count = admissions.filter((a) => segment.statuses.includes(a.status)).length
+      const percent = total > 0 ? (count / total) * 100 : 0
+      return { ...segment, count, percent }
+    })
+
+    return { total, items: items.filter((item) => item.count > 0) }
+  }, [admissions])
 
   // Calculate stats from admissions
   const stats = useMemo(() => {
@@ -214,46 +242,30 @@ function UniversityDashboard() {
                       stroke="#E5E7EB"
                       strokeWidth="16"
                     />
-                    <circle
-                      cx="96"
-                      cy="96"
-                      r="80"
-                      fill="none"
-                      stroke="#10B981"
-                      strokeWidth="16"
-                      strokeDasharray={`${2 * Math.PI * 80 * 0.65} ${2 * Math.PI * 80}`}
-                      strokeDashoffset="0"
-                    />
-                    <circle
-                      cx="96"
-                      cy="96"
-                      r="80"
-                      fill="none"
-                      stroke="#EF4444"
-                      strokeWidth="16"
-                      strokeDasharray={`${2 * Math.PI * 80 * 0.15} ${2 * Math.PI * 80}`}
-                      strokeDashoffset={`-${2 * Math.PI * 80 * 0.65}`}
-                    />
-                    <circle
-                      cx="96"
-                      cy="96"
-                      r="80"
-                      fill="none"
-                      stroke="#2563EB"
-                      strokeWidth="16"
-                      strokeDasharray={`${2 * Math.PI * 80 * 0.1} ${2 * Math.PI * 80}`}
-                      strokeDashoffset={`-${2 * Math.PI * 80 * 0.8}`}
-                    />
-                    <circle
-                      cx="96"
-                      cy="96"
-                      r="80"
-                      fill="none"
-                      stroke="#6B7280"
-                      strokeWidth="16"
-                      strokeDasharray={`${2 * Math.PI * 80 * 0.1} ${2 * Math.PI * 80}`}
-                      strokeDashoffset={`-${2 * Math.PI * 80 * 0.9}`}
-                    />
+                    {(() => {
+                      const radius = 80
+                      const circumference = 2 * Math.PI * radius
+                      let offset = 0
+
+                      return statusBreakdown.items.map((item) => {
+                        const length = circumference * (item.count / statusBreakdown.total)
+                        const segment = (
+                          <circle
+                            key={item.label}
+                            cx="96"
+                            cy="96"
+                            r={radius}
+                            fill="none"
+                            stroke={item.color}
+                            strokeWidth="16"
+                            strokeDasharray={`${length} ${circumference}`}
+                            strokeDashoffset={`-${offset}`}
+                          />
+                        )
+                        offset += length
+                        return segment
+                      })
+                    })()}
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
@@ -263,34 +275,17 @@ function UniversityDashboard() {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#10B981' }}></div>
-                      <span className="text-sm text-gray-600">Active</span>
+                  {statusBreakdown.items.map((item) => (
+                    <div key={item.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+                        <span className="text-sm text-gray-600">{item.label}</span>
+                      </div>
+                      <span className="text-sm font-medium" style={{ color: '#111827' }}>
+                        {item.percent.toFixed(1)}%
+                      </span>
                     </div>
-                    <span className="text-sm font-medium" style={{ color: '#111827' }}>65.0%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#EF4444' }}></div>
-                      <span className="text-sm text-gray-600">Closed</span>
-                    </div>
-                    <span className="text-sm font-medium" style={{ color: '#111827' }}>15.0%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#2563EB' }}></div>
-                      <span className="text-sm text-gray-600">Draft</span>
-                    </div>
-                    <span className="text-sm font-medium" style={{ color: '#111827' }}>10.0%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#6B7280' }}></div>
-                      <span className="text-sm text-gray-600">Expired</span>
-                    </div>
-                    <span className="text-sm font-medium" style={{ color: '#111827' }}>10.0%</span>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -351,7 +346,7 @@ function UniversityDashboard() {
                             <p className="font-medium" style={{ color: '#111827' }}>{admission.title}</p>
                           </td>
                           <td className="py-4 px-4">
-                            <p className="text-sm text-gray-600">{admission.deadline}</p>
+                            <p className="text-sm text-gray-600">{formatDateTimeSafe(admission.deadline)}</p>
                           </td>
                           <td className="py-4 px-4">
                             <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>

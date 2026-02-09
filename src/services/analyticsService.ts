@@ -34,7 +34,7 @@ export const analyticsService = {
    * @returns Promise resolving to system metrics
    */
   getSystemMetrics: async (): Promise<ApiResponse<any>> => {
-    const response = await apiClient.get('/analytics/system-metrics');
+    const response = await apiClient.get('/analytics/stats');
     return response.data;
   },
 
@@ -50,7 +50,7 @@ export const analyticsService = {
     start_date?: string;
     end_date?: string;
   }): Promise<ApiResponse<any>> => {
-    const response = await apiClient.get('/analytics/admission-stats', { params });
+    const response = await apiClient.get('/analytics/admissions', { params });
     return response.data;
   },
 };
