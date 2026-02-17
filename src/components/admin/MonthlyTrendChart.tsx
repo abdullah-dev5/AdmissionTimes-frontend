@@ -11,7 +11,11 @@ interface MonthlyTrendChartProps {
  * Line/Bar chart for monthly admission trends
  */
 export default function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
-	const maxCount = Math.max(...data.map((d) => d.count))
+	if (data.length === 0) {
+		return <p className="text-sm text-gray-500">No monthly trend data available.</p>
+	}
+
+	const maxCount = Math.max(...data.map((d) => d.count), 0)
 	const chartHeight = 200
 
 	return (
@@ -26,7 +30,7 @@ export default function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
 			{/* Chart area */}
 			<div className="ml-8 h-full flex items-end gap-2">
 				{data.map((item, index) => {
-					const barHeight = (item.count / maxCount) * (chartHeight - 40)
+					const barHeight = maxCount > 0 ? (item.count / maxCount) * (chartHeight - 40) : 0
 					const isLatest = index === data.length - 1
 
 					return (

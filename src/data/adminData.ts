@@ -89,6 +89,12 @@ export interface VerificationItem {
 	submittedBy: string
 	submittedOn: string
 	status: VerificationStatus
+	verificationStatusRaw?: string
+	rejectionReason?: string | null
+	disputeReason?: string | null
+	verificationComments?: string | null
+	adminNotes?: string | null
+	remarks?: string | null
 	// Full admission metadata for review modal
 	metadata?: {
 		title: string
@@ -736,12 +742,13 @@ export const getUniqueUsers = (): string[] => {
 
 export const getChangeTypeColor = (type: ChangeType) => {
 	switch (type) {
+		// TODO: Enable when scraper module is ready
 		case "Scraper Update":
-			return { bg: "#DBEAFE", text: "#2563EB" }
+			return { bg: "#D1E7FF", text: "#0055CC" }
 		case "Manual Edit":
-			return { bg: "#FEF3C7", text: "#F59E0B" }
+			return { bg: "#FFF4E6", text: "#CC6600" }
 		case "Admin Edit":
-			return { bg: "#E9D5FF", text: "#9333EA" }
+			return { bg: "#F0E6FF", text: "#7700CC" }
 		default:
 			return { bg: "#F3F4F6", text: "#6B7280" }
 	}
@@ -798,7 +805,7 @@ export const getScraperJobStatusColor = (status: ScraperJobStatus) => {
 export type ChangeType = "Manual Edit" | "Scraper Update" | "Admin Edit"
 
 export interface AdminChangeLog {
-	id: number
+	id: number | string
 	admissionId: string
 	admissionTitle: string
 	modifiedBy: string
@@ -813,6 +820,9 @@ export interface AdminChangeLog {
 	}>
 	reasonForChange?: string
 	verificationLogId?: number
+	metadata?: Record<string, any>
+	action_type?: string
+	actor_type?: 'admin' | 'university' | 'system'
 }
 
 // Mock scraper summary data

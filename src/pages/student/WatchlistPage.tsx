@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
+import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
+import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
+import UpdatedBadge from '../../components/admin/UpdatedBadge'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -214,6 +216,13 @@ const WatchlistCard = ({
           </button>
         </div>
       </div>
+      
+      {/* ✅ Show Updated Tag if status is Updated (after admin verification) */}
+      {program.status === 'Updated' && (
+        <div className="mb-4">
+          <UpdatedBadge size="sm" showTime={false} />
+        </div>
+      )}
 
       <div className="space-y-2 mb-4">
         <div className="flex items-center gap-2 text-sm">
@@ -380,7 +389,15 @@ function WatchlistPage() {
   const { showError, showSuccess } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
-  const { admissions } = useStudentDashboardData()
+  const { admissions: rawAdmissions } = useStudentDashboardData()
+  
+  // ✅ Filter admissions - HIDE rejected and disputed from students
+  const admissions = useMemo(
+    () => filterStudentVisibleAdmissions(rawAdmissions),
+    [rawAdmissions]
+  )
+  
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')

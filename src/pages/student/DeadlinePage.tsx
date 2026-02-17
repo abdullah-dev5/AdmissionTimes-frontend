@@ -5,6 +5,8 @@ import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '.
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
+import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
+import UpdatedBadge from '../../components/admin/UpdatedBadge'
 
 const DeadlineHeader = ({ 
   onUniversityFilter, 
@@ -113,6 +115,13 @@ const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission 
           {deadline.programStatus}
         </span>
       </div>
+      
+      {/* ✅ Show Updated Tag if status is Updated (after admin verification) */}
+      {deadline.status === 'Updated' && (
+        <div className="mb-4">
+          <UpdatedBadge size="sm" showTime={false} />
+        </div>
+      )}
 
       <div className="space-y-2 mb-4">
         <div className="flex items-center gap-2 text-sm">
@@ -446,7 +455,14 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
 }
 
 function DeadlinePage() {
-  const { admissions } = useStudentDashboardData()
+  const { admissions: rawAdmissions } = useStudentDashboardData()
+  
+  // ✅ Filter admissions - HIDE rejected and disputed from students
+  const admissions = useMemo(
+    () => filterStudentVisibleAdmissions(rawAdmissions),
+    [rawAdmissions]
+  )
+  
   const { showError, showSuccess } = useToast()
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
   const [universityFilter, setUniversityFilter] = useState('')

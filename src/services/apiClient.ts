@@ -66,14 +66,10 @@ export interface ApiError {
  * Base URL is read from environment variable VITE_API_BASE_URL
  * Falls back to default development URL if not set
  */
-// In development, use relative path to leverage Vite proxy
+// In development, use absolute URL to backend
 // In production, use full URL from environment variable
 const getBaseURL = () => {
-  if (import.meta.env.DEV) {
-    // Use relative path in development (Vite proxy handles it)
-    return '/api/v1';
-  }
-  // Use full URL in production
+  // Always use explicit backend URL (Vite proxy may not work reliably in all cases)
   return import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 };
 
@@ -107,15 +103,30 @@ apiClient.interceptors.request.use(
       if (token && config.headers) {
         config.headers['Authorization'] = `Bearer ${token}`;
 
-        // Debug logging (only in development)
-        if (import.meta.env.VITE_DEBUG_API === 'true') {
-          console.debug(`🔐 [API] JWT token attached to request: ${config.method?.toUpperCase()} ${config.url}`);
-          console.debug(`🔐 [API] Token prefix: ${token.substring(0, 20)}...`);
+        // Always log JWT info (important for debugging)
+        console.log(`🔐 [API] JWT token attached to ${config.method?.toUpperCase()} ${config.url}`);
+        console.log(`🔐 [API] Token prefix: ${token.substring(0, 20)}...`);
+        
+        // Decode and log JWT payload
+        try {
+          const parts = token.split('.');
+          if (parts.length >= 2) {
+            const payload = JSON.parse(atob(parts[1]));
+            console.log('🔐 [API] JWT Payload:', {
+              sub: payload.sub,
+              email: payload.email,
+              user_metadata: payload.user_metadata,
+              role: payload.user_metadata?.role,
+              iat: payload.iat,
+              exp: payload.exp,
+            });
+          }
+        } catch (decodeErr) {
+          console.warn('⚠️ [API] Failed to decode JWT payload:', decodeErr);
         }
       } else {
-        if (import.meta.env.VITE_DEBUG_API === 'true') {
-          console.warn('⚠️ [API] No JWT token available - request will proceed without authentication');
-        }
+        console.warn('⚠️ [API] No JWT token available - request will proceed without authentication');
+        console.warn('⚠️ [API] This will cause 401/403 errors on protected endpoints');
       }
 
       return config;

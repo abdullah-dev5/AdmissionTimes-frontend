@@ -184,9 +184,11 @@ function ChangeTable({
 				<thead className="sticky top-0 bg-white">
 					<tr className="border-b border-gray-200">
 						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
+						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
 						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Modified By</th>
 						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Date & Time</th>
 						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Change Summary</th>
+						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Remarks</th>
 						<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Actions</th>
 					</tr>
 				</thead>
@@ -195,6 +197,15 @@ function ChangeTable({
 						<tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
 							<td className="py-4 px-4">
 								<p className="font-medium text-gray-900">{row.admission}</p>
+							</td>
+							<td className="py-4 px-4">
+								{row.status ? (
+									<span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+										{row.status}
+									</span>
+								) : (
+									<span className="text-sm text-gray-400">—</span>
+								)}
 							</td>
 							<td className="py-4 px-4">
 								<p className="text-sm text-gray-700">{sanitizeActor(row.modifiedBy)}</p>
@@ -212,6 +223,11 @@ function ChangeTable({
 								</div>
 							</td>
 							<td className="py-4 px-4">
+								<p className="text-sm text-gray-600 truncate max-w-[220px]" title={formatInline(row.remarks || "")}>
+									{formatInline(row.remarks || "")}
+								</p>
+							</td>
+							<td className="py-4 px-4">
 								<button
 									onClick={() => onViewDiff(row)}
 									className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -223,7 +239,7 @@ function ChangeTable({
 					))}
 					{data.length === 0 && (
 						<tr>
-							<td colSpan={5} className="py-10 text-center text-sm text-gray-500">
+							<td colSpan={7} className="py-10 text-center text-sm text-gray-500">
 								No change logs found. Adjust filters or search terms.
 							</td>
 						</tr>
@@ -270,6 +286,12 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 							</li>
 						))}
 					</ul>
+					{item.remarks && (
+						<div className="mt-4">
+							<p className="text-sm text-gray-500">Remarks</p>
+							<p className="text-sm text-gray-900">{renderValue(item.remarks)}</p>
+						</div>
+					)}
 				</div>
 				<div className="mt-5 flex justify-end">
 					<button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">

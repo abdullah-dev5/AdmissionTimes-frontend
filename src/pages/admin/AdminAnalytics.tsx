@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
+import { adminService } from "../../services/adminService"
 import { analyticsEvents, getUniqueAnalyticsUsers, getUniqueEventTypes, type AnalyticsEventType } from "../../data/adminData"
 import { formatDateTime } from "../../utils/dateUtils"
 import { DEFAULT_ITEMS_PER_PAGE } from "../../constants/pagination"
@@ -13,44 +14,117 @@ function AdminAnalytics() {
 	const [dateTo, setDateTo] = useState("")
 	const [currentPage, setCurrentPage] = useState(1)
 
-	const users = getUniqueAnalyticsUsers()
-	const eventTypes = getUniqueEventTypes()
+	// API state
+	const [apiAnalytics, setApiAnalytics] = useState<any[]>([])
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
 
-	// Filter analytics events
+	// Fetch analytics on mount and when filters change
+	useEffect(() => {
+		fetchAnalytics()
+	}, [userFilter, eventTypeFilter, roleFilter, dateFrom, dateTo])
+
+	/**
+	 * Fetch analytics data from API
+	 */
+	const fetchAnalytics = async () => {
+		try {
+			setLoading(true)
+			setError(null)
+
+			const filters: any = {}
+			if (eventTypeFilter !== "All") {
+				filters.event_type = eventTypeFilter
+			}
+			if (roleFilter !== "All") {
+				const roleMap = { "Student": "student", "UniversityRep": "university", "Admin": "admin" }
+				filters.user_type = roleMap[roleFilter]
+			}
+			if (dateFrom) {
+				filters.date_from = dateFrom
+			}
+			if (dateTo) {
+				filters.date_to = dateTo
+			}
+
+			const response = await adminService.getAnalytics(filters)
+			console.log('🔵 [AdminAnalytics] Fetched analytics:', response.data)
+
+			// Handle both paginated and non-paginated responses
+			const events = Array.isArray(response.data) 
+				? response.data 
+				: (response.data?.data || response.data?.events || [])
+
+			// Transform API events to match AnalyticsEvent format
+			const transformed = transformApiEvents(events)
+			setApiAnalytics(transformed)
+		} catch (err: any) {
+			console.error('🔴 [AdminAnalytics] Error fetching analytics:', err)
+			setError(err.message || 'Failed to fetch analytics data')
+			// Will fallback to mock data
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	/**
+	 * Transform API event format to AnalyticsEvent format
+	 */
+	const transformApiEvents = (data: any[]): any[] => {
+		return data.map((event: any) => ({
+			id: event.id,
+			type: event.event_type || 'page_view',
+			eventType: event.event_type || 'page_view',
+			userName: event.user_name || 'Unknown',
+			userRole: mapRoleToDisplay(event.user_type || event.role || 'student'),
+			timestamp: event.created_at || event.timestamp || new Date().toISOString(),
+			description: event.description || event.details || '-',
+			metadata: event.metadata || {},
+		}))
+	}
+
+	/**
+	 * Map user_type from API to display role
+	 */
+	const mapRoleToDisplay = (role: string): "Admin" | "Student" | "UniversityRep" => {
+		const roleMap: Record<string, "Admin" | "Student" | "UniversityRep"> = {
+			'admin': 'Admin',
+			'student': 'Student',
+			'university': 'UniversityRep',
+			'university_rep': 'UniversityRep',
+		}
+		return roleMap[role.toLowerCase()] || 'Student'
+	}
+
+	// Use API data if available, otherwise use mock data
+	const analyticsToUse = apiAnalytics.length > 0 ? apiAnalytics : analyticsEvents
+
+	const users = useMemo(() => {
+		const uniqueUsers = new Set<string>()
+		analyticsToUse.forEach(event => uniqueUsers.add(event.userName))
+		return Array.from(uniqueUsers).sort()
+	}, [analyticsToUse])
+
+	const eventTypes = useMemo(() => {
+		const uniqueTypes = new Set<AnalyticsEventType>()
+		analyticsToUse.forEach(event => uniqueTypes.add(event.eventType))
+		return Array.from(uniqueTypes).sort()
+	}, [analyticsToUse])
+
+	// Filter analytics events (client-side for user filter)
 	const filteredEvents = useMemo(() => {
-		let filtered = [...analyticsEvents]
+		let filtered = [...analyticsToUse]
 
-		// User filter
+		// User filter (client-side since API might not support it)
 		if (userFilter !== "All") {
 			filtered = filtered.filter((event) => event.userName === userFilter)
-		}
-
-		// Event type filter
-		if (eventTypeFilter !== "All") {
-			filtered = filtered.filter((event) => event.eventType === eventTypeFilter)
-		}
-
-		// Role filter
-		if (roleFilter !== "All") {
-			filtered = filtered.filter((event) => event.userRole === roleFilter)
-		}
-
-		// Date range filter
-		if (dateFrom) {
-			const fromDate = new Date(dateFrom)
-			filtered = filtered.filter((event) => new Date(event.timestamp) >= fromDate)
-		}
-		if (dateTo) {
-			const toDate = new Date(dateTo)
-			toDate.setHours(23, 59, 59, 999) // End of day
-			filtered = filtered.filter((event) => new Date(event.timestamp) <= toDate)
 		}
 
 		// Sort by timestamp (newest first)
 		filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
 		return filtered
-	}, [userFilter, eventTypeFilter, roleFilter, dateFrom, dateTo])
+	}, [userFilter, analyticsToUse])
 
 	// Pagination
 	const totalPages = Math.ceil(filteredEvents.length / DEFAULT_ITEMS_PER_PAGE)
@@ -108,6 +182,26 @@ function AdminAnalytics() {
 					</h1>
 					<p className="text-gray-600">Track and analyze user activity across the platform.</p>
 				</div>
+
+				{/* Error Banner */}
+				{error && (
+					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+						<p className="text-sm text-red-800">{error}</p>
+						<button
+							onClick={() => setError(null)}
+							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+						>
+							Dismiss
+						</button>
+					</div>
+				)}
+
+				{/* Loading Indicator */}
+				{loading && (
+					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+						<p className="text-sm text-blue-800">Loading analytics data...</p>
+					</div>
+				)}
 
 				{/* Filters Section */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">

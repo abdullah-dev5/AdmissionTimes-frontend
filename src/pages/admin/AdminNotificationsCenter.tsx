@@ -1,43 +1,99 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
+import { adminService } from "../../services/adminService"
 import { adminNotifications, type NotificationType } from "../../data/adminData"
 
 function AdminNotificationsCenter() {
 	const [activeTab, setActiveTab] = useState<NotificationType | "All">("All")
 	const [unreadOnly, setUnreadOnly] = useState(false)
+	const [apiNotifications, setApiNotifications] = useState<any[]>([])
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	// Fetch notifications on mount
+	useEffect(() => {
+		fetchNotifications()
+	}, [])
+
+	/**
+	 * Fetch admin notifications from API
+	 */
+	const fetchNotifications = async () => {
+		try {
+			setLoading(true)
+			setError(null)
+			const response = await adminService.getNotifications(1, 100)
+			console.log('🔵 [AdminNotificationsCenter] Fetched notifications:', response.data)
+			
+			if (Array.isArray(response.data)) {
+				setApiNotifications(response.data)
+			} else if (Array.isArray(response.data?.data)) {
+				setApiNotifications(response.data.data)
+			}
+		} catch (err: any) {
+			console.error('🔴 [AdminNotificationsCenter] Error fetching notifications:', err)
+			setError(err.message || 'Failed to fetch notifications')
+			// Will fallback to mock data
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	// Use API data if available, otherwise use mock data
+	const notificationsToUse = apiNotifications.length > 0 ? apiNotifications : adminNotifications
 
 	// Filter notifications based on tab and unread filter
 	const filteredNotifications = useMemo(() => {
-		let filtered = [...adminNotifications]
+		let filtered = [...notificationsToUse]
 
-		// Filter by type
+		// Filter by type (if type field exists)
 		if (activeTab !== "All") {
-			filtered = filtered.filter((notif) => notif.type === activeTab)
+			filtered = filtered.filter((notif) => {
+				// Support both 'type' and 'category' fields
+				const notifType = notif.type || notif.category
+				return notifType === activeTab
+			})
 		}
 
 		// Filter by unread status
 		if (unreadOnly) {
-			filtered = filtered.filter((notif) => notif.unread)
+			filtered = filtered.filter((notif) => !notif.is_read)
 		}
 
 		// Sort by timestamp (newest first)
-		filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+		filtered.sort((a, b) => {
+			const aTime = new Date(a.timestamp || a.created_at).getTime()
+			const bTime = new Date(b.timestamp || b.created_at).getTime()
+			return bTime - aTime
+		})
 
 		return filtered
-	}, [activeTab, unreadOnly])
+	}, [activeTab, unreadOnly, notificationsToUse])
 
-	const handleMarkAllAsRead = () => {
-		// Mock API call - in production, this would be:
-		// PATCH /api/admin/notifications/mark-all-read
-		console.log("Marking all notifications as read")
-		// In production, update the notifications state or refetch
+	const handleMarkAllAsRead = async () => {
+		try {
+			setError(null)
+			console.log('📋 Marking all notifications as read')
+			await adminService.markAllNotificationsAsRead()
+			// Refresh notifications
+			await fetchNotifications()
+		} catch (err: any) {
+			console.error('🔴 Error marking all as read:', err)
+			setError(err.message || 'Failed to mark all as read')
+		}
 	}
 
-	const handleMarkAsRead = (id: number) => {
-		// Mock API call - in production, this would be:
-		// PATCH /api/admin/notifications/:id/read
-		console.log("Marking notification as read:", id)
-		// In production, update the notification state or refetch
+	const handleMarkAsRead = async (id: string | number) => {
+		try {
+			setError(null)
+			console.log('📖 Marking notification as read:', id)
+			await adminService.markNotificationAsRead(String(id))
+			// Refresh notifications
+			await fetchNotifications()
+		} catch (err: any) {
+			console.error('🔴 Error marking as read:', err)
+			setError(err.message || 'Failed to mark as read')
+		}
 	}
 
 	const getNotificationIcon = (type: NotificationType) => {
@@ -105,8 +161,8 @@ function AdminNotificationsCenter() {
 	}
 
 	const unreadCount = useMemo(() => {
-		return adminNotifications.filter((n) => n.unread).length
-	}, [])
+		return notificationsToUse.filter((n) => !n.is_read).length
+	}, [notificationsToUse])
 
 	return (
 		<AdminLayout>
@@ -118,6 +174,26 @@ function AdminNotificationsCenter() {
 					</h1>
 					<p className="text-gray-600">System alerts and verification updates.</p>
 				</div>
+
+				{/* Error Banner */}
+				{error && (
+					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+						<p className="text-sm text-red-800">{error}</p>
+						<button
+							onClick={() => setError(null)}
+							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+						>
+							Dismiss
+						</button>
+					</div>
+				)}
+
+				{/* Loading Indicator */}
+				{loading && (
+					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+						<p className="text-sm text-blue-800">Loading notifications...</p>
+					</div>
+				)}
 
 				{/* Filter Tabs and Action Controls */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">

@@ -1,12 +1,15 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { useNavigate, useLocation } from "react-router-dom"
 import AdminLayout from "../../layouts/AdminLayout"
+import { adminService } from "../../services/adminService"
+import { supabase } from "../../services/supabase"
 import {
-	verificationItems,
-	getUniqueUniversities,
 	getVerificationStatusColor,
 	type VerificationItem,
 	type VerificationStatus,
 } from "../../data/adminData"
+import { useWatcherNotifications } from "../../hooks/useWatcherNotifications"
+import { UpdateNotificationToast } from "../../components/admin/UpdatedBadge"
 
 const formatLabel = (value: string) =>
 	value
@@ -75,7 +78,28 @@ const renderValue = (value: unknown) => {
 	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
 }
 
+const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+const safeLabel = (value: string | null | undefined, fallback: string) => {
+	if (!value) return fallback
+	if (isUuid(value)) return fallback
+	return value
+}
+
+const buildRemarksList = (item: VerificationItem | null) => {
+	if (!item) return []
+	const entries = [
+		{ label: "Rejection reason", value: item.rejectionReason },
+		{ label: "Dispute reason", value: item.disputeReason },
+		{ label: "Verification comments", value: item.verificationComments },
+		{ label: "Admin notes", value: item.adminNotes },
+	]
+	return entries.filter((entry) => entry.value && String(entry.value).trim())
+}
+
 function AdminVerificationCenter() {
+	const navigate = useNavigate()
+	const location = useLocation() as { state?: { selectedId?: string } }
 	const [statusFilter, setStatusFilter] = useState<VerificationStatus | "All">("All")
 	const [universityFilter, setUniversityFilter] = useState<string>("All")
 	const [searchQuery, setSearchQuery] = useState("")
@@ -85,11 +109,169 @@ function AdminVerificationCenter() {
 	const [currentPage, setCurrentPage] = useState(1)
 	const itemsPerPage = 10
 
-	const universities = getUniqueUniversities()
+	// API state
+	const [apiVerifications, setApiVerifications] = useState<any[]>([])
+	const [universities, setUniversities] = useState<Map<string, any>>(new Map())
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const [submitting, setSubmitting] = useState(false)
+
+	// ✅ Initialize watcher notifications hook
+	const { notifyWatchers, notifications, dismissNotification } =
+		useWatcherNotifications()
+
+	// Fetch pending admissions on component mount
+	useEffect(() => {
+		fetchAllAdmissions()
+	}, [])
+
+	useEffect(() => {
+		// Refetch when status filter changes
+		if (currentPage === 1) {
+			fetchAllAdmissions()
+		} else {
+			setCurrentPage(1)
+		}
+	}, [statusFilter])
+
+	useEffect(() => {
+		const selectedId = location.state?.selectedId
+		if (!selectedId || !apiVerifications.length) {
+			return
+		}
+		if (selectedItem?.id === selectedId) {
+			return
+		}
+		const match = apiVerifications.find((item) => item.id === selectedId)
+		if (match) {
+			handleReview(match)
+		}
+	}, [apiVerifications, location.state, selectedItem?.id])
+
+	/**
+	 * Fetch all admissions from API with status filter and enrich with university data
+	 */
+	const fetchAllAdmissions = async () => {
+		try {
+			setLoading(true)
+			setError(null)
+			const status = statusFilter === "All" ? undefined : statusFilter?.toLowerCase()
+			const response = await adminService.getAllAdmissions(1, 100, status) // Get larger batch
+			console.log('🔵 [AdminVerificationCenter] Fetched admissions:', response)
+			
+			// Extract university IDs from admissions - response is PaginatedResponse which has .data
+			const admissionData = Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : [])
+			const universityIds = [...new Set(admissionData.map((a: any) => a.university_id).filter(Boolean))]
+			
+			// Fetch universities if we have IDs
+			let universityMap = new Map<string, any>()
+			if (universityIds.length > 0) {
+				console.log('🏛️ Fetching universities:', universityIds)
+				const { data: universitiesData, error: univError } = await supabase
+					.from('universities')
+					.select('id, name, logo_url, city, country')
+					.in('id', universityIds)
+				
+				if (!univError && universitiesData) {
+					console.log('✅ Fetched universities:', universitiesData)
+					universitiesData.forEach(u => {
+						universityMap.set(u.id, u)
+					})
+				} else {
+					console.warn('⚠️ Failed to fetch universities:', univError)
+				}
+			}
+			
+			setUniversities(universityMap)
+			
+			// Transform API data to VerificationItem format
+			const transformed = transformApiAdmissions(response, universityMap)
+			setApiVerifications(transformed)
+		} catch (err: any) {
+			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
+			setError(err.message || 'Failed to fetch admissions')
+			// Will fallback to mock data
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	/**
+	 * Transform API admissions to VerificationItem format with university data enrichment
+	 */
+	const transformApiAdmissions = (data: any, universityMap?: Map<string, any>): VerificationItem[] => {
+		// Handle both paginated and non-paginated responses
+		const admissions = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
+		const statusMap: Record<string, VerificationStatus> = {
+			pending: "Pending",
+			verified: "Verified",
+			rejected: "Rejected",
+			disputed: "Disputed",
+		}
+		
+		return admissions.map((admission: any) => {
+			// Get university name from the map, or fall back to other sources
+			let universityName = 'Unknown University'
+			if (universityMap && admission.university_id) {
+				const univData = universityMap.get(admission.university_id)
+				if (univData && univData.name) {
+					universityName = univData.name
+				}
+			}
+			// Fall back to other fields if not in map
+			if (universityName === 'Unknown University') {
+				universityName = safeLabel(
+					admission.university_name || admission.location,
+					'Unknown University'
+				)
+			}
+			
+			return {
+				rejectionReason: admission.rejection_reason ?? null,
+				disputeReason: admission.dispute_reason ?? null,
+				verificationComments: admission.verification_comments ?? null,
+				adminNotes: admission.admin_notes ?? null,
+				remarks:
+					admission.rejection_reason ||
+					admission.dispute_reason ||
+					admission.verification_comments ||
+					admission.admin_notes ||
+					null,
+				verificationStatusRaw: admission.verification_status,
+				id: admission.id || admission.admission_id,
+				admissionTitle: admission.title || admission.program_title || 'Unknown',
+				university: universityName,
+				submittedBy: safeLabel(admission.submitted_by || admission.created_by, 'University'),
+				submittedOn: admission.created_at 
+					? new Date(admission.created_at).toISOString().split('T')[0]
+					: 'N/A',
+				status: statusMap[admission.verification_status] || ('Pending' as VerificationStatus),
+				metadata: {
+					title: admission.title || 'Unknown',
+					degree: admission.degree_level || 'N/A',
+					program: admission.program_type || 'N/A',
+					fee: admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A',
+					deadline: admission.deadline 
+						? new Date(admission.deadline).toISOString().split('T')[0]
+						: 'N/A',
+					academicYear: 'N/A',
+					university: universityName,
+				},
+			}
+		})
+	}
+
+	// Use API data only; no mock fallback
+	const verificationDataToUse = apiVerifications
+	const universityList = useMemo(() => {
+		const uniqueUniversities = new Set<string>()
+		verificationDataToUse.forEach(item => uniqueUniversities.add(item.university))
+		return Array.from(uniqueUniversities).sort()
+	}, [verificationDataToUse])
 
 	// Filter and search logic
 	const filteredItems = useMemo(() => {
-		let filtered = [...verificationItems]
+		let filtered = [...verificationDataToUse]
 
 		// Status filter
 		if (statusFilter !== "All") {
@@ -112,7 +294,7 @@ function AdminVerificationCenter() {
 		}
 
 		return filtered
-	}, [statusFilter, universityFilter, searchQuery])
+	}, [statusFilter, universityFilter, searchQuery, verificationDataToUse])
 
 	// Pagination
 	const totalPages = Math.ceil(filteredItems.length / itemsPerPage)
@@ -121,10 +303,50 @@ function AdminVerificationCenter() {
 		return filteredItems.slice(startIndex, startIndex + itemsPerPage)
 	}, [filteredItems, currentPage])
 
-	const handleReview = (item: VerificationItem) => {
+	const handleReview = async (item: VerificationItem) => {
 		setSelectedItem(item)
 		setActionType(null)
 		setRemarks("")
+		
+		// Fetch changelog data for this admission
+		try {
+			const changelogResponse = await adminService.getChangeLogs(1, 100, {
+				admission_id: item.id,
+			})
+			
+			// Handle both paginated and non-paginated responses
+			let changelogs = []
+			if (Array.isArray(changelogResponse)) {
+				changelogs = changelogResponse
+			} else if (changelogResponse?.data) {
+				changelogs = Array.isArray(changelogResponse.data) ? changelogResponse.data : []
+			}
+			
+			// Filter for 'updated' action type only (field-level changes)
+			const updatedChanges = changelogs.filter((log: any) => log.action_type === 'updated')
+			
+			// Transform to diffData format
+			const diffData = updatedChanges.map((log: any) => {
+				// Format old_value and new_value
+				const formatValue = (val: any): string => {
+					if (val === null || val === undefined) return ''
+					if (typeof val === 'object') return JSON.stringify(val)
+					return String(val)
+				}
+				
+				return {
+					field: log.field_name || 'Unknown',
+					oldValue: formatValue(log.old_value),
+					newValue: formatValue(log.new_value),
+				}
+			})
+			
+			// Update selected item with diff data
+			setSelectedItem((prev) => prev ? { ...prev, diffData } : item)
+			console.log('🔍 [AdminVerificationCenter] Changelog diff data:', diffData)
+		} catch (err) {
+			console.error('🔴 [AdminVerificationCenter] Error fetching changelog:', err)
+		}
 	}
 
 	const handleActionSelect = (action: "Verify" | "Reject" | "Dispute") => {
@@ -132,31 +354,74 @@ function AdminVerificationCenter() {
 		setRemarks("")
 	}
 
-	const handleSubmitAction = () => {
+	const handleSubmitAction = async () => {
 		if (!selectedItem || !actionType || remarks.trim().length < 10) {
 			return
 		}
 
-		// Mock API call - in production, this would be:
-		// POST /api/admin/verification/update
-		// {
-		//   admission_id: selectedItem.id,
-		//   admin_id: currentAdminId,
-		//   action_type: actionType,
-		//   remarks: remarks
-		// }
+		// ✅ Validate state transition before submitting
+		const currentStatus = selectedItem.verificationStatusRaw || selectedItem.status.toLowerCase()
+		
+		if (actionType === 'Verify' && currentStatus === 'verified') {
+			setError('This admission is already verified. No action needed.')
+			return
+		}
+		if (actionType === 'Reject' && currentStatus === 'rejected') {
+			setError('This admission is already rejected. No action needed.')
+			return
+		}
+		if (actionType === 'Dispute' && currentStatus === 'disputed') {
+			setError('This admission is already disputed. No action needed.')
+			return
+		}
 
-		console.log("Submitting verification action:", {
-			admissionId: selectedItem.id,
-			actionType,
-			remarks,
-		})
+		try {
+			setSubmitting(true)
+			setError(null) // Clear any previous errors
 
-		// Close modal and refresh (in real app, refetch data)
-		setSelectedItem(null)
-		setActionType(null)
-		setRemarks("")
-		// In production, refetch verificationItems here
+			if (actionType === 'Verify') {
+				console.log('✅ Verifying admission:', selectedItem.id)
+				await adminService.verifyAdmission(selectedItem.id, {
+					verification_status: 'verified',
+					verification_comments: remarks,
+				})
+			} else if (actionType === 'Reject') {
+				console.log('❌ Rejecting admission:', selectedItem.id)
+				await adminService.rejectAdmission(selectedItem.id, remarks)
+			} else if (actionType === 'Dispute') {
+				console.log('⚠️ Disputing admission:', selectedItem.id)
+				await adminService.disputeAdmission(selectedItem.id, remarks)
+			}
+
+			// ✅ Notify watchers about the change (after successful action)
+			const mockChangelog: any = {
+				id: `changelog-${Date.now()}`,
+				admissionId: selectedItem.id,
+				admissionTitle: selectedItem.admissionTitle,
+				changeType: actionType.toLowerCase(),
+				modifiedBy: 'Admin', // TODO: Get actual user name from auth context
+				modifiedByUserId: 'admin-user-id',
+				summary: `${actionType} admission`,
+				timestamp: new Date().toISOString(),
+				diff: [],
+				actor_type: 'admin' as const,
+				action_type: actionType.toLowerCase(),
+			}
+			notifyWatchers(mockChangelog)
+
+			// Refresh the list after successful action
+			await fetchAllAdmissions()
+
+			// Close modal and reset
+			setSelectedItem(null)
+			setActionType(null)
+			setRemarks("")
+		} catch (err: any) {
+			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
+			setError(err.message || 'Failed to submit action')
+		} finally {
+			setSubmitting(false)
+		}
 	}
 
 	const handleResetFilters = () => {
@@ -176,6 +441,26 @@ function AdminVerificationCenter() {
 					</h1>
 					<p className="text-gray-600">Review and manage admissions requiring verification.</p>
 				</div>
+
+				{/* Error Banner */}
+				{error && (
+					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+						<p className="text-sm text-red-800">{error}</p>
+						<button
+							onClick={() => setError(null)}
+							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+						>
+							Dismiss
+						</button>
+					</div>
+				)}
+
+				{/* Loading Indicator */}
+				{loading && (
+					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+						<p className="text-sm text-blue-800">Loading pending admissions...</p>
+					</div>
+				)}
 
 				{/* Filters Panel */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -219,7 +504,7 @@ function AdminVerificationCenter() {
 									className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
 								>
 									<option value="All">All</option>
-									{universities.map((uni) => (
+									{universityList.map((uni) => (
 										<option key={uni} value={uni}>
 											{uni}
 										</option>
@@ -267,6 +552,7 @@ function AdminVerificationCenter() {
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted By</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted On</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Remarks</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
 								</tr>
 							</thead>
@@ -298,6 +584,14 @@ function AdminVerificationCenter() {
 												</span>
 											</td>
 											<td className="py-4 px-4">
+												<p
+													className="text-sm text-gray-600 max-w-[220px] truncate"
+													title={item.remarks || ""}
+												>
+													{item.remarks || "—"}
+												</p>
+											</td>
+											<td className="py-4 px-4">
 												<button
 													onClick={() => handleReview(item)}
 													className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
@@ -310,7 +604,7 @@ function AdminVerificationCenter() {
 								})}
 								{paginatedItems.length === 0 && (
 									<tr>
-										<td colSpan={6} className="py-10 text-center">
+										<td colSpan={7} className="py-10 text-center">
 											<div className="flex flex-col items-center justify-center">
 												<svg
 													className="w-16 h-16 text-gray-400 mb-4"
@@ -373,14 +667,36 @@ function AdminVerificationCenter() {
 
 				{/* Review Modal */}
 				{selectedItem && (
-					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+				<div 
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+					onClick={(e) => {
+						// Close modal only if clicking on the background, not the modal itself
+						if (e.target === e.currentTarget) {
+							setSelectedItem(null)
+							setActionType(null)
+							setRemarks("")
+						}
+					}}
+				>
 						<div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-lg overflow-hidden flex flex-col">
 							{/* Modal Header */}
 							<div className="p-6 border-b border-gray-200 flex items-center justify-between">
-								<div>
-									<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
-										Review Admission
-									</h2>
+								<div className="flex-1">
+									<div className="flex items-center gap-3">
+										<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+											Review Admission
+										</h2>
+										{/* ✅ Current Status Badge */}
+										<span
+											className="px-3 py-1 rounded-full text-xs font-semibold"
+											style={{
+											backgroundColor: getVerificationStatusColor(selectedItem.status).bg,
+											color: getVerificationStatusColor(selectedItem.status).text,
+											}}
+										>
+											Current: {selectedItem.status}
+										</span>
+									</div>
 									<p className="text-sm text-gray-600 mt-1">{selectedItem.admissionTitle}</p>
 								</div>
 								<button
@@ -486,6 +802,34 @@ function AdminVerificationCenter() {
 									)}
 								</div>
 
+								{/* Remarks */}
+								{(() => {
+									const remarksList = buildRemarksList(selectedItem)
+									return (
+										<div className="mb-6">
+											<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+												Remarks
+											</h3>
+											{remarksList.length > 0 ? (
+												<div className="space-y-3">
+													{remarksList.map((entry) => (
+														<div key={entry.label}>
+															<p className="text-sm text-gray-500 mb-1">{entry.label}</p>
+															<p className="text-sm" style={{ color: "#111827" }}>
+																{String(entry.value)}
+															</p>
+														</div>
+													))}
+												</div>
+											) : (
+												<div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+													<p className="text-sm text-gray-500">No remarks recorded yet.</p>
+												</div>
+											)}
+										</div>
+									)
+								})()}
+
 								{/* Field-Level Differences */}
 								{selectedItem.diffData && selectedItem.diffData.length > 0 ? (
 									<div className="mb-6">
@@ -529,39 +873,61 @@ function AdminVerificationCenter() {
 									<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
 										Admin Action
 									</h3>
+									
+									{/* ✅ Status warning if already processed */}
+									{(selectedItem.verificationStatusRaw === 'verified' || 
+									  selectedItem.verificationStatusRaw === 'rejected' || 
+									  selectedItem.verificationStatusRaw === 'disputed') && (
+										<div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+											<p className="text-sm text-blue-800">
+												ℹ️ This admission is already <strong>{selectedItem.status}</strong>. 
+												You can still update the status if needed.
+											</p>
+										</div>
+									)}
+									
 									<div className="flex flex-wrap gap-3 mb-4">
 										<button
 											onClick={() => handleActionSelect("Verify")}
+											disabled={selectedItem.verificationStatusRaw === 'verified'}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Verify"
 													? "text-white"
 													: "border border-gray-300 text-gray-700 hover:bg-gray-50"
-											}`}
+											} disabled:opacity-50 disabled:cursor-not-allowed`}
 											style={actionType === "Verify" ? { backgroundColor: "#10B981" } : {}}
+											title={selectedItem.verificationStatusRaw === 'verified' ? 'Already verified' : 'Mark as verified'}
 										>
-											Verify Admission
+											Mark as Verified
+											{selectedItem.verificationStatusRaw === 'verified' && ' ✓'}
 										</button>
 										<button
 											onClick={() => handleActionSelect("Reject")}
+											disabled={selectedItem.verificationStatusRaw === 'rejected'}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Reject"
 													? "text-white"
 													: "border border-gray-300 text-gray-700 hover:bg-gray-50"
-											}`}
+											} disabled:opacity-50 disabled:cursor-not-allowed`}
 											style={actionType === "Reject" ? { backgroundColor: "#EF4444" } : {}}
+											title={selectedItem.verificationStatusRaw === 'rejected' ? 'Already rejected' : 'Reject admission'}
 										>
 											Reject Admission
+											{selectedItem.verificationStatusRaw === 'rejected' && ' ✓'}
 										</button>
 										<button
 											onClick={() => handleActionSelect("Dispute")}
+											disabled={selectedItem.verificationStatusRaw === 'disputed'}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Dispute"
 													? "text-white"
 													: "border border-gray-300 text-gray-700 hover:bg-gray-50"
-											}`}
+											} disabled:opacity-50 disabled:cursor-not-allowed`}
 											style={actionType === "Dispute" ? { backgroundColor: "#EA580C" } : {}}
+											title={selectedItem.verificationStatusRaw === 'disputed' ? 'Already disputed' : 'Mark as disputed'}
 										>
 											Mark as Disputed
+											{selectedItem.verificationStatusRaw === 'disputed' && ' ✓'}
 										</button>
 									</div>
 
@@ -611,6 +977,21 @@ function AdminVerificationCenter() {
 						</div>
 					</div>
 				)}
+
+				{/* ✅ Notification Toasts Container */}
+				<div className="fixed bottom-4 right-4 space-y-2 max-w-sm z-50 pointer-events-none">
+					{notifications.slice(0, 3).map((notif) => (
+						<div key={notif.id} className="pointer-events-auto">
+							<UpdateNotificationToast
+								admission_title={notif.admission_title}
+							message={`Admission ${notif.change_type === 'Admin Edit' ? 'verified' : 'updated'}`}
+							change_type={notif.change_type}
+								onDismiss={() => dismissNotification(notif.id)}
+								onNavigate={() => navigate(`/admin/admissions/${notif.admission_id}`)}
+							/>
+						</div>
+					))}
+				</div>
 			</div>
 		</AdminLayout>
 	)

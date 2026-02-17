@@ -178,51 +178,6 @@ function SignIn() {
               </Link>
             </p>
           </div>
-
-          {/* Demo Accounts (Development Only) */}
-          {import.meta.env.DEV && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-3 text-center">Development Demo Accounts:</p>
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({
-                      email: 'student@test.com',
-                      password: 'password123',
-                    })
-                  }}
-                  className="w-full text-xs py-2 px-3 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                >
-                  Use Student Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({
-                      email: 'university@test.com',
-                      password: 'password123',
-                    })
-                  }}
-                  className="w-full text-xs py-2 px-3 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                >
-                  Use University Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({
-                      email: 'admin@test.com',
-                      password: 'password123',
-                    })
-                  }}
-                  className="w-full text-xs py-2 px-3 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                >
-                  Use Admin Demo
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -1,17 +1,14 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../contexts/AuthContext"
-import { dashboardService } from "../../services/dashboardService"
+import { adminService } from "../../services/adminService"
+import { admissionsService } from "../../services/admissionsService"
+import { usersService } from "../../services/usersService"
 import AdminLayout from "../../layouts/AdminLayout"
 import {
-	pendingVerifications,
-	recentAdminActions,
-	adminNotifications,
-	scraperActivities,
-	systemMetrics,
-	admissionAnalytics,
 	getActionColor,
 	getScraperStatusColor,
+	type VerificationStatus,
 } from "../../data/adminData"
 import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
 import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
@@ -71,8 +68,162 @@ function AdminDashboard() {
 	const navigate = useNavigate()
 	const { isAuthenticated, user, isLoading: authLoading } = useAuth()
 	const [apiDashboard, setApiDashboard] = useState<any>(null)
+	const [admissionsMap, setAdmissionsMap] = useState<Map<string, any>>(new Map())
+	const [analyticsData, setAnalyticsData] = useState({
+		statusBreakdown: [] as { status: VerificationStatus; count: number; percentage: number }[],
+		universityDistribution: [] as { university: string; count: number }[],
+		monthlyTrend: [] as { month: string; count: number }[],
+	})
+	const [changelogs, setChangelogs] = useState<any[]>([])
+	const [totalUsers, setTotalUsers] = useState(0)
+	const [totalAdmissions, setTotalAdmissions] = useState(0)
 	const [_loading, _setLoading] = useState(false)
 	const [_error, _setError] = useState<string | null>(null)
+
+	const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+	const safeLabel = (value: string | null | undefined, fallback: string) => {
+		if (!value) return fallback
+		if (isUuid(value)) return fallback
+		return value
+	}
+
+	const buildRealtimeAnalytics = (admissions: any[]) => {
+		const total = admissions.length
+		const statusCounts: Record<VerificationStatus, number> = {
+			Verified: 0,
+			Pending: 0,
+			Rejected: 0,
+			Disputed: 0,
+		}
+
+		const mapStatus = (value: string): VerificationStatus => {
+			switch ((value || "").toLowerCase()) {
+				case "verified":
+					return "Verified"
+				case "rejected":
+					return "Rejected"
+				case "disputed":
+					return "Disputed"
+				default:
+					return "Pending"
+			}
+		}
+
+		const universityCounts = new Map<string, number>()
+		const monthCounts = new Map<string, number>()
+
+		admissions.forEach((admission: any) => {
+			const status = mapStatus(admission.verification_status)
+			statusCounts[status] += 1
+
+			const universityName = safeLabel(
+				admission?.universities?.name || admission.university_name || admission.location || admission.university_id,
+				"Unknown University"
+			)
+			universityCounts.set(universityName, (universityCounts.get(universityName) || 0) + 1)
+
+			const rawDate = admission.created_at || admission.submitted_at || admission.updated_at
+			if (rawDate) {
+				const parsed = new Date(rawDate)
+				if (!Number.isNaN(parsed.getTime())) {
+					const monthKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`
+					monthCounts.set(monthKey, (monthCounts.get(monthKey) || 0) + 1)
+				}
+			}
+		})
+
+		const statusOrder: VerificationStatus[] = ["Verified", "Pending", "Rejected", "Disputed"]
+		const statusBreakdown = statusOrder.map((status) => ({
+			status,
+			count: statusCounts[status],
+			percentage: total > 0 ? (statusCounts[status] / total) * 100 : 0,
+		}))
+
+		const sortedUniversities = Array.from(universityCounts.entries())
+			.map(([university, count]) => ({ university, count }))
+			.sort((first, second) => second.count - first.count)
+
+		let universityDistribution = sortedUniversities.slice(0, 5)
+		if (sortedUniversities.length > 5) {
+			const othersCount = sortedUniversities.slice(5).reduce((sum, current) => sum + current.count, 0)
+			universityDistribution = [...universityDistribution, { university: "Others", count: othersCount }]
+		}
+
+		const monthlyTrend = Array.from(monthCounts.entries())
+			.sort((first, second) => first[0].localeCompare(second[0]))
+			.slice(-6)
+			.map(([monthKey, count]) => {
+				const [year, month] = monthKey.split("-")
+				const date = new Date(Number(year), Number(month) - 1, 1)
+				return {
+					month: date.toLocaleString("en-US", { month: "short", year: "numeric" }),
+					count,
+				}
+			})
+
+		return {
+			statusBreakdown,
+			universityDistribution,
+			monthlyTrend,
+		}
+	}
+
+	/**
+	 * Transform pending verifications from API format to UI format
+	 */
+	const transformPendingVerifications = (apiData: any[]) => {
+		return (apiData || []).map((item: any) => ({
+			id: item.admission_id || item.id,
+			admissionTitle: item.program_title || item.title || 'Unknown',
+			university: safeLabel(item.university_name || item.university_id, 'Unknown University'),
+			submittedBy: safeLabel(item.submitted_by || item.created_by, 'University'),
+			submittedOn: item.submitted_at
+				? new Date(item.submitted_at).toISOString().split('T')[0]
+				: item.created_at
+				? new Date(item.created_at).toISOString().split('T')[0]
+				: 'N/A',
+			status: 'Pending Audit', // All items in pending_verifications are pending
+		}))
+	}
+
+	/**
+	 * Transform recent actions from API format to UI format with admission title enrichment
+	 */
+	const transformRecentActions = (apiData: any[], admissionsTitleMap?: Map<string, any>) => {
+		return (apiData || []).map((item: any) => {
+			// Determine action type
+			let actionType = 'Updated'
+			if (item.action_type || item.change_type) {
+				const type = (item.action_type || item.change_type).toLowerCase()
+				if (type === 'verified') actionType = 'Verified'
+				else if (type === 'rejected') actionType = 'Rejected'
+				else if (type === 'disputed') actionType = 'Disputed'
+			}
+			
+			// Get admission title from map, with fallbacks
+			let admissionTitle = 'Unknown'
+			const admissionId = item.admission_id || item.admissionId
+			if (admissionsTitleMap && admissionId) {
+				const admissionData = admissionsTitleMap.get(admissionId)
+				if (admissionData && admissionData.title) {
+					admissionTitle = admissionData.title
+				}
+			}
+			// Fall back to other fields if not in map
+			if (admissionTitle === 'Unknown') {
+				admissionTitle = item.admission_title || item.program_title || item.title || 'Unknown'
+			}
+			
+			return {
+				id: item.id,
+				admission: admissionTitle,
+				action: actionType,
+				admin: item.changed_by || item.modified_by || item.actor_type?.charAt(0).toUpperCase() + item.actor_type?.slice(1) || 'System',
+				timestamp: item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A',
+				remarks: item.diff_summary || item.remarks || `Changed ${item.field_name || 'field'} from "${item.old_value}" to "${item.new_value}"`,
+			}
+		})
+	}
 
 	/**
 	 * Fetch admin dashboard from API if authenticated
@@ -92,38 +243,74 @@ function AdminDashboard() {
 	}, [isAuthenticated, user?.user_type, authLoading])
 
 	/**
-	 * Fetch dashboard data from API
+	 * Fetch dashboard data from API and enrich with related data
 	 */
 	const fetchDashboard = async () => {
 		try {
 			_setLoading(true)
 			_setError(null)
 
-			const response = await dashboardService.getAdminDashboard()
-			setApiDashboard(response.data)
+			// Fetch main dashboard data
+			const dashboardResponse = await adminService.getDashboard()
+			setApiDashboard(dashboardResponse.data)
 
-			console.debug('[AdminDashboard] Dashboard data fetched successfully')
+			// Fetch all admissions to build a map for title lookups
+			console.log('📚 Fetching all admissions for dashboard...')
+			const admissionsResponse = await admissionsService.listDirect({ limit: 1000 })
+			const admissionsData = admissionsResponse.data || []
+			const admissionMap = new Map<string, any>()
+			admissionsData.forEach((admission: any) => {
+				admissionMap.set(admission.id, admission)
+			})
+			console.log('✅ Loaded', admissionsData.length, 'admissions into map')
+			setAdmissionsMap(admissionMap)
+			setTotalAdmissions(admissionsData.length)
+			setAnalyticsData(buildRealtimeAnalytics(admissionsData))
+
+			// Fetch changelogs for recent actions (order by created_at DESC)
+			console.log('📋 Fetching changelogs...')
+			const changelogsResponse = await adminService.getChangeLogs(1, 5)
+			const changelogsData = Array.isArray(changelogsResponse.data)
+				? changelogsResponse.data
+				: changelogsResponse.data?.data || []
+			console.log('✅ Loaded', changelogsData.length, 'changelogs')
+			setChangelogs(changelogsData)
+
+			// Fetch users count
+			console.log('👥 Fetching users count...')
+			const usersResponse = await usersService.list({ limit: 1, page: 1 })
+			const userCount = usersResponse.pagination?.total || 0
+			console.log('✅ Total users:', userCount)
+			setTotalUsers(userCount)
+
+			console.debug('[AdminDashboard] All data fetched successfully')
 		} catch (err: any) {
 			console.error('[AdminDashboard] Failed to fetch dashboard data:', err)
 			_setError(err.message || 'Failed to load dashboard data')
-			// Will use mock data instead
 		} finally {
 			_setLoading(false)
 		}
 	}
 
-	// Use API data if available, otherwise use mock data
-	const displayPendingVerifications = (apiDashboard?.pending_verifications || pendingVerifications).slice(0, 5)
-	const displayRecentActions = (apiDashboard?.recent_actions || recentAdminActions).slice(0, 5)
-	const displayNotifications = (apiDashboard?.notifications || adminNotifications).slice(0, 4)
-	const displayScraperActivities = (apiDashboard?.scraper_activity || scraperActivities).slice(0, 4)
+	// Transform API data to UI format with enriched admission titles
+	const transformedPendingVerifications = transformPendingVerifications(apiDashboard?.pending_verifications)
+	const transformedRecentActions = transformRecentActions(changelogs, admissionsMap)
+
+	// Use only real API data - no mock fallbacks
+	const displayPendingVerifications = transformedPendingVerifications.slice(0, 5)
+	
+	const displayRecentActions = transformedRecentActions.slice(0, 5)
+	
+	const displayNotifications = (apiDashboard?.notifications || []).slice(0, 4)
+	const displayScraperActivities = (apiDashboard?.scraper_activity || []).slice(0, 4)
+	
 	const metrics = {
-		totalUsers: apiDashboard?.stats?.totalUsers ?? systemMetrics.totalUsers ?? 0,
-		totalAdmissions: apiDashboard?.stats?.totalAdmissions ?? systemMetrics.totalAdmissions ?? 0,
-		totalAlertsSent: apiDashboard?.stats?.totalAlertsSent ?? systemMetrics.totalAlertsSent ?? 0,
-		aiSummary: apiDashboard?.stats?.aiSummary ?? systemMetrics.aiSummary,
+		totalUsers: totalUsers || apiDashboard?.stats?.total_users || 0,
+		totalAdmissions: totalAdmissions || apiDashboard?.stats?.total_admissions || 0,
+		totalAlertsSent: apiDashboard?.stats?.pending_verifications || apiDashboard?.stats?.alerts || 0,
+		aiSummary: apiDashboard?.stats?.aiSummary || '',
 	}
-	const analytics = apiDashboard?.analytics || admissionAnalytics
+	const analytics = analyticsData
 
 	return (
 		<AdminLayout>
@@ -392,7 +579,9 @@ function AdminDashboard() {
 										</td>
 										<td className="py-4 px-4">
 											<button
-												onClick={() => navigate(`/admin/verification/${verification.id}`)}
+												onClick={() =>
+													navigate("/admin/verification", { state: { selectedId: verification.id } })
+												}
 												className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
 											>
 												Verify

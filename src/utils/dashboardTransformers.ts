@@ -71,6 +71,8 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     verified_by: admission.verified_by,
     rejection_reason: admission.rejection_reason,
     dispute_reason: admission.dispute_reason,
+    verification_comments: admission.verification_comments,
+    admin_notes: admission.admin_notes,
     
     // Audit trail
     created_by: admission.created_by,
@@ -81,7 +83,13 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     
     // Optional fields
     views: admission.views?.toString() || '0',
-    remarks: admission.remarks || '',
+    remarks:
+      admission.rejection_reason ||
+      admission.dispute_reason ||
+      admission.verification_comments ||
+      admission.admin_notes ||
+      admission.remarks ||
+      '',
     eligibility: admission.eligibility || '',
     academicYear: admission.academic_year || extractYear(admission.deadline || admission.created_at || ''),
   }));
@@ -90,19 +98,35 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
   console.log('🔵 [dashboardTransformers] Transformed admissions:', admissions.map(a => ({ id: a.id, title: a.title, status: a.status, verification_status: a.verification_status })))
 
   // Transform recent_changes to ChangeLogItem objects
-  const changeLogs: ChangeLogItem[] = (data.recent_changes || []).map((change: any, index: number) => ({
-    id: index + 1,
-    admission: change.program_title || change.admission_title || `Admission ${change.admission_id}`,
-    modifiedBy: change.changed_by || change.actor_type || 'Admin',
-    date: new Date(change.changed_at || change.created_at || '').toISOString(),
-    diff: [
-      {
-        field: change.field_name || change.field || 'status',
-        old: change.old_value || '—',
-        new: change.new_value || '—',
-      },
-    ],
-  }));
+  const changeLogs: ChangeLogItem[] = (data.recent_changes || []).map((change: any, index: number) => {
+    const fieldName = change.field_name || change.field || 'status'
+    const status = fieldName === 'verification_status'
+      ? mapVerificationStatusToAdmissionStatus(change.new_value || '')
+      : undefined
+    const remarks =
+      change.reason ||
+      change.notes ||
+      change.comment ||
+      change.verification_comments ||
+      change.admin_notes ||
+      ''
+
+    return {
+      id: index + 1,
+      admission: change.program_title || change.admission_title || 'Admission',
+      modifiedBy: change.changed_by || change.actor_type || 'Admin',
+      date: new Date(change.changed_at || change.created_at || '').toISOString(),
+      diff: [
+        {
+          field: fieldName,
+          old: change.old_value || '—',
+          new: change.new_value || '—',
+        },
+      ],
+      status,
+      remarks,
+    }
+  });
 
   // Transform recent_notifications to NotificationItem objects
   const notifications: NotificationItem[] = (data.recent_notifications || []).map((notif: any, index: number) => ({
