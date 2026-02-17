@@ -251,6 +251,7 @@ export const admissionsService = {
         'delivery_mode',
         'requirements',
         'verification_status',
+        'updated_by',  // Track who is making the update (for auto status transitions)
       ];
       
       for (const field of allowedFields) {

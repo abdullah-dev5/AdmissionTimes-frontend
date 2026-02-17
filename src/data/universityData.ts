@@ -14,6 +14,10 @@ export interface Admission {
 	verifiedBy?: string
 	lastAction?: string
 	remarks?: string
+	rejection_reason?: string
+	dispute_reason?: string
+	verification_comments?: string
+	admin_notes?: string
 	
 	// Program classification
 	degreeType?: string
@@ -50,6 +54,10 @@ export interface Admission {
 	university_id?: string
 	is_active?: boolean
 	
+	// Auto-tracking fields (system managed)
+	needs_reverification?: boolean | null
+	updated_by?: string | null
+	
 	// Internal fields
 	academicYear?: string
 }
@@ -69,6 +77,8 @@ export interface ChangeLogItem {
 	modifiedBy: string
 	date: string
 	diff: Array<{ field: string; old: string; new: string }>
+	status?: AdmissionStatus | AuditStatus
+	remarks?: string
 }
 
 export interface NotificationItem {

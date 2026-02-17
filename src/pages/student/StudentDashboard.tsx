@@ -6,6 +6,8 @@ import { useStudentStore } from '../../store/studentStore'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
+import UpdatedBadge from '../../components/admin/UpdatedBadge'
+import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -22,9 +24,15 @@ function StudentDashboard() {
   const { user } = useAuth()
   
   // Use custom hook for data fetching (handles loading logic)
-  const { admissions, loading, error } = useStudentDashboardData()
+  const { admissions: rawAdmissions, loading, error } = useStudentDashboardData()
   const allAdmissions = useStudentStore((state) => state.admissions)
   const notifications = useStudentStore((state) => state.notifications)
+  
+  // ✅ Filter admissions - HIDE rejected and disputed from students
+  const admissions = useMemo(
+    () => filterStudentVisibleAdmissions(rawAdmissions, true),
+    [rawAdmissions]
+  )
   
   // Memoize saved admissions to prevent unnecessary calculations
   const savedAdmissions = useMemo(
@@ -274,8 +282,14 @@ function StudentDashboard() {
                       <Link
                         to={`/program/${admission.id}`}
                         key={admission.id}
-                        className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md cursor-pointer transition-all"
+                        className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md cursor-pointer transition-all relative"
                       >
+                        {/* Updated Tag */}
+                        {admission.status === 'Updated' && (
+                          <div className="absolute top-4 right-4 z-10">
+                            <UpdatedBadge size="sm" showTime={false} />
+                          </div>
+                        )}
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-start gap-3 flex-1">
                             <div className="w-10 h-10 rounded flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>

@@ -74,7 +74,13 @@ const deriveAudits = (admissions: Admission[]): AuditItem[] =>
       status: (admission.status === 'Pending Audit' ? 'Pending' : admission.status) as AuditStatus,
       verifiedBy: admission.verifiedBy,
       lastAction: admission.lastAction || '',
-      remarks: admission.remarks,
+      remarks:
+        admission.rejection_reason ||
+        admission.dispute_reason ||
+        admission.verification_comments ||
+        admission.admin_notes ||
+        admission.remarks ||
+        '',
     }))
 
 const deriveStats = (
@@ -219,7 +225,13 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
       let savedAdmission: Admission
       if (isUpdate) {
         console.log('🟢 [UniversityStore] Updating admission via Supabase:', admission.id)
-        const apiResult = await admissionsService.updateDirect(admission.id, apiPayload)
+        // Add updated_by only if we have a valid user ID (don't set it to universityId)
+        // The backend trigger will handle status transitions based on the update itself
+        const updatePayload = {
+          ...apiPayload,
+          // Omit updated_by - let the backend derive it from auth context if needed
+        }
+        const apiResult = await admissionsService.updateDirect(admission.id, updatePayload)
         savedAdmission = transformApiAdmissionToFrontend(apiResult)
       } else {
         console.log('🟢 [UniversityStore] Creating new admission via Supabase')

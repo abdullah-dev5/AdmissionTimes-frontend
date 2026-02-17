@@ -83,6 +83,12 @@ export interface Admission {
   verified_by?: string | null;
   rejection_reason?: string | null;
   dispute_reason?: string | null;
+  verification_comments?: string | null;
+  admin_notes?: string | null;
+  
+  // AUTO-TRACKING: System-managed fields for status transitions
+  needs_reverification?: boolean | null;
+  updated_by?: string | null;
   
   // CONTEXT: Auto-set by system
   created_by?: string | null;
@@ -267,11 +273,14 @@ export interface UserPreferences {
 export interface ChangeLog {
   id: string;
   admission_id: string;
+  actor_type: 'admin' | 'university' | 'system';
   changed_by: string | null;
-  change_type: 'created' | 'updated' | 'deleted' | 'verified' | 'rejected';
+  action_type: 'created' | 'updated' | 'verified' | 'rejected' | 'disputed' | 'status_changed';
   field_name: string | null;
-  old_value: string | null;
-  new_value: string | null;
+  old_value: any | null;
+  new_value: any | null;
+  diff_summary?: string | null;
+  metadata?: Record<string, any> | null;
   created_at: string;
 }
 
@@ -350,23 +359,74 @@ export interface UniversityDashboard {
 
 /**
  * Admin Dashboard Response
- * Aggregated data for admin dashboard
+ * Aggregated data for admin dashboard with real backend structure
  */
 export interface AdminDashboard {
-  stats: {
-    total_users: number;
-    total_admissions: number;
-    pending_verifications: number;
-    total_notifications_sent: number;
-  };
-  pending_verifications: Array<Admission & {
-    university_name: string;
-    verification_requested_at: string;
-  }>;
-  recent_activity: Activity[];
-  system_metrics: {
-    scraper_jobs_today: number;
-    successful_scrapes: number;
-    failed_scrapes: number;
-  };
+  stats: AdminDashboardStats;
+  recent_actions: AdminAuditLog[];
+  pending_admissions: AdminAdmission[];
 }
+
+/**
+ * Admin Dashboard Statistics
+ */
+export interface AdminDashboardStats {
+  total: number;
+  pending: number;
+  verified: number;
+  rejected: number;
+  disputed: number;
+}
+
+/**
+ * Admin Admission Type
+ * Extended Admission type with admin-specific fields
+ */
+export interface AdminAdmission extends Admission {
+  verified_at?: string | null;
+  verified_by?: string | null;
+  rejection_reason?: string | null;
+  admin_notes?: string | null;
+  verification_comments?: string | null;
+}
+
+/**
+ * Admin Audit Log Type
+ * Tracks all admin actions on admissions
+ */
+export interface AdminAuditLog {
+  id: string;
+  admin_id: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  old_values?: Record<string, any> | null;
+  new_values?: Record<string, any> | null;
+  reason?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_by?: string;
+  created_at: string;
+}
+
+/**
+ * Admin Verify Request DTO
+ */
+export interface AdminVerifyAdmissionDTO {
+  verification_status: 'verified' | 'rejected' | 'disputed';
+  rejection_reason?: string | null;
+  admin_notes?: string | null;
+  verification_comments?: string | null;
+  dispute_reason?: string | null;
+}
+
+/**
+ * Admin Bulk Verify Request DTO
+ */
+export interface AdminBulkVerifyDTO {
+  admission_ids: string[];
+  verification_status: 'verified' | 'rejected' | 'disputed';
+  rejection_reason?: string | null;
+  admin_notes?: string | null;
+}
+

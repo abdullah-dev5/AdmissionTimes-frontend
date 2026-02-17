@@ -17,6 +17,14 @@ import type { Admission as ApiAdmission } from '../types/api'
  * @returns Admission with all fields populated (using defaults where needed)
  */
 export function sanitizeAdmission(admission: Partial<Admission>): Admission {
+  const remarks =
+    admission.rejection_reason ||
+    admission.dispute_reason ||
+    admission.verification_comments ||
+    admission.admin_notes ||
+    admission.remarks ||
+    ''
+
   return {
     id: admission.id || `adm-${Date.now()}`,
     title: admission.title || 'Unknown Program',
@@ -25,7 +33,7 @@ export function sanitizeAdmission(admission: Partial<Admission>): Admission {
     views: admission.views || '0',
     verifiedBy: admission.verifiedBy || undefined,
     lastAction: admission.lastAction || new Date().toISOString(),
-    remarks: admission.remarks || '',
+    remarks,
     degreeType: admission.degreeType || '',
     department: admission.department || '',
     academicYear: admission.academicYear || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
@@ -75,6 +83,13 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     status = 'Draft'
   }
 
+  const remarks =
+    apiAdmission.rejection_reason ||
+    apiAdmission.dispute_reason ||
+    apiAdmission.verification_comments ||
+    apiAdmission.admin_notes ||
+    ''
+
   return {
     id: apiAdmission.id,
     title: apiAdmission.title || 'Unknown Program',
@@ -84,7 +99,11 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     views: '0',
     verifiedBy: apiAdmission.verified_by,
     lastAction: apiAdmission.updated_at || apiAdmission.created_at || new Date().toISOString(),
-    remarks: apiAdmission.dispute_reason || '',
+    remarks,
+    rejection_reason: apiAdmission.rejection_reason || undefined,
+    dispute_reason: apiAdmission.dispute_reason || undefined,
+    verification_comments: apiAdmission.verification_comments || undefined,
+    admin_notes: apiAdmission.admin_notes || undefined,
     
     // Program classification
     degreeType: apiAdmission.degree_level || '',
@@ -120,6 +139,10 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     created_by: apiAdmission.created_by,
     university_id: apiAdmission.university_id,
     is_active: apiAdmission.is_active,
+    
+    // Auto-tracking fields (system managed)
+    needs_reverification: apiAdmission.needs_reverification,
+    updated_by: apiAdmission.updated_by,
   }
 }
 

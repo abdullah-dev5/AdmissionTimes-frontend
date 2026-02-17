@@ -116,7 +116,8 @@ function mapRawVerificationStatus(
     disputed: 'under_review',  // Map disputed to under_review
     under_review: 'under_review',
   };
-  return map[(status || '').toLowerCase()] || 'pending';
+  // Default to 'rejected' for unknown statuses (safer - hides from students)
+  return map[(status || '').toLowerCase()] || 'rejected';
 }
 
 /**

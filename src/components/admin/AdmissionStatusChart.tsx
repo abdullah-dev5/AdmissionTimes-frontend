@@ -15,13 +15,17 @@ interface AdmissionStatusChartProps {
  * Bar chart component for admission status breakdown
  */
 export default function AdmissionStatusChart({ data }: AdmissionStatusChartProps) {
-	const maxCount = Math.max(...data.map((d) => d.count))
+	if (data.length === 0) {
+		return <p className="text-sm text-gray-500">No status data available.</p>
+	}
+
+	const maxCount = Math.max(...data.map((d) => d.count), 0)
 
 	return (
 		<div className="space-y-3">
 			{data.map((item) => {
 				const colors = getVerificationStatusColor(item.status)
-				const barWidth = (item.count / maxCount) * 100
+				const barWidth = maxCount > 0 ? (item.count / maxCount) * 100 : 0
 
 				return (
 					<div key={item.status} className="flex items-center gap-4">

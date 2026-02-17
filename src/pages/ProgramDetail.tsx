@@ -3,14 +3,32 @@ import { useState, useMemo } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
 import { calculateDaysRemaining } from '../data/studentData'
+import { useChangeLogFilters } from '../hooks/useChangeLogFilters'
+import UpdatedBadge from '../components/admin/UpdatedBadge'
+import { getRelativeTime } from '../utils/dateUtils'
 
 function ProgramDetail() {
   const { id } = useParams()
   const [activeTab, setActiveTab] = useState('Overview')
   const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
   const admissions = useStudentStore((state) => state.admissions)
-
+  
+  // Get changelogs for update tracking
+  const { filteredLogs } = useChangeLogFilters()
+  
   const program = id ? getAdmissionById(id) : undefined
+  
+  // Check if admission status is Updated (after admin verification)
+  const isUpdated = program?.status === 'Updated'
+  
+  // Get recent changes for this admission
+  const recentChanges = useMemo(() => {
+    if (!id) return []
+    return filteredLogs
+      .filter(log => log.admissionId === id)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5) // Show last 5 changes
+  }, [id, filteredLogs])
   
   // Get related programs (same degree type, different university, limit 3)
   const relatedPrograms = useMemo(() => {
@@ -42,8 +60,22 @@ function ProgramDetail() {
         <div className="container mx-auto max-w-7xl">
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="mb-6">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: '#111827' }}>{program.program}</h1>
-            <p className="text-xl text-gray-600 mb-4">{program.university}</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex-1">
+                <h1 className="text-4xl font-bold mb-2" style={{ color: '#111827' }}>{program.program}</h1>
+                <p className="text-xl text-gray-600 mb-4">{program.university}</p>
+              </div>
+              {/* ✅ Show Updated Tag if admission status is Updated */}
+              {isUpdated && (
+                <div className="flex-shrink-0">
+                  <UpdatedBadge
+                    lastChangeTime={recentChanges[0]?.timestamp}
+                    size="lg"
+                    showTime={true}
+                  />
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-4 mb-6">
               <div className="flex items-center gap-2 text-gray-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,17 +181,21 @@ function ProgramDetail() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="border-b border-gray-200 mb-6">
                 <nav className="flex space-x-8 -mb-px">
-                  {['Overview', 'Eligibility', 'Important Dates', ].map((tab) => (
+                  {['Overview', 'Eligibility', 'Important Dates', isUpdated && 'Recent Changes'].filter(Boolean).map((tab) => (
                     <button
                       key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm cursor-pointer transition-colors ${
+                      onClick={() => setActiveTab(tab as string)}
+                      className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm cursor-pointer transition-colors relative ${
                         activeTab === tab
                           ? 'border-blue-500 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
                       {tab}
+                      {/* Show notification dot on Recent Changes tab */}
+                      {tab === 'Recent Changes' && isUpdated && (
+                        <span className="absolute -top-1 -right-2 w-2 h-2 bg-orange-500 rounded-full"></span>
+                      )}
                     </button>
                   ))}
                 </nav>
@@ -226,7 +262,10 @@ function ProgramDetail() {
                     </div>
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <span className="font-medium text-gray-700">Days Remaining</span>
-                      <span className={`font-semibold ${daysRemaining >= 0 && daysRemaining <= 7 ? 'text-red-600' : daysRemaining >= 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span className={`font-semibold ${
+                        daysRemaining >= 0 && daysRemaining <= 7 ? 'text-red-600' : 
+                        daysRemaining >= 0 ? 'text-green-600' : 'text-gray-500'
+                      }`}>
                         {daysRemaining >= 0 ? `${daysRemaining} days` : 'Deadline passed'}
                       </span>
                     </div>
@@ -235,6 +274,71 @@ function ProgramDetail() {
                       <span className="text-gray-600">{program.updated}</span>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ✅ Recent Changes Tab - Shows what was updated */}
+              {activeTab === 'Recent Changes' && isUpdated && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold" style={{ color: '#111827' }}>What Changed</h2>
+                    <span className="text-sm text-gray-500">{recentChanges.length} update{recentChanges.length > 1 ? 's' : ''}</span>
+                  </div>
+                  
+                  {/* Summary message */}
+                  <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-sm text-orange-900">
+                      <strong>This admission was updated by the university.</strong> Admin verification required to confirm these changes.
+                    </p>
+                  </div>
+                  
+                  {/* Important fields that changed */}
+                  <div className="space-y-4">
+                    {recentChanges.map((change, index) => {
+                      // Filter out metadata fields - only show important fields
+                      const importantFields = ['title', 'program', 'degree', 'deadline', 'fee', 'location', 'status', 'requirements', 'description'];
+                      const filteredDiffs = (change.diff || []).filter((d: any) => 
+                        importantFields.some(field => d.field.toLowerCase().includes(field.toLowerCase()))
+                      );
+                      
+                      if (filteredDiffs.length === 0) return null;
+                      
+                      return (
+                        <div key={change.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="font-medium text-gray-700">{getRelativeTime(change.timestamp)}</span>
+                            {index === 0 && (
+                              <span className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-1 rounded">Latest Update</span>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-2">
+                            {filteredDiffs.map((d: any, i: number) => (
+                              <div key={i} className="p-3 bg-white rounded border border-gray-100">
+                                <p className="font-semibold text-gray-700 mb-2">{d.field}</p>
+                                <div className="flex gap-4 text-sm">
+                                  <div className="flex-1">
+                                    <p className="text-gray-500 text-xs mb-1">Before</p>
+                                    <p className="text-red-600 line-through">{d.old || '—'}</p>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-gray-500 text-xs mb-1">After</p>
+                                    <p className="text-green-600 font-semibold">{d.new || '—'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {recentChanges.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No important changes found</p>
+                    </div>
+                  )}
                 </div>
               )}
 

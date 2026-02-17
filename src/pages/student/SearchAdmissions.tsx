@@ -7,20 +7,30 @@ import { useToast } from '../../contexts/ToastContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { supabase } from '../../services/supabase'
+import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
+import UpdatedBadge from '../../components/admin/UpdatedBadge'
 
 function SearchAdmissions() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { showError } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
-  const { admissions, loading } = useStudentDashboardData()
+  const { admissions: rawAdmissions, loading } = useStudentDashboardData()
+  
+  // ✅ Filter admissions - HIDE rejected and disputed from students
+  const admissions = useMemo(
+    () => filterStudentVisibleAdmissions(rawAdmissions, true),  // Enable debug logging
+    [rawAdmissions]
+  )
+  
   const [viewMode, setViewMode] = useState('grid')
   const [filtersCollapsed, setFiltersCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [universityFilter, setUniversityFilter] = useState('')
   const [cityFilter, setCityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
-  const [feeRange, setFeeRange] = useState([0, 500000])  // Changed from [10000, 200000] to [0, 500000]
+  const [feeRange, setFeeRange] = useState([0, 500000])
+  const [feeFilterActive, setFeeFilterActive] = useState(false)  // Track if user has set fee filter
   const [deadlineFilter, setDeadlineFilter] = useState('')
   const [programTitleFilter, setProgramTitleFilter] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
@@ -77,7 +87,8 @@ function SearchAdmissions() {
     setUniversityFilter('')
     setCityFilter('')
     setDegreeFilter('')
-    setFeeRange([0, 500000])  // Changed default
+    setFeeRange([0, 500000])
+    setFeeFilterActive(false)  // Reset fee filter status
     setDeadlineFilter('')
     setProgramTitleFilter('')
     setSelectedStatus([])
@@ -117,9 +128,20 @@ function SearchAdmissions() {
       console.log('🔍 [Filter] After degree filter:', filtered.length);
     }
 
-    // Fee range filter
-    filtered = filtered.filter(a => a.feeNumeric >= feeRange[0] && a.feeNumeric <= feeRange[1])
-    console.log('🔍 [Filter] After fee range filter:', filtered.length);
+    // Fee range filter - only apply if user explicitly set it
+    if (feeFilterActive) {
+      const beforeFeeFilter = filtered.length
+      filtered = filtered.filter(a => {
+        const passesFilter = a.feeNumeric >= feeRange[0] && a.feeNumeric <= feeRange[1]
+        if (!passesFilter) {
+          console.log(`🚫 [Fee Filter] Removing "${a.program}" - fee: ${a.feeNumeric}, range: [${feeRange[0]}, ${feeRange[1]}]`)
+        }
+        return passesFilter
+      })
+      console.log('🔍 [Filter] After fee range filter:', filtered.length, `(removed: ${beforeFeeFilter - filtered.length})`)
+    } else {
+      console.log('🔍 [Filter] Fee range filter skipped (not active)')
+    }
 
     // Deadline filter
     if (deadlineFilter) {
@@ -154,7 +176,7 @@ function SearchAdmissions() {
     }
 
     return filtered
-  }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, feeRange, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
+  }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, feeRange, feeFilterActive, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
 
   const toggleCompare = (id: string) => {
     setCompareIds(prev => {
@@ -313,9 +335,12 @@ function SearchAdmissions() {
                         type="range"
                         min="10000"
                         max="200000"
-                      step="10000"
+                        step="10000"
                         value={feeRange[1]}
-                        onChange={(e) => setFeeRange([feeRange[0], parseInt(e.target.value)])}
+                        onChange={(e) => {
+                          setFeeRange([feeRange[0], parseInt(e.target.value)])
+                          setFeeFilterActive(true)  // Mark filter as active when user changes it
+                        }}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                         style={{ accentColor: '#2563EB' }}
                       />
@@ -500,6 +525,14 @@ function SearchAdmissions() {
                         )}
                       </div>
                       <h3 className="font-semibold text-lg mb-2 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
+                      
+                      {/* ✅ Show Updated Tag if status is Updated (after admin verification) */}
+                      {admission.status === 'Updated' && (
+                        <div className="mb-3">
+                          <UpdatedBadge size="sm" showTime={false} />
+                        </div>
+                      )}
+                      
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

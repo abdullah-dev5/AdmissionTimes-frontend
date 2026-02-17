@@ -11,7 +11,11 @@ interface UniversityDistributionChartProps {
  * Horizontal bar chart for university distribution
  */
 export default function UniversityDistributionChart({ data }: UniversityDistributionChartProps) {
-	const maxCount = Math.max(...data.map((d) => d.count))
+	if (data.length === 0) {
+		return <p className="text-sm text-gray-500">No university distribution data available.</p>
+	}
+
+	const maxCount = Math.max(...data.map((d) => d.count), 0)
 	const colors = [
 		"#2563EB",
 		"#10B981",
@@ -26,7 +30,7 @@ export default function UniversityDistributionChart({ data }: UniversityDistribu
 	return (
 		<div className="space-y-3">
 			{data.map((item, index) => {
-				const barWidth = (item.count / maxCount) * 100
+				const barWidth = maxCount > 0 ? (item.count / maxCount) * 100 : 0
 				const color = colors[index % colors.length]
 
 				return (
