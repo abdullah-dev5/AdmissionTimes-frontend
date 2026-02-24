@@ -28,10 +28,6 @@ export function useUniversityDashboardData() {
     }
 
     const storeState = useUniversityStore.getState()
-      if (storeState.fetchedUserId === userId) {
-        fetchTriggeredRef.current = userId
-        return
-      }
     if (storeState.loading) {
       return
     }

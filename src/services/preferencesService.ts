@@ -40,7 +40,7 @@ export const preferencesService = {
    */
   updateNotifications: async (preferences: {
     email_notifications_enabled?: boolean;
-    email_frequency?: 'immediate' | 'daily' | 'weekly' | 'never';
+    email_frequency?: 'immediate'; // Only immediate delivery supported
     push_notifications_enabled?: boolean;
     notification_categories?: {
       system?: boolean;

@@ -120,9 +120,19 @@ export interface University {
  */
 export interface Notification {
   id: string;
-  user_id: string | null;
-  user_type: 'student' | 'university' | 'admin' | 'all';
-  category: 'verification' | 'deadline' | 'system' | 'update';
+  recipient_id: string;
+  role_type: 'student' | 'university' | 'admin' | 'maintenance';
+  notification_type:
+    | 'admission_submitted'
+    | 'admission_resubmitted'
+    | 'admission_verified'
+    | 'admission_rejected'
+    | 'admission_revision_required'
+    | 'admission_updated_saved'
+    | 'deadline_near'
+    | 'system_broadcast'
+    | 'dispute_raised'
+    | 'system_error';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   title: string;
   message: string;
@@ -131,6 +141,7 @@ export interface Notification {
   is_read: boolean;
   read_at: string | null;
   action_url: string | null;
+  event_key: string;
   created_at: string;
 }
 
@@ -195,10 +206,9 @@ export interface User {
   id: string;
   email: string;
   display_name?: string;  // User's display name
-  role: 'student' | 'university' | 'admin';  // Changed from user_type to role
-  user_type?: 'student' | 'university' | 'admin';  // Keep as optional for backward compatibility
-  organization_id?: string | null;  // For university users - maps to universities.id
-  university_id?: string | null;  // Backward compatibility
+  role: 'student' | 'university' | 'admin' | 'maintenance';  // Changed from user_type to role
+  user_type?: 'student' | 'university' | 'admin' | 'maintenance';  // Keep as optional for backward compatibility
+  university_id?: string | null;  // For university users - maps to universities.id
   created_at: string;
   updated_at: string;
 }
@@ -251,7 +261,7 @@ export interface UserPreferences {
   id: string;
   user_id: string;
   email_notifications_enabled: boolean;
-  email_frequency: 'immediate' | 'daily' | 'weekly' | 'never';
+  email_frequency: 'immediate'; // Only immediate delivery supported, use email_notifications_enabled for on/off
   push_notifications_enabled: boolean;
   notification_categories: {
     system: boolean;

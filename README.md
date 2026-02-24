@@ -1,103 +1,100 @@
-# AdmissionTimes - Frontend Application
-**Final Year Project - University Admissions Management Platform**
+# AdmissionTimes - Frontend
 
-## 🌟 Project Status (February 9, 2026)
+Frontend application for the University Admissions Management Platform.
 
-### ✅ Phase 1 Complete - JWT Authentication Fully Implemented + UI Enhancements
-- **Backend:** 100% Ready (51 endpoints, JWT auth middleware, auto-sync)
-- **Frontend:** 100% Complete (25+ pages, 50+ components, UI enhancements applied)
-- **Authentication:** ✅ 100% Complete (ES256 JWT, auto-sync, role consistency)
-- **Integration:** 100% Done+ (authentication + all dashboards + analytics planned)
-- **Documentation:** Comprehensive (60,000+ words + implementation guides + analytics plan)
-### 🚢 Latest Updates - This Session
-- ✅ **Fixed Active Admissions Counter** - Now uses `is_active` field instead of status
-- ✅ **Consolidated Status Filters** - Removed "Disputed" as separate count (5 filters instead of 6)
-- 📋 **Planned Engagement Analytics** - Complete implementation roadmap for Views/Clicks/Reminders (see `docs/ENGAGEMENT_ANALYTICS_IMPLEMENTATION_PLAN.md`)
-### 🚀 Current Capabilities
-- ✅ **JWT Authentication** - ES256 tokens with Supabase Auth
-- ✅ **Auto-Sync Users** - Automatic database user creation on first signin
-- ✅ **Role Consistency** - Bidirectional sync between Supabase Auth and database
-- ✅ **User Sign In/Up/Out** - End-to-end secure authentication
-- ✅ **Role-Based Navigation** - Student/university/admin dashboards
-- ✅ **Persistent Auth** - Zustand store with localStorage
-- ✅ **API Client** - Automatic JWT token injection in headers
-- ✅ **University Dashboard** - Accurate metrics, simplified status filters
-- ✅ **Engagement Tracking Ready** - Plan created for analytics implementation
-- ✅ **Admin Dashboard** - System metrics, verification queue
+**Status:** ✅ Production Ready  
+**Version:** 1.0.0  
+**Last Updated:** February 25, 2026
 
 ---
 
-## 📚 Quick Start
+## 📖 Documentation
 
-### Prerequisites
-- Node.js 18+ installed
-- pnpm package manager (`npm install -g pnpm`)
-- Backend API running on `http://localhost:3000`
+### 👉 Complete Documentation
+See **[project-docs/README.md](project-docs/README.md)** for complete project documentation.
 
-### Installation
+### Quick Links
+- **START HERE**: [START_HERE.md](START_HERE.md)
+- **Quick Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+- **Troubleshooting**: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **Project Status**: [PROJECT_STATUS.md](PROJECT_STATUS.md)
+- **TODO List**: [TODO.md](TODO.md)
+
+### Documentation Structure
+- [project-docs/](project-docs/) - Core documentation (4 files)
+  - Overview, tech specs, requirements, user structure
+- [project-docs/overview.md](project-docs/overview.md) - System architecture
+- [project-docs/tech-specs.md](project-docs/tech-specs.md) - Technologies & frameworks
+
+---
+
+## 🚀 Features
+
+✅ **User Authentication** - Sign in/up with JWT tokens  
+✅ **Student Dashboard** - Personal admission tracking, recommendations, deadlines  
+✅ **University Dashboard** - Program management, verification queue  
+✅ **Admin Dashboard** - System metrics, user management  
+✅ **Program Browsing** - Search, filter, detailed views  
+✅ **Watchlist** - Save favorite programs  
+✅ **Smart Recommendations** - Collaborative filtering suggestions  
+✅ **Email Notifications** - System + email alerts  
+✅ **Responsive Design** - Mobile, tablet, desktop support  
+✅ **Dark/Light Theme** (planned)
+
+---
+
+## 🛠️ Tech Stack
+
+- **Runtime**: Node.js 18+
+- **Framework**: React 18
+- **Language**: TypeScript
+- **Build**: Vite
+- **Styling**: Tailwind CSS
+- **State Management**: Zustand
+- **Routing**: React Router v6
+- **HTTP Client**: Axios
+- **Forms**: React Hook Form (optional)
+
+---
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
 ```bash
-# Clone and install
-cd e:\fyp\admission-times-frontend
+node --version  # v18+ required
+pnpm -v        # v10+ or use npm
+```
+
+### 2. Install Dependencies
+```bash
+cd admission-times-frontend
 pnpm install
+```
 
-# Run development server
+### 3. Setup Environment
+```bash
+cp .env.example .env.local
+# Edit .env.local with your configuration
+```
+
+**Required Variables:**
+```env
+VITE_API_BASE_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://...supabase.co
+VITE_SUPABASE_ANON_KEY=...
+```
+
+### 4. Start Development Server
+```bash
 pnpm dev
-
 # Visit http://localhost:5173
 ```
 
-### Documentation
-**📖 Essential Guides:**
-- **[AUTHENTICATION_ARCHITECTURE.md](./AUTHENTICATION_ARCHITECTURE.md)** - Complete JWT auth system, policies, and deployment
-- **[IMPLEMENTATION_STATUS_COMPLETE.md](./IMPLEMENTATION_STATUS_COMPLETE.md)** - Latest feature status
-- **[FRONTEND_BACKEND_API_CONTRACT.md](./FRONTEND_BACKEND_API_CONTRACT.md)** - Full API specification
-- **[STATUS_DASHBOARD.md](./STATUS_DASHBOARD.md)** - Project progress tracking
-
-### Test Credentials
+### 5. Build for Production
+```bash
+pnpm build
+pnpm preview
 ```
-Student:
-  Email: student@test.com
-  Password: password123
-
-University:
-  Email: university@test.com
-  Password: password123
-  
-  OR create your own (see University Signup Testing Guide below)
-
-Admin:
-  Email: admin@test.com
-  Password: password123
-```
-
-**🎓 University Representative Signup:**  
-For testing university representative accounts, see [University Signup Testing Guide](./docs/UNIVERSITY_SIGNUP_TESTING_GUIDE.md).  
-This guide explains how to seed test universities and create university accounts.
-
----
-
-## 🏗️ Tech Stack
-
-### Core Technologies
-- **React 19.1.1** - UI framework
-- **TypeScript 5.6** - Type safety
-- **Vite 6.0** - Build tool & dev server
-- **TailwindCSS 3.4** - Styling framework
-- **React Router DOM 7.1** - Client-side routing
-
-### State Management
-- **React Context API** - UI state (auth, data contexts)
-- **Zustand 5.0** - Persistent auth store (localStorage)
-
-### API & Data
-- **Axios** - HTTP client
-- **React Query** (planned) - Server state management
-- **TypeScript interfaces** - Complete type safety
-
-### UI Components
-- Custom components with Tailwind
-- Recharts for data visualization
-- Lucide React for icons
 
 ---
 
@@ -105,369 +102,231 @@ This guide explains how to seed test universities and create university accounts
 
 ```
 src/
-├── components/           # Reusable UI components
-│   ├── admin/           # Admin-specific components
-│   ├── student/         # Student-specific components
-│   ├── university/      # University-specific components
-│   ├── ai/              # AI chat components
-│   └── common/          # Shared components
-├── contexts/            # React Context providers
-│   ├── AuthContext.tsx           # Authentication state
-│   ├── StudentDataContext.tsx    # Student data (API integrated)
-│   ├── UniversityDataContext.tsx # University data
-│   ├── ToastContext.tsx          # Toast notifications
-│   └── AiContext.tsx             # AI chat state
-├── pages/               # Page components
-│   ├── admin/           # Admin pages
-│   ├── student/         # Student pages
-│   └── university/      # University pages
-├── services/            # API service layer
-│   ├── apiClient.ts     # Axios instance (with interceptors)
-│   ├── authService.ts   # Authentication API
-│   ├── dashboardService.ts  # Dashboard APIs
-│   ├── admissionsService.ts # Admissions CRUD
-│   └── ...              # Other domain services
-├── store/               # Zustand stores
-│   └── authStore.ts     # Persistent auth state
-├── types/               # TypeScript type definitions
+├── components/            # Reusable UI components
+│   ├── admin/            # Admin-specific components
+│   ├── student/          # Student-specific components
+│   ├── university/       # University-specific components
+│   ├── common/           # Shared components
+│   └── ai/               # AI-related components
+├── pages/                 # Page components
+│   ├── student/          # Student pages (dashboard, etc.)
+│   ├── university/       # University pages
+│   ├── admin/            # Admin pages
+│   └── ...
+├── hooks/                 # Custom React hooks
+├── contexts/              # React Context providers
+│   ├── AuthContext.tsx   # Authentication context
+│   ├── ToastContext.tsx  # Toast notifications
+│   └── AiContext.tsx     # AI interactions
+├── services/              # API services
+│   ├── apiClient.ts      # Axios instance
+│   ├── authService.ts    # Auth API calls
+│   ├── dashboardService.ts
+│   ├── recommendationsService.ts
+│   └── ...
+├── store/                 # Zustand stores
+│   ├── authStore.ts      # Authentication state
+│   ├── studentStore.ts   # Student data state
+│   └── universityStore.ts
+├── types/                 # TypeScript interfaces
 │   └── api.ts           # API response types
-├── utils/               # Utility functions
-│   └── setupUserContext.ts  # User context helpers
-├── Router/              # React Router configuration
-└── hooks/               # Custom React hooks
+├── utils/                 # Utility functions
+│   ├── transformers.ts   # Data transformation
+│   ├── dateUtils.ts      # Date helpers
+│   └── ...
+├── layouts/              # Layout components
+│   ├── StudentLayout.tsx
+│   ├── UniversityLayout.tsx
+│   └── AdminLayout.tsx
+├── constants/             # App constants
+├── data/                  # Static data
+└── main.tsx              # Application entry point
 ```
 
 ---
 
-## 🔑 Key Implementation Details
+## 🔌 Key Services
 
-### Authentication Flow
-```typescript
-1. User signs in → POST /api/v1/auth/signin
-2. Backend returns user data: { id, email, role, university_id }
-3. Frontend stores in:
-   - React Context (for UI components)
-   - Zustand store (for API client, persisted to localStorage)
-4. Navigate based on role:
-   - student → /student/dashboard
-   - university → /university/dashboard
-   - admin → /admin/dashboard
-5. API client automatically adds headers on every request:
-   - x-user-id: user.id
-   - x-user-role: user.role
-   - x-university-id: user.university_id (if applicable)
+### Authentication
+- **Service**: `services/authService.ts`
+- **Store**: `store/authStore.ts`
+- **Context**: `contexts/AuthContext.tsx`
+
+### Dashboard Data
+- **Service**: `services/dashboardService.ts`
+- **Hook**: `hooks/useStudentDashboardData.ts`
+
+### Recommendations
+- **Service**: `services/recommendationsService.ts`
+- **Backend**: Collaborative filtering API
+
+### Notifications
+- **Context**: `contexts/ToastContext.tsx`
+- **Service**: `services/notificationsService.ts`
+
+---
+
+## 🎨 Components
+
+### Common Components
+- `LoadingSpinner` - Loading states
+- `ErrorBoundary` - Error handling
+- `Modal` - Modal dialogs
+- `Button` - Reusable buttons
+- `Card` - Content cards
+
+### Page Components
+- `StudentDashboard` - Student home
+- `UniversityDashboard` - University home
+- `AdminDashboard` - Admin home
+- `ProgramDetail` - Program details
+- `SignIn` / `SignUp` - Auth pages
+
+---
+
+## 🔐 Authentication Flow
+
+```
+1. User visits app
+   ↓
+2. Check localStorage for token
+   ↓
+3. If token exists, validate and restore session
+   ↓
+4. If no token, show Sign In page
+   ↓
+5. Sign In → Supabase Auth → JWT token
+   ↓
+6. Auto-sync user to backend database
+   ↓
+7. Redirect to role-based dashboard
 ```
 
-### API Integration Pattern
+---
+
+## 🌐 API Integration
+
+### Axios Client
+All API calls use a configured Axios instance with:
+- Automatic JWT token injection
+- Base URL configuration
+- Error handling
+- Request/response logging
+
+**Location**: `services/apiClient.ts`
+
+### Service Pattern
+Each API domain has its own service:
 ```typescript
-// 1. Service layer (services/dashboardService.ts)
-export const dashboardService = {
-  getStudentDashboard: () => apiClient.get('/student/dashboard')
+// Example: recommendationsService.ts
+export const recommendationsService = {
+  getRecommendations: async (limit, minScore) => { ... },
+  refreshRecommendations: async () => { ... },
+  getRecommendationCount: async () => { ... },
 }
-
-// 2. Context layer (contexts/StudentDataContext.tsx)
-const fetchDashboardData = async () => {
-  const response = await dashboardService.getStudentDashboard()
-  setAdmissions(response.data.admissions)
-}
-
-// 3. Component layer (pages/student/StudentDashboard.tsx)
-const { admissions } = useStudentData()  // From context
 ```
-
-### Field Compatibility Layer
-Backend returns `user.role`, but we support both `role` and `user_type`:
-```typescript
-const userRole = user.role || user.user_type;
-```
-This pattern is applied throughout the codebase for resilience.
 
 ---
 
-## 📖 Documentation
+## 🧪 Testing
 
-### Essential Docs (Start Here)
-1. **[IMPLEMENTATION_STATUS_COMPLETE.md](IMPLEMENTATION_STATUS_COMPLETE.md)** - Latest implementation details
-2. **[FRONTEND_BACKEND_API_CONTRACT.md](FRONTEND_BACKEND_API_CONTRACT.md)** - Complete API specification
-3. **[FRONTEND_TODO_PRIORITIZED_LIST.md](FRONTEND_TODO_PRIORITIZED_LIST.md)** - Task roadmap
-
-### Reference Docs
-- **[STATUS_DASHBOARD.md](STATUS_DASHBOARD.md)** - Overall project status
-- **[QUICK_START_INTEGRATION.md](QUICK_START_INTEGRATION.md)** - Quick integration guide
-- **project-docs/** - Module specifications
-
----
-
-## ⚡ Development Workflow
-
-### Daily Development
+### Build Check
 ```bash
-# Start dev server
-pnpm dev
+pnpm build  # Check for build errors
+```
 
-# Type checking
-pnpm run type-check
+### Type Check
+```bash
+pnpm type-check  # Or: pnpm tsc --noEmit
+```
 
-# Build for production
+### Lint Check
+```bash
+pnpm lint
+```
+
+---
+
+## 📦 Build & Deployment
+
+### Production Build
+```bash
 pnpm build
-
-# Preview production build
-pnpm preview
+# Output: dist/
 ```
 
-### Testing
+### Preview Build
 ```bash
-# Open browser DevTools
-# 1. Network tab - verify API calls return 200
-# 2. Console - check for errors
-# 3. Application → Local Storage - verify auth-store exists
+pnpm preview
+# Serves dist/ locally at http://localhost:5173
 ```
 
-### Debugging API Calls
-1. Open DevTools → Network tab
-2. Make API request
-3. Click on request
-4. Check "Request Headers" - should see x-user-id, x-user-role
-5. Check "Response" - should see { success: true, data: {...} }
-
----
-
-## 🎯 Current Integration Status
-
-### ✅ Complete Features
-- [x] Authentication (sign in, sign up, sign out)
-- [x] Zustand auth store with persistence
-- [x] API client with automatic auth headers
-- [x] Student dashboard with real API data
-- [x] Role-based routing
-- [x] Session persistence
-- [x] Field compatibility (role vs user_type)
-
-### 🟡 Pending Features (Phase 2)
-- [ ] University dashboard integration (30 min)
-- [ ] Admin dashboard integration (20 min)
-- [ ] Notifications system (2-3 hours)
-- [ ] Deadlines management (2-3 hours)
-- [ ] Watchlists (2-3 hours)
-- [ ] Admissions list with filters (2-3 hours)
-- [ ] Search & pagination (1-2 hours)
-
-### 🔄 Future Enhancements (Phase 3-4)
-- [ ] User preferences (2-3 hours)
-- [ ] PDF upload (2 hours)
-- [ ] Changelogs (1-2 hours)
-- [ ] Error boundaries
-- [ ] Loading states
-- [ ] Mobile optimization
-- [ ] Real JWT authentication (Phase 4C)
-
----
-
-## 🤝 Contributing
-
-### Before You Start
-1. Read [IMPLEMENTATION_STATUS_COMPLETE.md](IMPLEMENTATION_STATUS_COMPLETE.md)
-2. Check [FRONTEND_TODO_PRIORITIZED_LIST.md](FRONTEND_TODO_PRIORITIZED_LIST.md) for tasks
-3. Understand the authentication flow and API integration pattern
-
-### Code Standards
-- **TypeScript:** Strict mode enabled
-- **Naming:** camelCase for functions/variables, PascalCase for components
-- **Components:** Functional components with hooks
-- **API calls:** Always use service layer
-- **Error handling:** Always use try-catch with graceful fallback
-- **Comments:** Document complex logic
-
-### Adding New Features
-```typescript
-// 1. Create service method (services/[domain]Service.ts)
-export const someService = {
-  fetchData: () => apiClient.get('/endpoint')
-}
-
-// 2. Update context if needed (contexts/[Domain]Context.tsx)
-const fetchData = async () => {
-  const response = await someService.fetchData()
-  setState(response.data)
-}
-
-// 3. Use in component (pages/[role]/[Page].tsx)
-const { data } = useSomeContext()
+### Deploy to Vercel
+```bash
+# Connect GitHub repo to Vercel
+# Set environment variables in Vercel dashboard
+# Automatic deployment on push
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 📝 Environment Variables
 
-### "403 Forbidden" on API calls
-**Cause:** User not authenticated or headers missing  
-**Fix:** Check `localStorage.auth-store` exists, verify headers in Network tab
+```env
+# API Configuration
+VITE_API_BASE_URL=http://localhost:3000
 
-### "Navigation not working after login"
-**Cause:** User role undefined  
-**Fix:** Check `user.role || user.user_type` compatibility pattern applied
+# Supabase Configuration
+VITE_SUPABASE_URL=https://...supabase.co
+VITE_SUPABASE_ANON_KEY=...
 
-### "TypeScript errors"
-**Cause:** Type mismatch or missing type definitions  
-**Fix:** Check `src/types/api.ts` for correct interfaces
-
-### "Blank dashboard"
-**Cause:** API call failed or data not mapping correctly  
-**Fix:** Check browser console for errors, verify API response structure
-
----
-
-## 📞 Support & Resources
-
-### Backend Team
-- API Documentation: `http://localhost:3000/api-docs` (Swagger UI)
-- Backend repo: [link to backend repo]
-- Contact: [backend team contact]
-
-### Frontend Resources
-- This README
-- [IMPLEMENTATION_STATUS_COMPLETE.md](IMPLEMENTATION_STATUS_COMPLETE.md) - Latest status
-- [FRONTEND_BACKEND_API_CONTRACT.md](FRONTEND_BACKEND_API_CONTRACT.md) - API spec
-- Browser DevTools (F12) - Your best friend
-
----
-
-## 📅 Timeline
-
-### Completed (Phase 1)
-- ✅ January 1-15: UI/UX development
-- ✅ January 16-22: Backend integration setup
-- ✅ January 23-27: Authentication + Student dashboard
-
-### Upcoming (Phase 2-4)
-- 🟡 January 28-February 3: University/Admin dashboards + core features
-- 🟡 February 4-10: Additional features (preferences, PDF, changelogs)
-- 🟡 February 11-17: Polish, testing, optimization
-- 🎯 **MVP Launch:** February 17-24, 2026
-
----
-
-## 🎓 Learning Resources
-
-### For New Developers
-1. **Understand the flow:** User → Component → Context → Service → API → Backend
-2. **Follow the pattern:** See StudentDataContext for reference implementation
-3. **Use TypeScript:** Let types guide you
-4. **Test frequently:** Browser DevTools is essential
-
-### Key Concepts
-- **React Context:** Shares state across components
-- **Zustand:** Persistent state with localStorage
-- **API Interceptor:** Automatically adds headers
-- **Service Layer:** Abstracts API calls from components
-
----
-
-## ✨ Credits
-
-**Frontend Development Team:**  
-[Your team members]
-
-**Backend Development Team:**  
-[Backend team members]
-
-**Project Lead:**  
-[Project lead name]
-
----
-
-**Last Updated:** January 27, 2026  
-**Version:** 1.0.0 (Phase 1 Complete)  
-**License:** [Your license]  
-**Repository:** e:\fyp\admission-times-frontend
-
----
-
-## 🚀 Next Steps
-
-**For Developers:**
-1. Read [IMPLEMENTATION_STATUS_COMPLETE.md](IMPLEMENTATION_STATUS_COMPLETE.md)
-2. Review [FRONTEND_TODO_PRIORITIZED_LIST.md](FRONTEND_TODO_PRIORITIZED_LIST.md)
-3. Pick a task from Phase 2
-4. Follow the implementation pattern
-5. Test thoroughly
-6. Submit PR
-
-**For Project Managers:**
-1. Review [STATUS_DASHBOARD.md](STATUS_DASHBOARD.md)
-2. Check progress against timeline
-3. Schedule Phase 2 kickoff
-4. Monitor integration milestones
-
-**Ready to code? Let's build this! 🚀**
-
----
-
-## React + Vite (Original Template Info)
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Optional
+VITE_DEBUG=false              # Enable debug logging
+VITE_MOCK_AUTH=false          # Mock auth for testing
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 🔗 Related Resources
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- **Backend**: [../admission-times-backend](../admission-times-backend)
+- **Mobile App**: [../AdmissionTimes-MobileApp](../AdmissionTimes-MobileApp)
+- **Full Documentation**: [project-docs/](project-docs/)
+
+---
+
+## 🚀 Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start development server |
+| `pnpm build` | Build for production |
+| `pnpm preview` | Preview production build |
+| `pnpm lint` | Run ESLint |
+| `pnpm type-check` | Type check with TypeScript |
+| `pnpm format` | Format code |
+
+---
+
+## 📖 Learning Resources
+
+- **React**: https://react.dev
+- **TypeScript**: https://www.typescriptlang.org
+- **Tailwind CSS**: https://tailwindcss.com
+- **Zustand**: https://github.com/pmndrs/zustand
+- **Vite**: https://vitejs.dev
+
+---
+
+## 📞 Support
+
+For issues or questions:
+1. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+2. Review [project-docs/](project-docs/)
+3. Check backend API docs: `http://localhost:3000/api-docs`
+
+---
+
+**Current Version:** 1.0.0  
+**Last Updated:** February 25, 2026  
+**Status:** Active Development

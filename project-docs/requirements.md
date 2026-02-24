@@ -1,7 +1,7 @@
 # Requirements & Features
 
-- Date: 2026-02-09
-- Status: Backend and frontend aligned for core domains
+- Date: 2026-02-18
+- Status: Backend and frontend aligned for core domains; docs synchronized for merge
 
 ## Core Requirements
 

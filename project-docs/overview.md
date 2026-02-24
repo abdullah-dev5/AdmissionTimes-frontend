@@ -1,7 +1,7 @@
 # Project Overview
 
-- Date: 2026-02-09
-- Status: Frontend and backend APIs aligned
+- Date: 2026-02-18
+- Status: Frontend and backend APIs aligned; docs synchronized for merge
 
 ## Vision
 

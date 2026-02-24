@@ -43,6 +43,7 @@ interface StudentStore {
   updateAdmission: (id: string, updates: Partial<StudentAdmission>) => void
   getAdmissionById: (id: string) => StudentAdmission | undefined
   getAdmissionsByIds: (ids: string[]) => StudentAdmission[]
+  fetchNotifications: (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => Promise<void>
   markNotificationRead: (id: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
   searchAdmissions: (filters?: {
@@ -415,6 +416,31 @@ export const useStudentStore = create<StudentStore>()(
       getAdmissionsByIds: (ids) => {
         const idSet = new Set(ids)
         return get().admissions.filter((admission) => idSet.has(admission.id))
+      },
+      
+      // Fetch Notifications from API
+      fetchNotifications: async (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => {
+        try {
+          set({ loading: true, error: null })
+          const response = await notificationsService.list({
+            role_type: 'student',
+            page: options?.page || 1,
+            limit: options?.limit || 50,
+          })
+          
+          if (response.data && Array.isArray(response.data)) {
+            // Transform API notifications to StudentNotification format
+            const transformedNotifications = response.data.map((notif: any) => transformNotification(notif))
+            set({ notifications: transformedNotifications })
+          }
+          
+          set({ loading: false })
+        } catch (err: any) {
+          console.error('❌ Failed to fetch notifications:', err)
+          const errorMsg = 'Failed to load notifications'
+          set({ error: errorMsg, loading: false })
+          options?.showError?.(errorMsg)
+        }
       },
       
       // Mark Notification Read

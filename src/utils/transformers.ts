@@ -14,13 +14,13 @@ import type { StudentAdmission, StudentNotification } from '../data/studentData'
 /**
  * Transform backend admission to frontend StudentAdmission format
  * 
- * @param backend - Backend admission data
+ * @param backend - Backend admission data (may include match_score and match_reason)
  * @param watchlist - Optional watchlist item for this admission
  * @param universityName - Optional university name (if not in admission)
  * @returns Transformed StudentAdmission object
  */
 export function transformAdmission(
-  backend: Admission,
+  backend: Admission & { match_score?: number; match_reason?: string },
   watchlist?: Watchlist,
   universityName?: string
 ): StudentAdmission {
@@ -38,6 +38,10 @@ export function transformAdmission(
       alert_opt_in: watchlist.alert_opt_in,
     });
   }
+  
+  // Map match score to match label and numeric value
+  const matchScore = backend.match_score || 0;
+  const matchLabel = getMatchLabel(matchScore);
   
   return {
     id: backend.id,
@@ -59,10 +63,12 @@ export function transformAdmission(
     programStatus: calculateProgramStatus(backend.deadline),
     updated: formatRelativeTime(backend.updated_at),
     daysRemaining: calculateDaysRemaining(backend.deadline),
+    match: matchLabel,
+    matchNumeric: matchScore,
     saved: !!watchlist,
     watchlistId: watchlist?.id,  // Store watchlist ID for delete operations
     alertEnabled: watchlist?.alert_opt_in || false,
-    aiSummary: backend.description || undefined,
+    aiSummary: backend.match_reason || backend.description || undefined,
     logoBg: '#1F2937', // Default logo background color
   };
 }
@@ -76,13 +82,13 @@ export function transformAdmission(
 export function transformNotification(backend: Notification): StudentNotification {
   return {
     id: backend.id,
-    type: mapNotificationType(backend.category),
+    type: mapNotificationType(backend.notification_type),
     title: backend.title,
     description: backend.message,
     time: backend.created_at,
     timeAgo: formatRelativeTime(backend.created_at),
     read: backend.is_read,
-    icon: getNotificationIcon(backend.category),
+    icon: getNotificationIcon(backend.notification_type),
     iconColor: getNotificationColor(backend.priority),
     admissionId: backend.related_entity_id || undefined,
   };
@@ -92,8 +98,11 @@ export function transformNotification(backend: Notification): StudentNotificatio
  * Map backend verification status to frontend status
  */
 function mapVerificationStatus(
-  status: string
+  status: string | null | undefined
 ): 'Verified' | 'Pending' | 'Updated' | 'Closed' {
+  if (!status) {
+    return 'Pending'; // Default to Pending if not provided
+  }
   const map: Record<string, 'Verified' | 'Pending' | 'Updated' | 'Closed'> = {
     verified: 'Verified',
     pending: 'Pending',
@@ -123,7 +132,10 @@ function mapRawVerificationStatus(
 /**
  * Calculate program status based on deadline
  */
-function calculateProgramStatus(deadline: string): 'Open' | 'Closing Soon' | 'Closed' {
+function calculateProgramStatus(deadline: string | null | undefined): 'Open' | 'Closing Soon' | 'Closed' {
+  if (!deadline) {
+    return 'Closed'; // Default to Closed if no deadline
+  }
   const daysRemaining = calculateDaysRemaining(deadline);
   if (daysRemaining < 0) return 'Closed';
   if (daysRemaining <= 7) return 'Closing Soon';
@@ -131,9 +143,24 @@ function calculateProgramStatus(deadline: string): 'Open' | 'Closing Soon' | 'Cl
 }
 
 /**
+ * Get match label from numeric score (0-100)
+ */
+function getMatchLabel(score: number): string {
+  if (score >= 90) return 'Excellent Match';
+  if (score >= 80) return 'High Match';
+  if (score >= 70) return 'Good Match';
+  if (score >= 60) return 'Fair Match';
+  if (score >= 50) return 'Match';
+  return '';
+}
+
+/**
  * Calculate days remaining until deadline
  */
-function calculateDaysRemaining(deadline: string): number {
+function calculateDaysRemaining(deadline: string | null | undefined): number {
+  if (!deadline) {
+    return -1; // Return -1 (past) if no deadline
+  }
   const deadlineDate = new Date(deadline);
   const now = new Date();
   const diffTime = deadlineDate.getTime() - now.getTime();
@@ -144,7 +171,10 @@ function calculateDaysRemaining(deadline: string): number {
 /**
  * Format date to human-readable string
  */
-function formatDate(dateString: string): string {
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return 'No deadline'; // Default if no date provided
+  }
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -156,7 +186,10 @@ function formatDate(dateString: string): string {
 /**
  * Format date to relative time string (e.g., "2 days ago")
  */
-function formatRelativeTime(dateString: string): string {
+function formatRelativeTime(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return 'Never'; // Default if no date provided
+  }
   const date = new Date(dateString);
   const now = new Date();
   const diffTime = now.getTime() - date.getTime();
@@ -178,7 +211,10 @@ function formatRelativeTime(dateString: string): string {
 /**
  * Format currency amount
  */
-function formatCurrency(amount: number): string {
+function formatCurrency(amount: number | null | undefined): string {
+  if (!amount) {
+    return 'Not specified'; // Default if no amount provided
+  }
   // For now, assume PKR currency
   // Can be enhanced to support multiple currencies
   return new Intl.NumberFormat('en-PK', {
@@ -191,7 +227,10 @@ function formatCurrency(amount: number): string {
 /**
  * Extract city from location string
  */
-function extractCity(location: string): string {
+function extractCity(location: string | null | undefined): string {
+  if (!location) {
+    return 'Unknown Location';
+  }
   const parts = location.split(',');
   return parts[parts.length - 2]?.trim() || location;
 }
@@ -199,7 +238,10 @@ function extractCity(location: string): string {
 /**
  * Map degree level to frontend degree type
  */
-function mapDegreeType(degreeLevel: string): 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA' | 'MD' | 'MPhil' {
+function mapDegreeType(degreeLevel: string | null | undefined): 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA' | 'MD' | 'MPhil' {
+  if (!degreeLevel) {
+    return 'BS'; // Default to Bachelor of Science if not provided
+  }
   const lower = degreeLevel.toLowerCase();
   const map: Record<string, 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA' | 'MD' | 'MPhil'> = {
     bachelor: 'BS',
@@ -226,34 +268,66 @@ function mapDegreeType(degreeLevel: string): 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA'
  * Map notification category to frontend type
  */
 function mapNotificationType(
-  category: string
+  notificationType: string | null | undefined
 ): 'alert' | 'system' | 'admission' {
+  if (!notificationType) {
+    return 'system'; // Default to system if not provided
+  }
   const map: Record<string, 'alert' | 'system' | 'admission'> = {
-    deadline: 'alert',
-    verification: 'admission',
-    system: 'system',
-    update: 'admission',
+    deadline_near: 'alert',
+    admission_submitted: 'admission',
+    admission_resubmitted: 'admission',
+    admission_verified: 'admission',
+    admission_rejected: 'admission',
+    admission_revision_required: 'admission',
+    admission_updated_saved: 'admission',
+    dispute_raised: 'admission',
+    system_broadcast: 'system',
+    system_error: 'system',
   };
-  return map[category.toLowerCase()] || 'system';
+  return map[notificationType.toLowerCase()] || 'system';
 }
 
 /**
  * Get notification icon based on category
+ * Returns SVG path data for rendering in notification icons
  */
-function getNotificationIcon(category: string): string {
+function getNotificationIcon(notificationType: string | null | undefined): string {
+  if (!notificationType) {
+    return 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'; // Default bell icon
+  }
   const map: Record<string, string> = {
-    deadline: '⏰',
-    verification: '✅',
-    system: '🔔',
-    update: '📢',
+    // Deadline near - clock icon
+    deadline_near: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z',
+    // Admission submitted - inbox icon
+    admission_submitted: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4',
+    // Admission resubmitted - refresh icon
+    admission_resubmitted: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+    // Admission verified - check circle icon
+    admission_verified: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    // Admission rejected - x circle icon
+    admission_rejected: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
+    // Admission revision required - pencil icon
+    admission_revision_required: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
+    // Admission updated - speaker icon
+    admission_updated_saved: 'M11 5.882V19.24a1.961 1.961 0 01-1.936-1.954V5.882m0 0a1.961 1.961 0 011.936-1.954h6.128a1.961 1.961 0 011.936 1.954m0 0A1.966 1.966 0 0120 5.882v12.358A1.966 1.966 0 0118.128 20H6.128A1.966 1.966 0 014 18.24V5.882m16 0A1.966 1.966 0 0019.964 3.88V1.96a1.961 1.961 0 00-1.936-1.954h-6.128a1.961 1.961 0 00-1.936 1.954v1.92m0 0A1.966 1.966 0 004 5.882',
+    // Dispute raised - exclamation icon
+    dispute_raised: 'M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    // System broadcast - speaker volume icon
+    system_broadcast: 'M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728m-.9-1.425a7 7 0 010-9.9m1.31-2.567a11 11 0 010 15.456M3.05 11a7 7 0 009.9 0M5.555 7.555A11 11 0 0015.455 17m-2.333-2.333A7 7 0 005.888 7.888',
+    // System error - x icon
+    system_error: 'M6 18L18 6M6 6l12 12',
   };
-  return map[category.toLowerCase()] || '🔔';
+  return map[notificationType.toLowerCase()] || 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9';
 }
 
 /**
  * Get notification color based on priority
  */
-function getNotificationColor(priority: string): string {
+function getNotificationColor(priority: string | null | undefined): string {
+  if (!priority) {
+    return 'text-gray-600'; // Default color if not provided
+  }
   const map: Record<string, string> = {
     urgent: 'text-red-600',
     high: 'text-orange-600',

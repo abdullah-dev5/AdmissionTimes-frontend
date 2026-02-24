@@ -94,13 +94,12 @@ function StudentDashboard() {
 
   // Get recommended programs (high match, open status, not past deadline)
   const recommendedPrograms = useMemo(() => {
+    // Use backend recommendations if available (from dashboard data)
+    // These are smart collaborative filtering recommendations
     return admissions
-      .filter(a => {
-        const daysRemaining = calculateDaysRemaining(a.deadline)
-        return a.matchNumeric && a.matchNumeric >= 85 && daysRemaining >= 0 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
-      })
+      .filter(a => a.matchNumeric && a.matchNumeric >= 50) // Filter by match score from backend
       .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
-      .slice(0, 4)
+      .slice(0, 10) // Show up to 10 recommendations
   }, [admissions])
 
   // Get upcoming deadlines for sidebar (with dynamic calculation)
@@ -273,54 +272,91 @@ function StudentDashboard() {
               <div className="lg:col-span-2">
                 <div className="mb-4">
                   <h2 className="text-2xl font-bold mb-1" style={{ color: '#111827' }}>Recommended for You</h2>
-                  <p className="text-sm text-gray-600">AI-powered suggestions based on your interests.</p>
+                  <p className="text-sm text-gray-600">Smart suggestions based on students with similar interests.</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recommendedPrograms.map((admission) => {
-                    const statusColors = getStatusColor(admission.programStatus)
-                    return (
-                      <Link
-                        to={`/program/${admission.id}`}
-                        key={admission.id}
-                        className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md cursor-pointer transition-all relative"
-                      >
-                        {/* Updated Tag */}
-                        {admission.status === 'Updated' && (
-                          <div className="absolute top-4 right-4 z-10">
-                            <UpdatedBadge size="sm" showTime={false} />
-                          </div>
-                        )}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-start gap-3 flex-1">
-                            <div className="w-10 h-10 rounded flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>
-                              {admission.universityLogo ? (
-                                <img src={admission.universityLogo} alt={admission.university} className="w-full h-full object-cover" />
-                              ) : (
-                                admission.university.substring(0, 2).toUpperCase()
+                {recommendedPrograms.length === 0 ? (
+                  <div className="bg-white rounded-lg p-8 border border-gray-200 text-center">
+                    <div className="text-gray-400 mb-3">
+                      <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">No recommendations yet</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Add programs to your watchlist to get personalized recommendations!
+                    </p>
+                    <button 
+                      onClick={() => navigate('/student/admissions')}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Browse Programs
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {recommendedPrograms.map((admission) => {
+                      const statusColors = getStatusColor(admission.programStatus)
+                      const scoreColor = 
+                        (admission.matchNumeric || 0) >= 80 ? '#10B981' : 
+                        (admission.matchNumeric || 0) >= 70 ? '#3B82F6' : 
+                        (admission.matchNumeric || 0) >= 60 ? '#F59E0B' : '#6B7280';
+                      const scoreBg = 
+                        (admission.matchNumeric || 0) >= 80 ? '#D1FAE5' : 
+                        (admission.matchNumeric || 0) >= 70 ? '#DBEAFE' : 
+                        (admission.matchNumeric || 0) >= 60 ? '#FEF3C7' : '#F3F4F6';
+                      
+                      return (
+                        <Link
+                          to={`/program/${admission.id}`}
+                          key={admission.id}
+                          className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md cursor-pointer transition-all relative"
+                        >
+                          {/* Updated Tag */}
+                          {admission.status === 'Updated' && (
+                            <div className="absolute top-4 right-4 z-10">
+                              <UpdatedBadge size="sm" showTime={false} />
+                            </div>
+                          )}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-start gap-3 flex-1">
+                              <div className="w-10 h-10 rounded flex items-center justify-center text-white font-semibold text-xs flex-shrink-0 overflow-hidden" style={{ backgroundColor: admission.logoBg }}>
+                                {admission.universityLogo ? (
+                                  <img src={admission.universityLogo} alt={admission.university} className="w-full h-full object-cover" />
+                                ) : (
+                                  admission.university.substring(0, 2).toUpperCase()
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-semibold mb-1 text-lg" style={{ color: '#111827' }}>{admission.program}</h3>
+                                <p className="text-sm text-gray-600">{admission.university}</p>
+                                {admission.universityCity && (
+                                  <p className="text-xs text-gray-500">{admission.universityCity}, {admission.universityCountry}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-sm font-bold px-2 py-1 rounded" style={{ color: scoreColor, backgroundColor: scoreBg }}>
+                                {admission.matchNumeric || 0}%
+                              </span>
+                              {admission.match && (
+                                <span className="text-xs text-gray-500">{admission.match}</span>
                               )}
                             </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold mb-1 text-lg" style={{ color: '#111827' }}>{admission.program}</h3>
-                              <p className="text-sm text-gray-600">{admission.university}</p>
-                              {admission.universityCity && (
-                                <p className="text-xs text-gray-500">{admission.universityCity}, {admission.universityCountry}</p>
-                              )}
-                            </div>
                           </div>
-                          <span className="text-sm font-medium px-2 py-1 rounded" style={{ color: '#10B981', backgroundColor: '#D1FAE5' }}>
-                            {getMatchLabel(admission.matchNumeric)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                          <span className="text-xs font-medium px-3 py-1 rounded-full" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-                            {admission.programStatus}
-                          </span>
-                          <p className="text-xs text-gray-600">Deadline: {admission.deadlineDisplay}</p>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
+                          {admission.aiSummary && (
+                            <p className="text-xs text-gray-600 mb-3 line-clamp-2">{admission.aiSummary}</p>
+                          )}
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                            <span className="text-xs font-medium px-3 py-1 rounded-full" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+                              {admission.programStatus}
+                            </span>
+                            <p className="text-xs text-gray-600">Deadline: {admission.deadlineDisplay}</p>
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-6">

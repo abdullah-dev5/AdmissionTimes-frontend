@@ -82,7 +82,7 @@ export interface ChangeLogItem {
 }
 
 export interface NotificationItem {
-	id: number
+	id: number | string
 	title: string
 	message: string
 	type: "Admin Feedback" | "System Alert" | "Data Update"

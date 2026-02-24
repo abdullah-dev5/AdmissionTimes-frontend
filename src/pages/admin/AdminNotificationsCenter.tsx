@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
 import { adminService } from "../../services/adminService"
-import { adminNotifications, type NotificationType } from "../../data/adminData"
+import { type NotificationType } from "../../data/adminData"
+import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
 
 function AdminNotificationsCenter() {
 	const [activeTab, setActiveTab] = useState<NotificationType | "All">("All")
@@ -9,6 +10,7 @@ function AdminNotificationsCenter() {
 	const [apiNotifications, setApiNotifications] = useState<any[]>([])
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [showBroadcastModal, setShowBroadcastModal] = useState(false)
 
 	// Fetch notifications on mount
 	useEffect(() => {
@@ -16,31 +18,45 @@ function AdminNotificationsCenter() {
 	}, [])
 
 	/**
-	 * Fetch admin notifications from API
+	 * Fetch admin notifications from real API
+	 * NOTE: This fetches from the backend API, not mock data
+	 * The backend endpoint is: GET /api/v1/notifications (auto-scoped to admin role)
 	 */
 	const fetchNotifications = async () => {
 		try {
 			setLoading(true)
 			setError(null)
-			const response = await adminService.getNotifications(1, 100)
-			console.log('🔵 [AdminNotificationsCenter] Fetched notifications:', response.data)
+			console.log('📡 [AdminNotificationsCenter] Fetching real notifications from API...')
 			
+			const response = await adminService.getNotifications(1, 100)
+			console.log('✅ [AdminNotificationsCenter] API response received:', response)
+			
+			// Extract data from response (handle various response formats)
+			let notifications: any[] = []
 			if (Array.isArray(response.data)) {
-				setApiNotifications(response.data)
-			} else if (Array.isArray(response.data?.data)) {
-				setApiNotifications(response.data.data)
+				notifications = response.data
+			} else if (response.data?.data && Array.isArray(response.data.data)) {
+				notifications = response.data.data
+			}
+			
+			console.log(`✅ [AdminNotificationsCenter] Extracted ${notifications.length} notifications from API response`)
+			setApiNotifications(notifications)
+			
+			if (notifications.length === 0) {
+				console.log('⚠️  [AdminNotificationsCenter] API returned 0 notifications - check if data exists in DB')
 			}
 		} catch (err: any) {
-			console.error('🔴 [AdminNotificationsCenter] Error fetching notifications:', err)
-			setError(err.message || 'Failed to fetch notifications')
-			// Will fallback to mock data
+			console.error('❌ [AdminNotificationsCenter] Error fetching from API:', err)
+			setError(`API Error: ${err.message || 'Failed to fetch notifications'}`)
+			// Do not fallback to mock data - show error to user
+			setApiNotifications([])
 		} finally {
 			setLoading(false)
 		}
 	}
 
-	// Use API data if available, otherwise use mock data
-	const notificationsToUse = apiNotifications.length > 0 ? apiNotifications : adminNotifications
+	// Use only API data - no mock fallback
+	const notificationsToUse = apiNotifications
 
 	// Filter notifications based on tab and unread filter
 	const filteredNotifications = useMemo(() => {
@@ -49,15 +65,18 @@ function AdminNotificationsCenter() {
 		// Filter by type (if type field exists)
 		if (activeTab !== "All") {
 			filtered = filtered.filter((notif) => {
-				// Support both 'type' and 'category' fields
-				const notifType = notif.type || notif.category
+				// Support API and mock fields
+				const notifType = notif.notification_type || notif.type
 				return notifType === activeTab
 			})
 		}
 
 		// Filter by unread status
 		if (unreadOnly) {
-			filtered = filtered.filter((notif) => !notif.is_read)
+			filtered = filtered.filter((notif) => {
+				const isRead = typeof notif.is_read === "boolean" ? notif.is_read : !notif.unread
+				return !isRead
+			})
 		}
 
 		// Sort by timestamp (newest first)
@@ -98,7 +117,7 @@ function AdminNotificationsCenter() {
 
 	const getNotificationIcon = (type: NotificationType) => {
 		switch (type) {
-			case "verification_update":
+			case "admission_verified":
 				return (
 					<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -109,7 +128,7 @@ function AdminNotificationsCenter() {
 						/>
 					</svg>
 				)
-			case "university_upload":
+			case "admission_submitted":
 				return (
 					<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -120,7 +139,7 @@ function AdminNotificationsCenter() {
 						/>
 					</svg>
 				)
-			case "system_alert":
+			case "system_broadcast":
 				return (
 					<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -131,7 +150,7 @@ function AdminNotificationsCenter() {
 						/>
 					</svg>
 				)
-			case "scraper_alert":
+			case "system_error":
 				return (
 					<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -147,13 +166,13 @@ function AdminNotificationsCenter() {
 
 	const getNotificationIconColor = (type: NotificationType) => {
 		switch (type) {
-			case "verification_update":
+			case "admission_verified":
 				return "#10B981" // Green
-			case "university_upload":
+			case "admission_submitted":
 				return "#2563EB" // Blue
-			case "system_alert":
+			case "system_broadcast":
 				return "#F59E0B" // Yellow/Orange
-			case "scraper_alert":
+			case "system_error":
 				return "#8B5CF6" // Purple
 			default:
 				return "#6B7280" // Gray
@@ -161,7 +180,10 @@ function AdminNotificationsCenter() {
 	}
 
 	const unreadCount = useMemo(() => {
-		return notificationsToUse.filter((n) => !n.is_read).length
+		return notificationsToUse.filter((n) => {
+			const isRead = typeof n.is_read === "boolean" ? n.is_read : !n.unread
+			return !isRead
+		}).length
 	}, [notificationsToUse])
 
 	return (
@@ -178,16 +200,25 @@ function AdminNotificationsCenter() {
 				{/* Error Banner */}
 				{error && (
 					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-						<p className="text-sm text-red-800">{error}</p>
-						<button
-							onClick={() => setError(null)}
-							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
-						>
-							Dismiss
-						</button>
-					</div>
-				)}
+					<p className="text-sm text-red-800"><strong>API Error:</strong> {error}</p>
+					<button
+						onClick={() => setError(null)}
+						className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+					>
+						Dismiss
+					</button>
+				</div>
+			)}
 
+
+
+			{!error && apiNotifications.length > 0 && (
+				<div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+					<p className="text-sm text-green-800">
+						<strong>✅ Real Data:</strong> Showing {apiNotifications.length} real notifications from the API.
+					</p>
+				</div>
+			)}
 				{/* Loading Indicator */}
 				{loading && (
 					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -200,17 +231,17 @@ function AdminNotificationsCenter() {
 					<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 						{/* Tabs */}
 						<div className="flex items-center gap-2 flex-wrap">
-							{(["All", "verification_update", "university_upload", "system_alert", "scraper_alert"] as const).map((tab) => {
+							{(["All", "admission_verified", "admission_submitted", "system_broadcast", "system_error"] as const).map((tab) => {
 								const tabLabel =
 									tab === "All"
 										? "All"
-										: tab === "verification_update"
-											? "Verification Updates"
-											: tab === "university_upload"
-												? "University Uploads"
-												: tab === "system_alert"
-													? "System Alerts"
-													: "Scraper Alerts"
+										: tab === "admission_verified"
+											? "Verified Admissions"
+										: tab === "admission_submitted"
+											? "New Submissions"
+										: tab === "system_broadcast"
+											? "System Broadcasts"
+										: "System Errors"
 								return (
 									<button
 										key={tab}
@@ -228,6 +259,26 @@ function AdminNotificationsCenter() {
 
 						{/* Action Controls */}
 						<div className="flex items-center gap-4">
+							{/* Broadcast Button */}
+							<button
+								onClick={() => setShowBroadcastModal(true)}
+								className="px-4 py-2 text-sm font-medium rounded-lg text-white cursor-pointer transition-colors"
+								style={{ backgroundColor: "#004AAD" }}
+								title="Send broadcast notification to users"
+							>
+								📢 Broadcast
+							</button>
+
+							{/* Refresh Button */}
+							<button
+								onClick={fetchNotifications}
+								disabled={loading}
+								className="px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+								title="Refresh notifications from the API"
+							>
+								{loading ? '⟳ Refreshing...' : '⟳ Refresh'}
+							</button>
+
 							{/* Unread Only Toggle */}
 							<div className="flex items-center gap-2">
 								<label className="text-sm text-gray-600 cursor-pointer" htmlFor="unread-only">
@@ -264,12 +315,17 @@ function AdminNotificationsCenter() {
 				<div className="space-y-4">
 					{filteredNotifications.length > 0 ? (
 						filteredNotifications.map((notification) => {
-							const iconColor = getNotificationIconColor(notification.type)
+							const normalizedType = notification.notification_type || notification.type
+							const isRead = typeof notification.is_read === "boolean" ? notification.is_read : !notification.unread
+							const timeLabel =
+								notification.timeAgo ||
+								new Date(notification.created_at || notification.timestamp).toLocaleString()
+							const iconColor = getNotificationIconColor(normalizedType)
 							return (
 								<div
 									key={notification.id}
 									className={`bg-white rounded-lg shadow-sm p-6 border-l-4 ${
-										notification.unread ? "border-blue-500" : "border-gray-200"
+										!isRead ? "border-blue-500" : "border-gray-200"
 									}`}
 								>
 									<div className="flex items-start gap-4">
@@ -278,7 +334,7 @@ function AdminNotificationsCenter() {
 											className="flex-shrink-0 p-3 rounded-lg"
 											style={{ backgroundColor: `${iconColor}15`, color: iconColor }}
 										>
-											{getNotificationIcon(notification.type)}
+											{getNotificationIcon(normalizedType)}
 										</div>
 
 										{/* Content */}
@@ -288,19 +344,19 @@ function AdminNotificationsCenter() {
 													<div className="flex items-center gap-2 mb-1">
 														<h3
 															className={`text-base font-semibold ${
-																notification.unread ? "" : "text-gray-500"
+																!isRead ? "" : "text-gray-500"
 															}`}
-															style={notification.unread ? { color: "#111827" } : {}}
+															style={!isRead ? { color: "#111827" } : {}}
 														>
 															{notification.title}
 														</h3>
-														{notification.unread && (
+														{!isRead && (
 															<div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#2563EB" }}></div>
 														)}
 													</div>
 													<p className="text-sm text-gray-600 mb-2">{notification.message}</p>
 													<div className="flex items-center gap-4 text-xs text-gray-500">
-														<span>{notification.timeAgo}</span>
+														<span>{timeLabel}</span>
 														{notification.university && (
 															<span className="flex items-center gap-1">
 																<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -319,7 +375,7 @@ function AdminNotificationsCenter() {
 
 												{/* Status Badge */}
 												<div className="flex-shrink-0 ml-4">
-													{notification.unread ? (
+													{!isRead ? (
 														<span
 															className="px-2 py-1 rounded-full text-xs font-medium"
 															style={{ backgroundColor: "#DBEAFE", color: "#2563EB" }}
@@ -338,7 +394,7 @@ function AdminNotificationsCenter() {
 											</div>
 
 											{/* Actions */}
-											{notification.unread && (
+											{!isRead && (
 												<div className="mt-4 pt-4 border-t border-gray-100">
 													<button
 														onClick={() => handleMarkAsRead(notification.id)}
@@ -374,12 +430,29 @@ function AdminNotificationsCenter() {
 								{unreadOnly
 									? "You have no unread notifications."
 									: activeTab !== "All"
-										? `No notifications found for ${activeTab === "verification_update" ? "Verification Updates" : activeTab === "university_upload" ? "University Uploads" : activeTab === "system_alert" ? "System Alerts" : "Scraper Alerts"}.`
+										? `No notifications found for ${
+											activeTab === "admission_verified" ? "Verified Admissions"
+											: activeTab === "admission_submitted" ? "New Submissions"
+											: activeTab === "system_broadcast" ? "System Broadcasts"
+											: activeTab === "system_error" ? "System Errors"
+											: "this category"
+										}.`
 										: "You're all caught up!"}
 							</p>
 						</div>
 					)}
 				</div>
+
+				{/* Broadcast Modal */}
+				{showBroadcastModal && (
+					<AdminBroadcastModal
+						onClose={() => setShowBroadcastModal(false)}
+						onSuccess={() => {
+							// Refresh notifications after successful broadcast
+							fetchNotifications()
+						}}
+					/>
+				)}
 			</div>
 		</AdminLayout>
 	)

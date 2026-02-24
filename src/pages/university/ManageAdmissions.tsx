@@ -13,7 +13,7 @@ function ManageAdmissions() {
   const isEditMode = !!editId
 
   const { user } = useAuth()
-  const universityId = user?.organization_id || user?.university_id || user?.id || null
+  const universityId = user?.university_id || user?.id || null
   const admissions = useUniversityStore((state) => state.admissions)
   const getAdmissionById = useUniversityStore((state) => state.getAdmissionById)
   const createOrUpdateAdmission = useUniversityStore((state) => state.createOrUpdateAdmission)
@@ -304,7 +304,7 @@ function ManageAdmissions() {
   const recentAdmissions = useMemo(() => {
     return [...admissions]
       .sort((a, b) => (b.lastAction || '').localeCompare(a.lastAction || ''))
-      // Show all admissions for this university, not just 3
+      .slice(0, 5)
   }, [admissions])
 
   const handleEditRecent = (id: string) => {

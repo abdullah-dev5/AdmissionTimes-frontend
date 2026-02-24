@@ -130,10 +130,10 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
 
   // Transform recent_notifications to NotificationItem objects
   const notifications: NotificationItem[] = (data.recent_notifications || []).map((notif: any, index: number) => ({
-    id: index + 1,
+    id: notif.id || index + 1,
     title: notif.title || 'Notification',
     message: notif.message || '',
-    type: mapNotificationCategory(notif.category || notif.type),
+    type: mapNotificationCategory(notif.notification_type || notif.type),
     time: notif.created_at || new Date().toISOString(),
     read: notif.is_read || false,
     admissionId: notif.related_entity_id,
@@ -171,14 +171,20 @@ function mapVerificationStatusToAdmissionStatus(status: string): 'Active' | 'Ver
  * @param category - Backend notification category
  * @returns Frontend notification type
  */
-function mapNotificationCategory(category: string): 'Admin Feedback' | 'System Alert' | 'Data Update' {
-  const categoryMap: Record<string, any> = {
-    'verification': 'Admin Feedback',
-    'deadline': 'System Alert',
-    'system': 'System Alert',
-    'update': 'Data Update',
+function mapNotificationCategory(notificationType: string): 'Admin Feedback' | 'System Alert' | 'Data Update' {
+  const typeMap: Record<string, any> = {
+    admission_submitted: 'Admin Feedback',
+    admission_resubmitted: 'Admin Feedback',
+    admission_verified: 'Admin Feedback',
+    admission_rejected: 'Admin Feedback',
+    admission_revision_required: 'Admin Feedback',
+    dispute_raised: 'Admin Feedback',
+    admission_updated_saved: 'Data Update',
+    deadline_near: 'System Alert',
+    system_broadcast: 'System Alert',
+    system_error: 'System Alert',
   };
-  return categoryMap[category?.toLowerCase()] || 'System Alert';
+  return typeMap[notificationType?.toLowerCase()] || 'System Alert';
 }
 
 /**

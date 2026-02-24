@@ -127,6 +127,26 @@ export const adminService = {
   },
 
   /**
+   * Request revision for an admission
+   *
+   * POST /api/v1/admin/admissions/:id/revision-required
+   *
+   * @param admissionId - Admission ID
+   * @param reason - Revision reason/notes
+   * @returns Promise resolving to updated admission
+   */
+  requestRevision: async (
+    admissionId: string,
+    reason: string
+  ): Promise<ApiResponse<AdminAdmission>> => {
+    console.log('🟠 [adminService] Requesting revision:', admissionId);
+    const response = await apiClient.post(`/admin/admissions/${admissionId}/revision-required`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  /**
    * Mark admission as verified
    * Convenience method that calls verifyAdmission with status='verified'
    * 
@@ -230,7 +250,6 @@ export const adminService = {
   getNotifications: async (page: number = 1, limit: number = 20): Promise<ApiResponse<any>> => {
     const response = await apiClient.get('/notifications', {
       params: {
-        user_type: 'admin',
         page,
         limit,
       },
