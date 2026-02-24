@@ -41,13 +41,6 @@ const initialState = {
   error: null,
 }
 
-const normalizeUser = (user: User): User => {
-  if (user.role === 'university' && !user.organization_id && user.university_id) {
-    return { ...user, organization_id: user.university_id }
-  }
-  return user
-}
-
 export const useAuthStore = create<AuthStoreState>()(
   persist(
     (set, get) => ({
@@ -68,11 +61,11 @@ export const useAuthStore = create<AuthStoreState>()(
           if (session?.access_token) {
             // Get current user from API using JWT
             const response = await authService.getCurrentUser()
-            const userData = normalizeUser(response.data)
+            const userData = response.data
 
             console.log('🔐 [AuthStore] checkAuth - User data:', userData)
             if (userData.role !== 'student') {
-              console.log('🔐 [AuthStore] checkAuth - organization_id:', userData.organization_id)
+              console.log('🔐 [AuthStore] checkAuth - university_id:', userData.university_id)
             }
 
             set({ user: userData, isAuthenticated: true })
@@ -112,11 +105,11 @@ export const useAuthStore = create<AuthStoreState>()(
 
           // Fetch user from backend
           const response = await authService.getCurrentUser()
-          const userData = normalizeUser(response.data)
+          const userData = response.data
 
           console.log('🔐 [AuthStore] User data received:', userData)
           if (userData.role !== 'student') {
-            console.log('🔐 [AuthStore] organization_id:', userData.organization_id)
+            console.log('🔐 [AuthStore] university_id:', userData.university_id)
           }
           console.log('🔐 [AuthStore] role:', userData.role)
 

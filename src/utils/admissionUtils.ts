@@ -147,6 +147,27 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
 }
 
 /**
+ * Convert date from yyyy-MM-dd format to ISO8601 datetime (end of day)
+ * Used to convert HTML date inputs to backend-compatible ISO8601 format
+ * 
+ * @param dateString - Date in yyyy-MM-dd format or ISO8601 format
+ * @returns ISO8601 datetime string or undefined
+ */
+function convertDateToIso8601(dateString: string | undefined): string | undefined {
+  if (!dateString) return undefined
+  
+  // If already in ISO format with time, return as-is
+  if (dateString.includes('T')) return dateString
+  
+  // Convert yyyy-MM-dd to yyyy-MM-ddT23:59:59Z (end of day in UTC)
+  if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return `${dateString}T23:59:59Z`
+  }
+  
+  return dateString
+}
+
+/**
  * Transform frontend Admission format to backend API format
  * Maps all 25 frontend fields to backend database fields
  * 
@@ -185,9 +206,9 @@ export function transformAdmissionToApi(
     tuition_fee: frontendAdmission.tuition_fee ? parseFloat(frontendAdmission.tuition_fee) : undefined,
     currency: frontendAdmission.currency,
     
-    // Important dates
-    deadline: frontendAdmission.deadline,
-    start_date: frontendAdmission.start_date,
+    // Important dates - convert to ISO8601 format
+    deadline: convertDateToIso8601(frontendAdmission.deadline),
+    start_date: convertDateToIso8601(frontendAdmission.start_date),
     
     // Description
     description: frontendAdmission.overview,

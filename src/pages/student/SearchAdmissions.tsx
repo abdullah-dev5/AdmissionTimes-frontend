@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
@@ -6,7 +6,6 @@ import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
-import { supabase } from '../../services/supabase'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 
@@ -36,28 +35,6 @@ function SearchAdmissions() {
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
   const [sortBy, setSortBy] = useState('Relevance')
   const [compareIds, setCompareIds] = useState<string[]>([])
-
-  // DEBUG: Check what's in database
-  useEffect(() => {
-    const checkDB = async () => {
-      console.log('🔍 [DEBUG] Direct database check...');
-      const { data, error, count } = await supabase
-        .from('admissions')
-        .select('id, title, verification_status, is_active', { count: 'exact' })
-        .limit(10);
-      
-      console.log('🔍 [DEBUG] Total rows in admissions table:', count);
-      console.log('🔍 [DEBUG] Sample records:', data);
-      if (error) console.error('🔍 [DEBUG] Database error:', error);
-      
-      if (data && data.length > 0) {
-        const verified = data.filter(a => a.verification_status === 'verified').length;
-        const active = data.filter(a => a.is_active).length;
-        console.log(`🔍 [DEBUG] Verified: ${verified}, Active: ${active}`);
-      }
-    };
-    checkDB();
-  }, []);
 
   const savedIds = useMemo(() => admissions.filter(a => a.saved).map(a => a.id), [admissions])
 

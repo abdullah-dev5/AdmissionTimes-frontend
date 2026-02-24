@@ -15,10 +15,15 @@ import type { ApiResponse, PaginatedResponse, Deadline } from '../types/api';
 
 export const deadlinesService = {
   // ============================================================
-  // DIRECT SUPABASE QUERIES (Phase 1 - Fast Read Operations)
+  // DIRECT SUPABASE QUERIES (Phase 1 - DEPRECATED)
+  // ============================================================
+  // @deprecated - These methods make direct Supabase calls
+  // Use the backend API methods below instead
+  // Timeline: Phase 2 (next sprint) will remove these entirely
   // ============================================================
 
   /**
+   * @deprecated Use list() instead
    * List deadlines directly from Supabase (Phase 1)
    * 
    * @param params - Filter and pagination params
@@ -33,6 +38,7 @@ export const deadlinesService = {
     data: Deadline[];
     count: number;
   }> => {
+    console.warn('⚠️  listDirect is deprecated. Use list() instead.');
     try {
       let query = supabase.from('deadlines').select('*', { count: 'exact' });
 
@@ -63,12 +69,14 @@ export const deadlinesService = {
   },
 
   /**
+   * @deprecated Use getById() instead
    * Get deadline by ID directly from Supabase (Phase 1)
    * 
    * @param id - Deadline ID
    * @returns Promise resolving to deadline
    */
   getByIdDirect: async (id: string): Promise<Deadline> => {
+    console.warn('⚠️  getByIdDirect is deprecated. Use getById() instead.');
     try {
       const { data, error } = await supabase
         .from('deadlines')
@@ -85,12 +93,14 @@ export const deadlinesService = {
   },
 
   /**
+   * @deprecated Use getUpcoming() instead
    * Get upcoming deadlines directly from Supabase (Phase 1)
    * 
    * @param days - Days ahead to look (default: 7)
    * @returns Promise resolving to upcoming deadlines
    */
   getUpcomingDirect: async (days: number = 7): Promise<Deadline[]> => {
+    console.warn('⚠️  getUpcomingDirect is deprecated. Use getUpcoming() instead.');
     try {
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + days);
@@ -111,15 +121,18 @@ export const deadlinesService = {
   },
 
   /**
+   * @deprecated Use getUserDeadlines() instead
    * Get urgent deadlines (Phase 1)
    * 
    * @returns Promise resolving to urgent deadlines (within 3 days)
    */
   getUrgentDirect: async (): Promise<Deadline[]> => {
+    console.warn('⚠️  getUrgentDirect is deprecated. Use getUrgent() instead.');
     return deadlinesService.getUpcomingDirect(3);
   },
 
   /**
+   * @deprecated Use getUserDeadlines() instead
    * Get deadlines for user's watchlist items (Phase 1)
    * 
    * NOTE: Deadlines don't have user_id - they're linked via:
@@ -133,6 +146,7 @@ export const deadlinesService = {
     userId: string,
     alertOptIn: boolean = true
   ): Promise<Deadline[]> => {
+    console.warn('⚠️  getUserDeadlinesDirect is deprecated. Use getUserDeadlines() instead.');
     try {
       // First get user's watchlist admission IDs
       let watchlistQuery = supabase
@@ -222,6 +236,28 @@ export const deadlinesService = {
    */
   getUrgent: async (): Promise<ApiResponse<Deadline[]>> => {
     const response = await apiClient.get('/deadlines/urgent');
+    return response.data;
+  },
+
+  /**
+   * Get current user's upcoming deadlines with  admission and university details
+   * ✅ Uses backend API (replaces getUserDeadlinesDirect - Phase 1)
+   * 
+   * @param days - Number of days to look ahead (default: 7)
+   * @param alertOptIn - Only include deadlines with alerts enabled (default: true)
+   * @param page - Page number (default: 1)
+   * @param limit - Items per page (default: 20)
+   * @returns Promise resolving to paginated deadlines with enriched data
+   */
+  getUserDeadlines: async (
+    days: number = 7,
+    alertOptIn: boolean = true,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<PaginatedResponse<any>> => {
+    const response = await apiClient.get('/users/me/upcoming-deadlines', {
+      params: { days, alert_enabled: alertOptIn, page, limit }
+    });
     return response.data;
   },
 };

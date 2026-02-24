@@ -85,9 +85,28 @@ export function UpdateNotificationToast({
 		"Manual Edit": { bg: "#FFF4E6", border: "#CC6600" },
 		"Admin Edit": { bg: "#F0E6FF", border: "#7700CC" },
 		"Scraper Update": { bg: "#D1E7FF", border: "#0055CC" },
-	}
+	} as const
 
-	const style = typeStyles[change_type]
+	const normalizedChangeType = (() => {
+		if (change_type in typeStyles) {
+			return change_type
+		}
+
+		const value = String(change_type).toLowerCase()
+		if (["verify", "verified", "reject", "rejected", "dispute", "disputed", "admin_edit", "admin edit"].includes(value)) {
+			return "Admin Edit" as const
+		}
+		if (["scraper", "scraper_update", "scraper update", "system"].includes(value)) {
+			return "Scraper Update" as const
+		}
+		if (["manual", "manual_edit", "manual edit"].includes(value)) {
+			return "Manual Edit" as const
+		}
+
+		return "Manual Edit" as const
+	})()
+
+	const style = typeStyles[normalizedChangeType]
 
 	return (
 		<div

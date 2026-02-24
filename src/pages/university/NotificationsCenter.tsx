@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type NotificationItem } from "../../data/universityData"
@@ -31,10 +31,14 @@ function NotificationTabs({
 	active,
 	onChange,
 	onMarkAll,
+	onRefresh,
+	isLoading,
 }: {
 	active: "All" | NotificationType
 	onChange: (tab: "All" | NotificationType) => void
 	onMarkAll: () => void
+	onRefresh: () => void
+	isLoading: boolean
 }) {
 	return (
 		<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -51,9 +55,24 @@ function NotificationTabs({
 					</button>
 				))}
 			</div>
-			<button onClick={onMarkAll} className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
-				Mark All as Read
-			</button>
+			<div className="flex gap-2">
+				<button 
+					onClick={onMarkAll} 
+					className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+				>
+					Mark All as Read
+				</button>
+				<button 
+					onClick={onRefresh}
+					disabled={isLoading}
+					className={`px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center gap-2 ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+				>
+					<svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+					</svg>
+					{isLoading ? 'Refreshing...' : 'Refresh'}
+				</button>
+			</div>
 		</div>
 	)
 }
@@ -81,7 +100,7 @@ function NotificationCard({
 	onOpen,
 }: {
 	item: NotificationItem
-	onMarkRead: (id: number) => void
+	onMarkRead: (id: number | string) => void
 	onOpen: (id?: string) => void
 }) {
 	const badge = TYPE_STYLES[item.type]
@@ -122,10 +141,43 @@ function NotificationCard({
 function NotificationsCenter() {
 	const navigate = useNavigate()
 	const notifications = useUniversityStore((state) => state.notifications)
+	const fetchNotifications = useUniversityStore((state) => state.fetchNotifications)
+	const loading = useUniversityStore((state) => state.loading)
 	const markNotificationRead = useUniversityStore((state) => state.markNotificationRead)
 	const markAllNotificationsRead = useUniversityStore((state) => state.markAllNotificationsRead)
 	const [tab, setTab] = useState<"All" | NotificationType>("All")
 	const [query, setQuery] = useState("")
+	const [isUsingRealData, setIsUsingRealData] = useState(false)
+
+	// Fetch notifications from API on mount
+	useEffect(() => {
+		let isMounted = true
+
+		const initializeNotifications = async () => {
+			try {
+				await fetchNotifications({
+					showError: (msg) => {
+						if (isMounted) {
+							console.warn('⚠️  Could not fetch from API:', msg)
+						}
+					}
+				})
+				if (isMounted) {
+					setIsUsingRealData(true)
+				}
+			} catch (err) {
+				if (isMounted) {
+					console.error('Failed to fetch notifications:', err)
+					setIsUsingRealData(false)
+				}
+			}
+		}
+
+		initializeNotifications()
+		return () => {
+			isMounted = false
+		}
+	}, [fetchNotifications])
 
 	const filtered = useMemo(() => {
 		let list = notifications
@@ -143,8 +195,16 @@ function NotificationsCenter() {
 		markAllNotificationsRead()
 	}
 
-	const markRead = (id: number) => {
+	const markRead = (id: number | string) => {
 		markNotificationRead(id)
+	}
+
+	const handleRefresh = () => {
+		fetchNotifications({
+			showError: (msg) => {
+				console.error('Failed to refresh notifications:', msg)
+			}
+		})
 	}
 
 	const openAdmission = (admissionId?: string) => {
@@ -165,9 +225,20 @@ function NotificationsCenter() {
 					</div>
 				</header>
 				<main className="max-w-5xl mx-auto px-6 py-6">
+					{isUsingRealData && (
+						<div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+							<svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+							</svg>
+							<div className="flex-1">
+								<p className="text-sm font-medium text-green-800">✅ Real Data</p>
+								<p className="text-xs text-green-700">Notifications loaded from API</p>
+							</div>
+						</div>
+					)}
 					<div className="bg-white shadow-sm rounded-xl p-4 mb-4">
 						<div className="flex flex-col gap-3">
-							<NotificationTabs active={tab} onChange={setTab} onMarkAll={markAll} />
+							<NotificationTabs active={tab} onChange={setTab} onMarkAll={markAll} onRefresh={handleRefresh} isLoading={loading} />
 							<SearchBar value={query} onChange={setQuery} />
 						</div>
 					</div>

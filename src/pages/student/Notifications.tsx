@@ -10,6 +10,8 @@ import { useToast } from '../../contexts/ToastContext'
 function Notifications() {
   const navigate = useNavigate()
   const notifications = useStudentStore((state) => state.notifications)
+  const loading = useStudentStore((state) => state.loading)
+  const fetchNotifications = useStudentStore((state) => state.fetchNotifications)
   const markNotificationRead = useStudentStore((state) => state.markNotificationRead)
   const markAllNotificationsRead = useStudentStore((state) => state.markAllNotificationsRead)
   const { showError, showSuccess } = useToast()
@@ -17,9 +19,32 @@ function Notifications() {
   const [preferences, setPreferences] = useState<UserPreferences | null>(null)
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
   const [isSavingPrefs, setIsSavingPrefs] = useState(false)
+  const [isUsingRealData, setIsUsingRealData] = useState(false)
 
+  // Fetch notifications and preferences on mount
   useEffect(() => {
     let isMounted = true
+
+    const initializeNotifications = async () => {
+      try {
+        // Fetch real notifications from API
+        await fetchNotifications({
+          showError: (msg) => {
+            if (isMounted) {
+              console.warn('⚠️  Could not fetch from API:', msg)
+            }
+          }
+        })
+        if (isMounted) {
+          setIsUsingRealData(true)
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error('Failed to fetch notifications:', err)
+          setIsUsingRealData(false)
+        }
+      }
+    }
 
     const fetchPreferences = async () => {
       try {
@@ -40,15 +65,15 @@ function Notifications() {
       }
     }
 
+    initializeNotifications()
     fetchPreferences()
     return () => {
       isMounted = false
     }
-  }, []) // No dependencies - fetch once on mount
+  }, [fetchNotifications])
 
   const emailAlerts = preferences?.email_notifications_enabled ?? true
   const inAppAlerts = preferences?.push_notifications_enabled ?? true
-  const weeklyDigest = (preferences?.email_frequency ?? 'immediate') === 'weekly'
 
   const updateNotificationPreferences = async (patch: Partial<UserPreferences>) => {
     try {
@@ -87,34 +112,26 @@ function Notifications() {
   }
 
   const handleRefresh = () => {
-    // Notifications are managed by the store and update automatically
-    // No need to manually refresh - just provide user feedback
-    showSuccess('Notifications are up to date!')
+    // Refresh notifications from API
+    fetchNotifications({
+      showError: (msg) => {
+        showError('Failed to refresh notifications')
+      }
+    }).then(() => {
+      showSuccess('✅ Notifications refreshed from API')
+    })
   }
 
   const handleToggleEmail = () => {
-    const nextEnabled = !emailAlerts
-    const nextFrequency = nextEnabled
-      ? (weeklyDigest ? 'weekly' : 'immediate')
-      : 'never'
-
     updateNotificationPreferences({
-      email_notifications_enabled: nextEnabled,
-      email_frequency: nextFrequency,
+      email_notifications_enabled: !emailAlerts,
+      email_frequency: 'immediate',
     })
   }
 
   const handleToggleInApp = () => {
     updateNotificationPreferences({
       push_notifications_enabled: !inAppAlerts,
-    })
-  }
-
-  const handleToggleWeeklyDigest = () => {
-    const nextWeekly = !weeklyDigest
-    updateNotificationPreferences({
-      email_notifications_enabled: true,
-      email_frequency: nextWeekly ? 'weekly' : 'immediate',
     })
   }
 
@@ -126,6 +143,19 @@ function Notifications() {
                 <div className="mb-6">
                   <h1 className="text-3xl font-bold mb-2" style={{ color: '#111827' }}>Notifications</h1>
                   <p className="text-gray-600 mb-4">Stay updated with admission changes, deadlines, and system alerts.</p>
+
+                  {isUsingRealData && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+                      <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-800">✅ Real Data</p>
+                        <p className="text-xs text-green-700">Notifications loaded from API</p>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={handleMarkAllRead}
@@ -138,12 +168,13 @@ function Notifications() {
                     </button>
                     <button 
                       onClick={handleRefresh}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
+                      disabled={loading}
+                      className={`px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2 ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      Refresh
+                      {loading ? 'Refreshing...' : 'Refresh'}
                     </button>
                   </div>
                 </div>
@@ -253,26 +284,6 @@ function Notifications() {
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                             inAppAlerts ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm mb-1" style={{ color: '#111827' }}>Weekly Digest</p>
-                        <p className="text-xs text-gray-500">A summary of your week's activity.</p>
-                      </div>
-                      <button
-                        onClick={handleToggleWeeklyDigest}
-                        disabled={isLoadingPrefs || isSavingPrefs}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          weeklyDigest ? 'bg-blue-600' : 'bg-gray-300'
-                        } ${isLoadingPrefs || isSavingPrefs ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            weeklyDigest ? 'translate-x-6' : 'translate-x-1'
                           }`}
                         />
                       </button>

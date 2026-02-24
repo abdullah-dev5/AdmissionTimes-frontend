@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import AdminLayout from "../../layouts/AdminLayout"
 import { adminService } from "../../services/adminService"
-import { supabase } from "../../services/supabase"
 import {
 	getVerificationStatusColor,
 	type VerificationItem,
@@ -104,7 +103,7 @@ function AdminVerificationCenter() {
 	const [universityFilter, setUniversityFilter] = useState<string>("All")
 	const [searchQuery, setSearchQuery] = useState("")
 	const [selectedItem, setSelectedItem] = useState<VerificationItem | null>(null)
-	const [actionType, setActionType] = useState<"Verify" | "Reject" | "Dispute" | null>(null)
+	const [actionType, setActionType] = useState<"Verify" | "Reject" | "Dispute" | "Revision" | null>(null)
 	const [remarks, setRemarks] = useState("")
 	const [currentPage, setCurrentPage] = useState(1)
 	const itemsPerPage = 10
@@ -149,7 +148,7 @@ function AdminVerificationCenter() {
 	}, [apiVerifications, location.state, selectedItem?.id])
 
 	/**
-	 * Fetch all admissions from API with status filter and enrich with university data
+	 * Fetch all admissions from API with status filter
 	 */
 	const fetchAllAdmissions = async () => {
 		try {
@@ -159,33 +158,13 @@ function AdminVerificationCenter() {
 			const response = await adminService.getAllAdmissions(1, 100, status) // Get larger batch
 			console.log('🔵 [AdminVerificationCenter] Fetched admissions:', response)
 			
-			// Extract university IDs from admissions - response is PaginatedResponse which has .data
-			const admissionData = Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : [])
-			const universityIds = [...new Set(admissionData.map((a: any) => a.university_id).filter(Boolean))]
-			
-			// Fetch universities if we have IDs
-			let universityMap = new Map<string, any>()
-			if (universityIds.length > 0) {
-				console.log('🏛️ Fetching universities:', universityIds)
-				const { data: universitiesData, error: univError } = await supabase
-					.from('universities')
-					.select('id, name, logo_url, city, country')
-					.in('id', universityIds)
-				
-				if (!univError && universitiesData) {
-					console.log('✅ Fetched universities:', universitiesData)
-					universitiesData.forEach(u => {
-						universityMap.set(u.id, u)
-					})
-				} else {
-					console.warn('⚠️ Failed to fetch universities:', univError)
-				}
-			}
-			
-			setUniversities(universityMap)
+			// No need for direct Supabase university fetch - backend should return enriched data
+			// If universities relationship is populated, use it; otherwise fall back to fields in admission
+			const emptyMap = new Map<string, any>()
+			setUniversities(emptyMap)
 			
 			// Transform API data to VerificationItem format
-			const transformed = transformApiAdmissions(response, universityMap)
+			const transformed = transformApiAdmissions(response, emptyMap)
 			setApiVerifications(transformed)
 		} catch (err: any) {
 			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
@@ -349,7 +328,7 @@ function AdminVerificationCenter() {
 		}
 	}
 
-	const handleActionSelect = (action: "Verify" | "Reject" | "Dispute") => {
+	const handleActionSelect = (action: "Verify" | "Reject" | "Dispute" | "Revision") => {
 		setActionType(action)
 		setRemarks("")
 	}
@@ -374,6 +353,9 @@ function AdminVerificationCenter() {
 			setError('This admission is already disputed. No action needed.')
 			return
 		}
+		if (actionType === 'Revision' && currentStatus === 'pending') {
+			setError('This admission is already pending. You can still send revision notes if needed.')
+		}
 
 		try {
 			setSubmitting(true)
@@ -391,21 +373,28 @@ function AdminVerificationCenter() {
 			} else if (actionType === 'Dispute') {
 				console.log('⚠️ Disputing admission:', selectedItem.id)
 				await adminService.disputeAdmission(selectedItem.id, remarks)
+			} else if (actionType === 'Revision') {
+				console.log('🟠 Requesting revision:', selectedItem.id)
+				await adminService.requestRevision(selectedItem.id, remarks)
 			}
 
 			// ✅ Notify watchers about the change (after successful action)
+			const resolvedChangeType = actionType === 'Verify' || actionType === 'Reject' || actionType === 'Dispute' || actionType === 'Revision'
+				? 'Admin Edit'
+				: 'Manual Edit'
+
 			const mockChangelog: any = {
 				id: `changelog-${Date.now()}`,
 				admissionId: selectedItem.id,
 				admissionTitle: selectedItem.admissionTitle,
-				changeType: actionType.toLowerCase(),
+				changeType: resolvedChangeType,
 				modifiedBy: 'Admin', // TODO: Get actual user name from auth context
 				modifiedByUserId: 'admin-user-id',
 				summary: `${actionType} admission`,
 				timestamp: new Date().toISOString(),
 				diff: [],
 				actor_type: 'admin' as const,
-				action_type: actionType.toLowerCase(),
+				action_type: resolvedChangeType,
 			}
 			notifyWatchers(mockChangelog)
 
@@ -928,6 +917,18 @@ function AdminVerificationCenter() {
 										>
 											Mark as Disputed
 											{selectedItem.verificationStatusRaw === 'disputed' && ' ✓'}
+										</button>
+										<button
+											onClick={() => handleActionSelect("Revision")}
+											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+												actionType === "Revision"
+													? "text-white"
+													: "border border-gray-300 text-gray-700 hover:bg-gray-50"
+											}`}
+											style={actionType === "Revision" ? { backgroundColor: "#2563EB" } : {}}
+											title="Request revision from university"
+										>
+											Request Revision
 										</button>
 									</div>
 

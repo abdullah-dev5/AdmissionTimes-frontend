@@ -20,17 +20,24 @@ function ViewAllAdmissions() {
   const filteredAdmissions = useMemo(() => {
     let filtered = [...admissions]
 
+    const getNormalizedStatus = (adm: (typeof admissions)[number]) => {
+      const verification = (adm.verification_status || '').toLowerCase()
+      if (verification === 'draft') return 'draft'
+      if (verification === 'pending') return 'pending'
+      if (verification === 'verified') return 'verified'
+      if (verification === 'rejected' || verification === 'disputed') return 'rejected'
+
+      const status = (adm.status || '').toLowerCase()
+      if (status === 'draft') return 'draft'
+      if (status === 'pending audit' || status === 'pending') return 'pending'
+      if (status === 'verified') return 'verified'
+      if (status === 'rejected' || status === 'disputed') return 'rejected'
+      return 'pending'
+    }
+
     // Apply status filter
     if (statusFilter !== 'all') {
-      const statusMap: { [key in StatusFilter]: string[] } = {
-        all: [],
-        draft: ['Draft'],
-        pending: ['Pending Audit'],
-        verified: ['Verified'],
-        rejected: ['Rejected', 'Disputed'], // Includes both rejected and disputed
-      }
-      const targetStatuses = statusMap[statusFilter] || []
-      filtered = filtered.filter((adm) => targetStatuses.includes(adm.status))
+      filtered = filtered.filter((adm) => getNormalizedStatus(adm) === statusFilter)
     }
 
     // Apply search filter
@@ -70,12 +77,27 @@ function ViewAllAdmissions() {
 
   // Get counts for each status
   const statusCounts = useMemo(() => {
+    const getNormalizedStatus = (adm: (typeof admissions)[number]) => {
+      const verification = (adm.verification_status || '').toLowerCase()
+      if (verification === 'draft') return 'draft'
+      if (verification === 'pending') return 'pending'
+      if (verification === 'verified') return 'verified'
+      if (verification === 'rejected' || verification === 'disputed') return 'rejected'
+
+      const status = (adm.status || '').toLowerCase()
+      if (status === 'draft') return 'draft'
+      if (status === 'pending audit' || status === 'pending') return 'pending'
+      if (status === 'verified') return 'verified'
+      if (status === 'rejected' || status === 'disputed') return 'rejected'
+      return 'pending'
+    }
+
     return {
       all: admissions.length,
-      draft: admissions.filter((a) => a.status === 'Draft').length,
-      pending: admissions.filter((a) => a.status === 'Pending Audit').length,
-      verified: admissions.filter((a) => a.status === 'Verified').length,
-      rejected: admissions.filter((a) => a.status === 'Rejected' || a.status === 'Disputed').length, // Combined count
+      draft: admissions.filter((a) => getNormalizedStatus(a) === 'draft').length,
+      pending: admissions.filter((a) => getNormalizedStatus(a) === 'pending').length,
+      verified: admissions.filter((a) => getNormalizedStatus(a) === 'verified').length,
+      rejected: admissions.filter((a) => getNormalizedStatus(a) === 'rejected').length,
     }
   }, [admissions])
 

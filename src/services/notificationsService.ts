@@ -116,8 +116,8 @@ export const notificationsService = {
    * @returns Promise resolving to paginated notifications list
    */
   list: async (params?: {
-    user_type?: string;
-    category?: string;
+    role_type?: string;
+    notification_type?: string;
     priority?: string;
     is_read?: boolean;
     page?: number;

@@ -18,7 +18,17 @@ export interface AdminAction {
 	remarks: string
 }
 
-export type NotificationType = "verification_update" | "university_upload" | "system_alert" | "scraper_alert"
+export type NotificationType =
+	| "admission_submitted"
+	| "admission_resubmitted"
+	| "admission_verified"
+	| "admission_rejected"
+	| "admission_revision_required"
+	| "admission_updated_saved"
+	| "deadline_near"
+	| "system_broadcast"
+	| "dispute_raised"
+	| "system_error"
 
 export interface AdminNotification {
 	id: number
@@ -208,7 +218,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 1,
 		title: "Admission Verified",
 		message: "Admission 'BSCS Fall 2025' from FAST University has been verified by Admin.",
-		type: "verification_update",
+		type: "admission_verified",
 		timestamp: "2025-02-08T10:30:00Z",
 		timeAgo: "2 hours ago",
 		unread: true,
@@ -219,7 +229,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 2,
 		title: "New Admission Uploaded",
 		message: "FAST University uploaded a new admission: 'MS Data Science' requiring verification.",
-		type: "university_upload",
+		type: "admission_submitted",
 		timestamp: "2025-02-08T09:15:00Z",
 		timeAgo: "3 hours ago",
 		unread: true,
@@ -230,7 +240,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 3,
 		title: "System Maintenance Scheduled",
 		message: "Scheduled system maintenance will occur on February 12, 2025 at 2:00 AM. Expected downtime: 30 minutes.",
-		type: "system_alert",
+		type: "system_broadcast",
 		timestamp: "2025-02-08T08:30:00Z",
 		timeAgo: "4 hours ago",
 		unread: true,
@@ -239,7 +249,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 4,
 		title: "Scraper Error Detected",
 		message: "Scraper failed to fetch data from NUST website. Error: Connection timeout. Retry scheduled.",
-		type: "scraper_alert",
+		type: "system_error",
 		timestamp: "2025-02-08T07:00:00Z",
 		timeAgo: "5 hours ago",
 		unread: true,
@@ -249,7 +259,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 5,
 		title: "Admission Rejected",
 		message: "Admission 'MS Data Science' from FAST University was rejected by Admin. Reason: Incomplete fee structure.",
-		type: "verification_update",
+		type: "admission_rejected",
 		timestamp: "2025-02-08T06:45:00Z",
 		timeAgo: "5 hours ago",
 		unread: false,
@@ -260,7 +270,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 6,
 		title: "New Admission Uploaded",
 		message: "LUMS uploaded a new admission: 'MBA Executive' requiring verification.",
-		type: "university_upload",
+		type: "admission_submitted",
 		timestamp: "2025-02-07T16:00:00Z",
 		timeAgo: "1 day ago",
 		unread: false,
@@ -271,7 +281,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 7,
 		title: "Admission Disputed",
 		message: "Admission 'BBA Honors' from IBA has been marked as disputed. University requested recheck on deadline.",
-		type: "verification_update",
+		type: "dispute_raised",
 		timestamp: "2025-02-07T14:20:00Z",
 		timeAgo: "1 day ago",
 		unread: false,
@@ -282,7 +292,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 8,
 		title: "Scraper Success",
 		message: "Scraper successfully updated 3 admissions from FAST University website.",
-		type: "scraper_alert",
+		type: "system_broadcast",
 		timestamp: "2025-02-07T09:00:00Z",
 		timeAgo: "1 day ago",
 		unread: false,
@@ -292,7 +302,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 9,
 		title: "New Admission Uploaded",
 		message: "NUST uploaded a new admission: 'PhD Physics' requiring verification.",
-		type: "university_upload",
+		type: "admission_submitted",
 		timestamp: "2025-02-06T11:00:00Z",
 		timeAgo: "2 days ago",
 		unread: false,
@@ -303,7 +313,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 10,
 		title: "Database Backup Completed",
 		message: "Daily database backup completed successfully. Backup size: 2.5 GB. Stored in secure location.",
-		type: "system_alert",
+		type: "system_broadcast",
 		timestamp: "2025-02-06T03:00:00Z",
 		timeAgo: "2 days ago",
 		unread: false,
@@ -312,7 +322,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 11,
 		title: "Admission Verified",
 		message: "Admission 'MBA Executive' from LUMS has been verified by Admin.",
-		type: "verification_update",
+		type: "admission_verified",
 		timestamp: "2025-02-05T16:45:00Z",
 		timeAgo: "3 days ago",
 		unread: false,
@@ -323,7 +333,7 @@ export const adminNotifications: AdminNotification[] = [
 		id: 12,
 		title: "Scraper No Changes",
 		message: "Scraper ran for LUMS website. No changes detected in admission data.",
-		type: "scraper_alert",
+		type: "system_broadcast",
 		timestamp: "2025-02-05T18:00:00Z",
 		timeAgo: "3 days ago",
 		unread: false,

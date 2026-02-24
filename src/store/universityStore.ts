@@ -10,6 +10,7 @@
 import { create } from 'zustand'
 import { dashboardService } from '../services/dashboardService'
 import { admissionsService } from '../services/admissionsService'
+import { notificationsService } from '../services/notificationsService'
 import { transformUniversityDashboard } from '../utils/dashboardTransformers'
 import { transformAdmissionToApi, transformApiAdmissionToFrontend } from '../utils/admissionUtils'
 import {
@@ -49,7 +50,8 @@ interface UniversityStoreState {
   ) => Promise<{ success: boolean; data?: Admission; error?: string }>
   deleteAdmission: (id: string) => Promise<{ success: boolean; error?: string }>
   getAdmissionById: (id: string) => Admission | undefined
-  markNotificationRead: (id: number) => void
+  fetchNotifications: (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => Promise<void>
+  markNotificationRead: (id: number | string) => void
   markAllNotificationsRead: () => void
   refreshNotifications: () => void
   appendChangeLog: (entry: Omit<ChangeLogItem, 'id'>) => void
@@ -224,19 +226,16 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       let savedAdmission: Admission
       if (isUpdate) {
-        console.log('🟢 [UniversityStore] Updating admission via Supabase:', admission.id)
-        // Add updated_by only if we have a valid user ID (don't set it to universityId)
-        // The backend trigger will handle status transitions based on the update itself
+        console.log('🟢 [UniversityStore] Updating admission via Backend API:', admission.id)
         const updatePayload = {
           ...apiPayload,
-          // Omit updated_by - let the backend derive it from auth context if needed
         }
-        const apiResult = await admissionsService.updateDirect(admission.id, updatePayload)
-        savedAdmission = transformApiAdmissionToFrontend(apiResult)
+        const apiResponse = await admissionsService.update(admission.id, updatePayload)
+        savedAdmission = transformApiAdmissionToFrontend(apiResponse.data)
       } else {
-        console.log('🟢 [UniversityStore] Creating new admission via Supabase')
-        const apiResult = await admissionsService.createDirect(apiPayload)
-        savedAdmission = transformApiAdmissionToFrontend(apiResult)
+        console.log('🟢 [UniversityStore] Creating new admission via Backend API')
+        const apiResponse = await admissionsService.create(apiPayload)
+        savedAdmission = transformApiAdmissionToFrontend(apiResponse.data)
       }
 
       console.log('🟢 [UniversityStore] ✅ Supabase operation successful:', savedAdmission)
@@ -278,7 +277,28 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
     } catch (error: any) {
       console.error('[UniversityStore] Failed to save admission:', error)
 
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to save admission'
+      // Extract error message from response
+      let errorMessage = 'Failed to save admission'
+      
+      if (error.response?.data) {
+        const apiError = error.response.data
+        // First try to use the message field
+        if (apiError.message) {
+          errorMessage = apiError.message
+          // If it's a validation error, add field details
+          if (apiError.errors && typeof apiError.errors === 'object') {
+            const fieldErrors = Object.entries(apiError.errors)
+              .map(([field, msg]) => `${field}: ${msg}`)
+              .join(', ')
+            errorMessage = `${apiError.message} - ${fieldErrors}`
+          }
+        } else if (apiError.error) {
+          errorMessage = apiError.error
+        }
+      } else if (error.message && error.message !== 'Object') {
+        errorMessage = error.message
+      }
+
       set({ error: errorMessage })
 
       if (options?.showError) {
@@ -294,7 +314,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
     console.log('🟢 [UniversityStore] Deleting admission:', id)
 
     try {
-      await admissionsService.deleteDirect(id)
+      await admissionsService.delete(id)
       console.log('🟢 [UniversityStore] Delete successful')
 
       set((state) => {
@@ -324,8 +344,52 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
     return get().admissions.find((admission) => admission.id === id)
   },
 
+  // Fetch Notifications from API
+  fetchNotifications: async (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => {
+    try {
+      const response = await notificationsService.list({
+        role_type: 'university',
+        page: options?.page || 1,
+        limit: options?.limit || 50,
+      })
+      
+      if (response.data && Array.isArray(response.data)) {
+        // Convert API notifications to NotificationItem format
+        // Preserve backend notification IDs so read actions can be persisted
+        const transformedNotifications: NotificationItem[] = response.data
+          .filter((notif: any, index: number, self: any[]) => {
+            // Remove exact duplicates
+            return index === self.findIndex((t) => t.id === notif.id && t.title === notif.title)
+          })
+          .map((notif: any, index: number) => ({
+            id: notif.id || `${index}`,
+            title: notif.title || 'Notification',
+            message: notif.message || '',
+            type: notif.notification_type === 'system_broadcast' ? 'System Alert' : 'Admin Feedback',
+            time: notif.created_at || new Date().toISOString(),
+            read: notif.is_read || false,
+            admissionId: notif.related_entity_id || undefined,
+          }))
+        
+        set({
+          notifications: transformedNotifications,
+          stats: deriveStats(get().admissions, get().changeLogs, transformedNotifications),
+        })
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to fetch notifications:', err)
+      options?.showError?.('Failed to load notifications')
+    }
+  },
+
   // Mark Notification Read
-  markNotificationRead: (id) => {
+  markNotificationRead: (id: number | string) => {
+    if (typeof id === 'string' && id.length >= 8) {
+      void notificationsService.markAsRead(String(id)).catch((err) => {
+        console.error('Failed to persist notification read state:', err)
+      })
+    }
+
     set((state) => {
       const notifications = state.notifications.map((notification) =>
         notification.id === id ? { ...notification, read: true } : notification
@@ -339,6 +403,10 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
   // Mark All Notifications Read
   markAllNotificationsRead: () => {
+    void notificationsService.markAllAsRead().catch((err) => {
+      console.error('Failed to persist mark-all notifications state:', err)
+    })
+
     set((state) => {
       const notifications = state.notifications.map((notification) => ({ ...notification, read: true }))
       return {

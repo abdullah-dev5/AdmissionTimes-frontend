@@ -85,13 +85,8 @@ function StudentSidebar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                   </svg>
                   {isExpanded && <span>{item.name}</span>}
-                  {isExpanded && item.badge && item.badge > 0 && (
-                    <span className="ml-auto w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white" style={{ backgroundColor: active ? 'rgba(255,255,255,0.3)' : '#2563EB' }}>
-                      {item.badge}
-                    </span>
-                  )}
-                  {!isExpanded && item.badge && item.badge > 0 && (
-                    <span className="absolute top-1 right-1 w-3 h-3 rounded-full" style={{ backgroundColor: '#EF4444' }}></span>
+                  {!isExpanded && item.name && item.name.length > 0 && (
+                    <span></span>
                   )}
                 </Link>
               </li>
