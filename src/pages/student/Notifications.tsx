@@ -30,9 +30,7 @@ function Notifications() {
         // Fetch real notifications from API
         await fetchNotifications({
           showError: (msg) => {
-            if (isMounted) {
-              console.warn('⚠️  Could not fetch from API:', msg)
-            }
+            // Silently fallback if API fails
           }
         })
         if (isMounted) {
@@ -40,7 +38,6 @@ function Notifications() {
         }
       } catch (err) {
         if (isMounted) {
-          console.error('Failed to fetch notifications:', err)
           setIsUsingRealData(false)
         }
       }
@@ -54,7 +51,6 @@ function Notifications() {
           setPreferences(response.data)
         }
       } catch (err: any) {
-        console.error('Failed to load preferences:', err)
         if (isMounted) {
           showError('Failed to load notification preferences.')
         }
@@ -82,7 +78,6 @@ function Notifications() {
       setPreferences(response.data)
       showSuccess('Notification preferences updated.')
     } catch (err: any) {
-      console.error('Failed to update preferences:', err)
       showError('Failed to update notification preferences.')
     } finally {
       setIsSavingPrefs(false)
@@ -143,18 +138,6 @@ function Notifications() {
                 <div className="mb-6">
                   <h1 className="text-3xl font-bold mb-2" style={{ color: '#111827' }}>Notifications</h1>
                   <p className="text-gray-600 mb-4">Stay updated with admission changes, deadlines, and system alerts.</p>
-
-                  {isUsingRealData && (
-                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
-                      <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-green-800">✅ Real Data</p>
-                        <p className="text-xs text-green-700">Notifications loaded from API</p>
-                      </div>
-                    </div>
-                  )}
                   
                   <div className="flex items-center gap-3">
                     <button 

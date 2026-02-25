@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
 import { adminService } from "../../services/adminService"
 import { type NotificationType } from "../../data/adminData"
@@ -22,7 +22,7 @@ function AdminNotificationsCenter() {
 	 * NOTE: This fetches from the backend API, not mock data
 	 * The backend endpoint is: GET /api/v1/notifications (auto-scoped to admin role)
 	 */
-	const fetchNotifications = async () => {
+	const fetchNotifications = useCallback(async () => {
 		try {
 			setLoading(true)
 			setError(null)
@@ -53,7 +53,18 @@ function AdminNotificationsCenter() {
 		} finally {
 			setLoading(false)
 		}
-	}
+	}, [])
+
+	useEffect(() => {
+		const handleRefresh = () => {
+			fetchNotifications().catch(() => {})
+		}
+
+		window.addEventListener("admin:notifications-updated", handleRefresh)
+		return () => {
+			window.removeEventListener("admin:notifications-updated", handleRefresh)
+		}
+	}, [fetchNotifications])
 
 	// Use only API data - no mock fallback
 	const notificationsToUse = apiNotifications
@@ -212,13 +223,6 @@ function AdminNotificationsCenter() {
 
 
 
-			{!error && apiNotifications.length > 0 && (
-				<div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-					<p className="text-sm text-green-800">
-						<strong>✅ Real Data:</strong> Showing {apiNotifications.length} real notifications from the API.
-					</p>
-				</div>
-			)}
 				{/* Loading Indicator */}
 				{loading && (
 					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">

@@ -286,7 +286,7 @@ function StudentDashboard() {
                       Add programs to your watchlist to get personalized recommendations!
                     </p>
                     <button 
-                      onClick={() => navigate('/student/admissions')}
+                      onClick={() => navigate('/student/search')}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
                       Browse Programs
