@@ -97,6 +97,11 @@ function UniversityDashboard() {
     return filtered
   }, [admissions, statusFilter, sortBy])
 
+  // Limit to 10 most recent for dashboard display
+  const recentAdmissions = useMemo(() => {
+    return filteredAdmissions.slice(0, 10)
+  }, [filteredAdmissions])
+
   const handleEdit = (id: string) => {
     navigate(`/university/manage-admissions?edit=${id}`)
   }
@@ -338,7 +343,7 @@ function UniversityDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAdmissions.map((admission) => {
+                    {recentAdmissions.map((admission) => {
                       const statusColors = getStatusColor(admission.status)
                       return (
                         <tr key={admission.id} className="border-b border-gray-100 hover:bg-gray-50">

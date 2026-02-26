@@ -1,4 +1,4 @@
-import { Link, useParams, Navigate } from 'react-router-dom'
+import { Link, useParams, Navigate, useNavigate } from 'react-router-dom'
 import { useState, useMemo } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
@@ -6,12 +6,16 @@ import { calculateDaysRemaining } from '../data/studentData'
 import { useChangeLogFilters } from '../hooks/useChangeLogFilters'
 import UpdatedBadge from '../components/admin/UpdatedBadge'
 import { getRelativeTime } from '../utils/dateUtils'
+import { useToast } from '../contexts/ToastContext'
 
 function ProgramDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const { showSuccess, showInfo, showWarning, showError } = useToast()
   const [activeTab, setActiveTab] = useState('Overview')
   const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
   const admissions = useStudentStore((state) => state.admissions)
+  const toggleAlert = useStudentStore((state) => state.toggleAlert)
   
   // Get changelogs for update tracking
   const { filteredLogs } = useChangeLogFilters()
@@ -54,6 +58,69 @@ function ProgramDetail() {
   const statusColors = getStatusColor(program.programStatus)
   const daysRemaining = calculateDaysRemaining(program.deadline)
 
+  const handleCompare = () => {
+    const savedIds = admissions.filter((a) => a.saved).map((a) => a.id)
+    const ids = Array.from(new Set([program.id, ...savedIds])).slice(0, 4)
+
+    if (ids.length < 2) {
+      showWarning('Please save at least one more program to compare.')
+      navigate('/student/watchlist')
+      return
+    }
+
+    navigate(`/student/compare?ids=${ids.join(',')}`)
+  }
+
+  const handleSetReminder = async () => {
+    try {
+      const latest = getAdmissionById(program.id)
+      if (latest?.alertEnabled) {
+        showInfo('Reminder is already enabled for this program.')
+        return
+      }
+
+      await toggleAlert(program.id)
+      showSuccess('Reminder enabled. Program added to watchlist automatically.')
+    } catch (error) {
+      showError('Failed to update reminder settings. Please try again.')
+    }
+  }
+
+  const handleApplyNow = () => {
+    if (program.officialUrl && !program.officialUrl.startsWith('/program/')) {
+      window.open(program.officialUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    showInfo('Official application link is unavailable. Please use the Official Website section below.')
+  }
+
+  const handleDownload = () => {
+    const content = [
+      `Program: ${program.program}`,
+      `University: ${program.university}`,
+      `Degree: ${program.degree}`,
+      `Location: ${program.location}`,
+      `Application Fee: ${program.fee}`,
+      `Deadline: ${program.deadlineDisplay}`,
+      `Status: ${program.programStatus}`,
+      `Last Updated: ${program.updated}`,
+      program.aiSummary ? `Summary: ${program.aiSummary}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${program.program.replace(/\s+/g, '_')}_details.txt`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <StudentLayout>
       <div className="p-6">
@@ -91,25 +158,25 @@ function ProgramDetail() {
           </div>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3 flex-wrap">
-              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+              <button onClick={handleCompare} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
                 Compare
               </button>
-              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+              <button onClick={handleSetReminder} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 Set Reminder
               </button>
-              <button className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2" style={{ backgroundColor: '#10B981' }}>
+              <button onClick={handleApplyNow} className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2" style={{ backgroundColor: '#10B981' }}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Apply Now
               </button>
-              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
+              <button onClick={handleDownload} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>

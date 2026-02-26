@@ -13,9 +13,6 @@ function ViewAllAdmissions() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  console.log('🟣 [ViewAllAdmissions] Rendered with admissions count:', admissions.length)
-  console.log('🟣 [ViewAllAdmissions] Admissions:', admissions.map(a => ({ id: a.id, title: a.title, status: a.status, verification_status: a.verification_status })))
-
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {
     let filtered = [...admissions]

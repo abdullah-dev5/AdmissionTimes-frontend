@@ -1,11 +1,49 @@
+import { useEffect } from "react"
 import type { ReactNode } from "react"
 import AdminSidebar from "../components/admin/AdminSidebar"
+import { useAuthStore } from "../store/authStore"
+import { supabase } from "../services/supabase"
 
 interface AdminLayoutProps {
 	children: ReactNode
 }
 
 function AdminLayout({ children }: AdminLayoutProps) {
+	const user = useAuthStore((state) => state.user)
+
+	useEffect(() => {
+		if (!user?.id || user.role !== "admin") {
+			return
+		}
+
+		const emitRefresh = () => {
+			window.dispatchEvent(new CustomEvent("admin:notifications-updated"))
+		}
+
+		const channel = supabase
+			.channel(`admin-notifications-live-${user.id}`)
+			.on(
+				"postgres_changes",
+				{
+					event: "INSERT",
+					schema: "public",
+					table: "notifications",
+					filter: `recipient_id=eq.${user.id}`,
+				},
+				() => emitRefresh()
+			)
+			.subscribe()
+
+		const pollId = window.setInterval(() => {
+			emitRefresh()
+		}, 30000)
+
+		return () => {
+			window.clearInterval(pollId)
+			supabase.removeChannel(channel)
+		}
+	}, [user?.id, user?.role])
+
 	return (
 		<div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
 			<div className="flex h-screen overflow-hidden">

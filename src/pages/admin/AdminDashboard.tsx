@@ -172,18 +172,23 @@ function AdminDashboard() {
 	 * Transform pending verifications from API format to UI format
 	 */
 	const transformPendingVerifications = (apiData: any[]) => {
-		return (apiData || []).map((item: any) => ({
-			id: item.admission_id || item.id,
-			admissionTitle: item.program_title || item.title || 'Unknown',
-			university: safeLabel(item.university_name || item.university_id, 'Unknown University'),
-			submittedBy: safeLabel(item.submitted_by || item.created_by, 'University'),
-			submittedOn: item.submitted_at
-				? new Date(item.submitted_at).toISOString().split('T')[0]
-				: item.created_at
-				? new Date(item.created_at).toISOString().split('T')[0]
-				: 'N/A',
-			status: 'Pending Audit', // All items in pending_verifications are pending
-		}))
+		console.log('🔍 [transformPendingVerifications] Input apiData:', apiData)
+		return (apiData || []).map((item: any) => {
+			console.log('🔍 [transformPendingVerifications] Processing item:', item)
+			console.log('🔍 [transformPendingVerifications] university_name:', item.university_name)
+			return {
+				id: item.admission_id || item.id,
+				admissionTitle: item.program_title || item.title || 'Unknown',
+				university: safeLabel(item.university_name, 'Unknown University'),
+				submittedBy: safeLabel(item.submitted_by || item.created_by, 'University'),
+				submittedOn: item.submitted_at
+					? new Date(item.submitted_at).toISOString().split('T')[0]
+					: item.created_at
+					? new Date(item.created_at).toISOString().split('T')[0]
+					: 'N/A',
+				status: 'Pending Audit', // All items in pending_verifications are pending
+			}
+		})
 	}
 
 	/**
@@ -218,7 +223,7 @@ function AdminDashboard() {
 				id: item.id,
 				admission: admissionTitle,
 				action: actionType,
-				admin: item.changed_by || item.modified_by || item.actor_type?.charAt(0).toUpperCase() + item.actor_type?.slice(1) || 'System',
+				admin: item.changed_by_name || safeLabel(item.changed_by || item.modified_by, 'System'),
 				timestamp: item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A',
 				remarks: item.diff_summary || item.remarks || `Changed ${item.field_name || 'field'} from "${item.old_value}" to "${item.new_value}"`,
 			}
@@ -252,6 +257,19 @@ function AdminDashboard() {
 
 			// Fetch main dashboard data
 			const dashboardResponse = await adminService.getDashboard()
+			console.log('🔍 [AdminDashboard] Full dashboard response:', dashboardResponse)
+			console.log('🔍 [AdminDashboard] pending_verifications:', (dashboardResponse.data as any)?.pending_verifications)
+			if ((dashboardResponse.data as any)?.pending_verifications) {
+				(dashboardResponse.data as any).pending_verifications.forEach((item: any, index: number) => {
+					console.log(`🔍 [AdminDashboard] pending_verification[${index}]:`, {
+						id: item.id,
+						program_title: item.program_title,
+						university_name: item.university_name,
+						university_id: item.university_id,
+						submitted_at: item.submitted_at
+					})
+				})
+			}
 			setApiDashboard(dashboardResponse.data)
 
 			// Fetch all admissions to build a map for title lookups
