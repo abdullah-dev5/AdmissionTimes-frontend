@@ -19,6 +19,8 @@ import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig 
 import { getAccessToken, signOutUser } from './supabase';
 import { getAuthState } from '../store/authStore';
 
+const isApiDebugEnabled = import.meta.env.VITE_DEBUG_API === 'true';
+
 /**
  * Standard API response structure
  * All backend endpoints return responses in this format
@@ -103,30 +105,33 @@ apiClient.interceptors.request.use(
       if (token && config.headers) {
         config.headers['Authorization'] = `Bearer ${token}`;
 
-        // Always log JWT info (important for debugging)
-        console.log(`🔐 [API] JWT token attached to ${config.method?.toUpperCase()} ${config.url}`);
-        console.log(`🔐 [API] Token prefix: ${token.substring(0, 20)}...`);
-        
-        // Decode and log JWT payload
-        try {
-          const parts = token.split('.');
-          if (parts.length >= 2) {
-            const payload = JSON.parse(atob(parts[1]));
-            console.log('🔐 [API] JWT Payload:', {
-              sub: payload.sub,
-              email: payload.email,
-              user_metadata: payload.user_metadata,
-              role: payload.user_metadata?.role,
-              iat: payload.iat,
-              exp: payload.exp,
-            });
+        if (isApiDebugEnabled) {
+          console.log(`🔐 [API] JWT token attached to ${config.method?.toUpperCase()} ${config.url}`);
+          console.log(`🔐 [API] Token prefix: ${token.substring(0, 20)}...`);
+
+          // Decode and log JWT payload
+          try {
+            const parts = token.split('.');
+            if (parts.length >= 2) {
+              const payload = JSON.parse(atob(parts[1]));
+              console.log('🔐 [API] JWT Payload:', {
+                sub: payload.sub,
+                email: payload.email,
+                user_metadata: payload.user_metadata,
+                role: payload.user_metadata?.role,
+                iat: payload.iat,
+                exp: payload.exp,
+              });
+            }
+          } catch (decodeErr) {
+            console.warn('⚠️ [API] Failed to decode JWT payload:', decodeErr);
           }
-        } catch (decodeErr) {
-          console.warn('⚠️ [API] Failed to decode JWT payload:', decodeErr);
         }
       } else {
-        console.warn('⚠️ [API] No JWT token available - request will proceed without authentication');
-        console.warn('⚠️ [API] This will cause 401/403 errors on protected endpoints');
+        if (isApiDebugEnabled) {
+          console.warn('⚠️ [API] No JWT token available - request will proceed without authentication');
+          console.warn('⚠️ [API] This will cause 401/403 errors on protected endpoints');
+        }
       }
 
       return config;

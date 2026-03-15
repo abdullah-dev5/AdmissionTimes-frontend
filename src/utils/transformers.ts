@@ -24,12 +24,27 @@ export function transformAdmission(
   watchlist?: Watchlist,
   universityName?: string
 ): StudentAdmission {
+  const backendAny = backend as any;
+  const uuidLikePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const fallbackUniversityId = backend.university_id || backendAny.university_id;
+  const safeUniversityFallback =
+    fallbackUniversityId && !uuidLikePattern.test(String(fallbackUniversityId))
+      ? String(fallbackUniversityId)
+      : 'University';
+
   // Get university name from different sources (in order of preference)
   const finalUniversityName = 
     universityName ||
+    backendAny.university_name ||
     (backend.universities?.name) ||
-    backend.university_id || 
-    'Unknown';
+    safeUniversityFallback;
+
+  // Get program title from supported response shapes
+  const finalProgramTitle =
+    backend.title ||
+    backendAny.program_title ||
+    'Untitled Program';
   
   // Debug logging for watchlist data
   if (watchlist) {
@@ -46,12 +61,12 @@ export function transformAdmission(
   return {
     id: backend.id,
     university: finalUniversityName,
-    universityLogo: backend.universities?.logo_url || undefined,  // University logo URL
-    universityCity: backend.universities?.city || undefined,      // University city
-    universityCountry: backend.universities?.country || undefined, // University country
-    program: backend.title,
-    degree: backend.degree_level,
-    degreeType: mapDegreeType(backend.degree_level),
+    universityLogo: backend.universities?.logo_url || backendAny.university_logo_url || undefined,  // University logo URL
+    universityCity: backend.universities?.city || backendAny.university_city || undefined,      // University city
+    universityCountry: backend.universities?.country || backendAny.university_country || undefined, // University country
+    program: finalProgramTitle,
+    degree: backend.degree_level || backendAny.degree || 'Degree Not Specified',
+    degreeType: mapDegreeType(backend.degree_level || backendAny.degree),
     deadline: backend.deadline,
     deadlineDisplay: formatDate(backend.deadline),
     fee: formatCurrency(backend.application_fee),

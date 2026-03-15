@@ -4,9 +4,15 @@
  * Service for managing admission deadlines.
  * Handles fetching deadlines, upcoming deadlines, and deadline tracking.
  * 
- * Phase 1: Supports both backend API and direct Supabase queries
- * 
  * @module services/deadlinesService
+ * 
+ * ⚠️  STATUS: NO ACTIVE CONSUMERS
+ * This service has no confirmed runtime consumers (pages/stores/hooks).
+ * The direct Supabase methods below are deprecated; the backend API methods
+ * are ready to use. Wire up a consumer (e.g., DeadlinePage or studentStore)
+ * before removing the deprecation note.
+ * 
+ * Phase 1: Supports both backend API and direct Supabase queries
  */
 
 import apiClient from './apiClient';

@@ -5,7 +5,7 @@ import UniversityAIAssistant from "../components/ai/university/UniversityAIAssis
 import { useUniversityDashboardData } from "../hooks/useUniversityDashboardData"
 import { useUniversityStore } from "../store/universityStore"
 import { useAuthStore } from "../store/authStore"
-import { supabase } from "../services/supabase"
+import { isRealtimeEnabled, supabase } from "../services/supabase"
 
 interface UniversityLayoutProps {
 	children: ReactNode
@@ -27,19 +27,21 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 			fetchDashboardData({ userId: user.id }).catch(() => {})
 		}
 
-		const channel = supabase
-			.channel(`university-notifications-live-${user.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "INSERT",
-					schema: "public",
-					table: "notifications",
-					filter: `recipient_id=eq.${user.id}`,
-				},
-				() => refresh()
-			)
-			.subscribe()
+		const channel = isRealtimeEnabled
+			? supabase
+					.channel(`university-notifications-live-${user.id}`)
+					.on(
+						"postgres_changes",
+						{
+							event: "INSERT",
+							schema: "public",
+							table: "notifications",
+							filter: `recipient_id=eq.${user.id}`,
+						},
+						() => refresh()
+					)
+					.subscribe()
+			: null
 
 		const pollId = window.setInterval(() => {
 			refresh()
@@ -47,7 +49,9 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 
 		return () => {
 			window.clearInterval(pollId)
-			supabase.removeChannel(channel)
+			if (channel) {
+				supabase.removeChannel(channel).catch(() => {})
+			}
 		}
 	}, [user?.id, user?.role, fetchNotifications, fetchDashboardData])
 

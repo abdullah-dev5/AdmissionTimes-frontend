@@ -68,7 +68,7 @@ export function useStudentDashboardData() {
     
     // Call searchAdmissions - pass showError via closure
     storeState.searchAdmissions(
-      { limit: 1000 },
+      { limit: 100 },
       { showError, userId }
     ).catch(err => {
       console.error('[useStudentDashboardData] Error fetching admissions:', err)

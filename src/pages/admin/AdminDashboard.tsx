@@ -274,15 +274,16 @@ function AdminDashboard() {
 
 			// Fetch all admissions to build a map for title lookups
 			console.log('📚 Fetching all admissions for dashboard...')
-			const admissionsResponse = await admissionsService.listDirect({ limit: 1000 })
+			const admissionsResponse = await admissionsService.listAdmin({ limit: 100 })
 			const admissionsData = admissionsResponse.data || []
 			const admissionMap = new Map<string, any>()
 			admissionsData.forEach((admission: any) => {
 				admissionMap.set(admission.id, admission)
 			})
-			console.log('✅ Loaded', admissionsData.length, 'admissions into map')
+			const totalAdmissionsCount = admissionsResponse.pagination?.total ?? admissionsData.length
+			console.log('✅ Loaded', admissionsData.length, 'admissions into map (total:', totalAdmissionsCount, ')')
 			setAdmissionsMap(admissionMap)
-			setTotalAdmissions(admissionsData.length)
+			setTotalAdmissions(totalAdmissionsCount)
 			setAnalyticsData(buildRealtimeAnalytics(admissionsData))
 
 			// Fetch changelogs for recent actions (order by created_at DESC)
@@ -329,6 +330,8 @@ function AdminDashboard() {
 		aiSummary: apiDashboard?.stats?.aiSummary || '',
 	}
 	const analytics = analyticsData
+	const reminderCoverage = apiDashboard?.reminder_coverage
+	const missingReminderCount = reminderCoverage?.total_missing_now || 0
 
 	return (
 		<AdminLayout>
@@ -336,9 +339,19 @@ function AdminDashboard() {
 				{/* Header */}
 				<div className="mb-6 flex items-center justify-between">
 					<div>
-						<h1 className="text-2xl font-bold mb-2" style={{ color: "#111827" }}>
-							Admin Dashboard
-						</h1>
+						<div className="flex items-center gap-3 mb-2">
+							<h1 className="text-2xl font-bold" style={{ color: "#111827" }}>
+								Admin Dashboard
+							</h1>
+							{missingReminderCount > 0 && (
+								<span
+									className="px-2.5 py-1 rounded-full text-xs font-semibold"
+									style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}
+								>
+									{missingReminderCount} missing reminder{missingReminderCount > 1 ? "s" : ""}
+								</span>
+							)}
+						</div>
 						<p className="text-gray-600">System overview and pending verification tasks.</p>
 					</div>
 					<button
@@ -416,6 +429,72 @@ function AdminDashboard() {
 								</svg>
 							</div>
 						</div>
+					</div>
+				</div>
+
+				{/* Reminder Coverage Health */}
+				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+					<div className="flex items-center justify-between mb-4">
+						<h2 className="text-xl font-semibold" style={{ color: "#111827" }}>
+							Deadline Reminder Coverage (7/3/1)
+						</h2>
+						<span className="text-xs text-gray-500">
+							Next {reminderCoverage?.look_ahead_days || 7} days
+						</span>
+					</div>
+
+					<div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+						<div className="rounded-lg p-4" style={{ backgroundColor: "#F9FAFB" }}>
+							<p className="text-xs text-gray-600 mb-1">Targets (next 7d)</p>
+							<p className="text-xl font-semibold" style={{ color: "#111827" }}>
+								{(reminderCoverage?.total_targets_next_7_days || 0).toLocaleString()}
+							</p>
+						</div>
+						<div className="rounded-lg p-4" style={{ backgroundColor: "#F9FAFB" }}>
+							<p className="text-xs text-gray-600 mb-1">Due Now</p>
+							<p className="text-xl font-semibold" style={{ color: "#111827" }}>
+								{(reminderCoverage?.total_due_now || 0).toLocaleString()}
+							</p>
+						</div>
+						<div className="rounded-lg p-4" style={{ backgroundColor: "#ECFDF5" }}>
+							<p className="text-xs text-gray-600 mb-1">Sent</p>
+							<p className="text-xl font-semibold" style={{ color: "#065F46" }}>
+								{(reminderCoverage?.total_sent_now || 0).toLocaleString()}
+							</p>
+						</div>
+						<div className="rounded-lg p-4" style={{ backgroundColor: "#FEF2F2" }}>
+							<p className="text-xs text-gray-600 mb-1">Missing</p>
+							<p className="text-xl font-semibold" style={{ color: "#991B1B" }}>
+								{(reminderCoverage?.total_missing_now || 0).toLocaleString()}
+							</p>
+						</div>
+					</div>
+
+					<div className="overflow-x-auto">
+						<table className="w-full">
+							<thead>
+								<tr className="border-b border-gray-200">
+									<th className="text-left py-2 px-2 text-xs font-semibold text-gray-600">Threshold</th>
+									<th className="text-left py-2 px-2 text-xs font-semibold text-gray-600">Due</th>
+									<th className="text-left py-2 px-2 text-xs font-semibold text-gray-600">Sent</th>
+									<th className="text-left py-2 px-2 text-xs font-semibold text-gray-600">Missing</th>
+								</tr>
+							</thead>
+							<tbody>
+								{(reminderCoverage?.by_threshold || [
+									{ threshold_day: 7, due_targets: 0, sent_targets: 0, missing_targets: 0 },
+									{ threshold_day: 3, due_targets: 0, sent_targets: 0, missing_targets: 0 },
+									{ threshold_day: 1, due_targets: 0, sent_targets: 0, missing_targets: 0 },
+								]).map((item: any) => (
+									<tr key={item.threshold_day} className="border-b border-gray-100">
+										<td className="py-2 px-2 text-sm text-gray-700">{item.threshold_day} day</td>
+										<td className="py-2 px-2 text-sm text-gray-700">{item.due_targets}</td>
+										<td className="py-2 px-2 text-sm text-emerald-700">{item.sent_targets}</td>
+										<td className="py-2 px-2 text-sm text-red-700">{item.missing_targets}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
 					</div>
 				</div>
 
