@@ -501,21 +501,22 @@ export const useStudentStore = create<StudentStore>()(
           
           const params = buildSearchParams({
             ...filters,
-            limit: filters?.limit || 1000,
+            limit: filters?.limit || 100,
           })
           
           console.log('🔍 [searchAdmissions] Built params:', params)
           
           // Parallel fetch
           const [result, watchlistsResponse] = await Promise.all([
-            admissionsService.listDirect(params),
+            admissionsService.listPublic(params),
             options?.userId ? watchlistsService.list().catch(err => {
               console.warn('⚠️ Failed to fetch watchlists:', err)
               return { data: [] }
             }) : Promise.resolve({ data: [] })
           ])
           
-          console.log(`✅ Fetched ${result.data.length} admissions out of ${result.count} total`)
+          const total = result.pagination?.total ?? result.data.length
+          console.log(`✅ Fetched ${result.data.length} admissions out of ${total} total`)
           
           if (result.data.length === 0) {
             console.warn('⚠️ No admissions found. Check if database has data.')

@@ -8,7 +8,7 @@ import ChatPanel from '../components/ai/ChatPanel'
 import { useAi } from '../contexts/AiContext'
 import { useStudentStore } from '../store/studentStore'
 import { useAuthStore } from '../store/authStore'
-import { supabase } from '../services/supabase'
+import { isRealtimeEnabled, supabase } from '../services/supabase'
 
 interface StudentLayoutProps {
   children: ReactNode
@@ -46,31 +46,38 @@ function StudentLayout({ children }: StudentLayoutProps) {
       return
     }
 
-    const channel = supabase
-      .channel(`notifications-live-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${user.id}`,
-        },
-        () => {
-          fetchNotifications().catch(() => {})
-          fetchStats().catch(() => {})
-        }
-      )
-      .subscribe()
-
-    const pollId = window.setInterval(() => {
+    const refresh = () => {
       fetchNotifications().catch(() => {})
       fetchStats().catch(() => {})
+    }
+
+    const channel = isRealtimeEnabled
+      ? supabase
+          .channel(`notifications-live-${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'notifications',
+              filter: `recipient_id=eq.${user.id}`,
+            },
+            () => {
+              refresh()
+            }
+          )
+          .subscribe()
+      : null
+
+    const pollId = window.setInterval(() => {
+      refresh()
     }, 30000)
 
     return () => {
       window.clearInterval(pollId)
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel).catch(() => {})
+      }
     }
   }, [user?.id, user?.role, fetchNotifications, fetchStats])
 

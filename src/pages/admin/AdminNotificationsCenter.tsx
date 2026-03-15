@@ -5,11 +5,45 @@ import { type NotificationType } from "../../data/adminData"
 import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
 
 function AdminNotificationsCenter() {
+	const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
+
+	const getNotificationActorLabel = (notification: any) => {
+		const explicitUniversity = notification.university || notification.university_name
+		if (explicitUniversity && !isUuid(explicitUniversity)) {
+			return explicitUniversity
+		}
+
+		return "the university"
+	}
+
+	const formatNotificationMessage = (notification: any) => {
+		const message = String(notification.message || "")
+		if (!message) {
+			return message
+		}
+
+		const actorLabel = getNotificationActorLabel(notification)
+
+		return message.replace(
+			/updated by\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+			`updated by ${actorLabel}`
+		)
+	}
+
 	const [activeTab, setActiveTab] = useState<NotificationType | "All">("All")
 	const [unreadOnly, setUnreadOnly] = useState(false)
 	const [apiNotifications, setApiNotifications] = useState<any[]>([])
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [secretRunning, setSecretRunning] = useState(false)
+	const [secretResult, setSecretResult] = useState<{
+		targets: number
+		attempted: number
+		succeeded: number
+		failed: number
+		deduped: number
+		timestamp: string
+	} | null>(null)
 	const [showBroadcastModal, setShowBroadcastModal] = useState(false)
 
 	// Fetch notifications on mount
@@ -126,6 +160,34 @@ function AdminNotificationsCenter() {
 		}
 	}
 
+	const handleSecretReminderTrigger = async () => {
+		try {
+			setSecretRunning(true)
+			setError(null)
+			console.log('🕵️ [AdminNotificationsCenter] Secret reminder trigger started (7,3,1)')
+
+			const response = await adminService.triggerDeadlineReminders([7, 3, 1], true)
+			const result = response.data || { targets: 0, attempted: 0, succeeded: 0, failed: 0, deduped: 0 }
+
+			setSecretResult({
+				targets: result.targets || 0,
+				attempted: result.attempted || 0,
+				succeeded: result.succeeded || 0,
+				failed: result.failed || 0,
+				deduped: result.deduped || 0,
+				timestamp: new Date().toISOString(),
+			})
+
+			// Refresh admin notifications list after dispatch
+			await fetchNotifications()
+		} catch (err: any) {
+			console.error('❌ [AdminNotificationsCenter] Secret reminder trigger failed:', err)
+			setError(err.message || 'Failed to trigger deadline reminders')
+		} finally {
+			setSecretRunning(false)
+		}
+	}
+
 	const getNotificationIcon = (type: NotificationType) => {
 		switch (type) {
 			case "admission_verified":
@@ -230,12 +292,24 @@ function AdminNotificationsCenter() {
 					</div>
 				)}
 
+				{/* Secret Trigger Result Banner */}
+				{secretResult && (
+					<div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+						<p className="text-sm text-emerald-800">
+							<strong>Reminder dispatch:</strong> targets={secretResult.targets}, attempted={secretResult.attempted}, succeeded={secretResult.succeeded}, deduped={secretResult.deduped}, failed={secretResult.failed}
+						</p>
+						<p className="text-xs text-emerald-700 mt-1">
+							Triggered at {new Date(secretResult.timestamp).toLocaleString()}. If deduped &gt; 0, matching reminders already existed for the same key and email side-effects were skipped.
+						</p>
+					</div>
+				)}
+
 				{/* Filter Tabs and Action Controls */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
 					<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 						{/* Tabs */}
 						<div className="flex items-center gap-2 flex-wrap">
-							{(["All", "admission_verified", "admission_submitted", "system_broadcast", "system_error"] as const).map((tab) => {
+							{(["All", "admission_verified", "admission_submitted", "deadline_near", "system_broadcast", "system_error"] as const).map((tab) => {
 								const tabLabel =
 									tab === "All"
 										? "All"
@@ -243,6 +317,8 @@ function AdminNotificationsCenter() {
 											? "Verified Admissions"
 										: tab === "admission_submitted"
 											? "New Submissions"
+									: tab === "deadline_near"
+										? "Deadline Alerts"
 										: tab === "system_broadcast"
 											? "System Broadcasts"
 										: "System Errors"
@@ -263,6 +339,17 @@ function AdminNotificationsCenter() {
 
 						{/* Action Controls */}
 						<div className="flex items-center gap-4">
+							{/* Secret Reminder Trigger */}
+							<button
+								onClick={handleSecretReminderTrigger}
+								disabled={secretRunning}
+								className="w-5 h-5 rounded-full border border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+								title="Secret: Trigger deadline reminders (7/3/1)"
+								aria-label="Secret reminder trigger"
+							>
+								{secretRunning ? '…' : '•'}
+							</button>
+
 							{/* Broadcast Button */}
 							<button
 								onClick={() => setShowBroadcastModal(true)}
@@ -358,7 +445,7 @@ function AdminNotificationsCenter() {
 															<div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#2563EB" }}></div>
 														)}
 													</div>
-													<p className="text-sm text-gray-600 mb-2">{notification.message}</p>
+													<p className="text-sm text-gray-600 mb-2">{formatNotificationMessage(notification)}</p>
 													<div className="flex items-center gap-4 text-xs text-gray-500">
 														<span>{timeLabel}</span>
 														{notification.university && (

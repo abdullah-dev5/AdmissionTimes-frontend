@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
@@ -14,6 +14,7 @@ function SearchAdmissions() {
   const { user } = useAuth()
   const { showError } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
+  const searchAdmissions = useStudentStore((state) => state.searchAdmissions)
   const { admissions: rawAdmissions, loading } = useStudentDashboardData()
   
   // ✅ Filter admissions - HIDE rejected and disputed from students
@@ -35,6 +36,33 @@ function SearchAdmissions() {
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
   const [sortBy, setSortBy] = useState('Relevance')
   const [compareIds, setCompareIds] = useState<string[]>([])
+
+  // Debounced server-side search: fires when the text query or degree filter changes.
+  // Fields the backend can filter (search, degree_level) are delegated to the server;
+  // fields only available client-side (city, university name, fee range, deadline) continue
+  // to run against the returned dataset via the useMemo below.
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    // Skip on the initial mount – useStudentDashboardData handles the first load
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    if (!user?.id) return
+
+    const timer = setTimeout(() => {
+      searchAdmissions(
+        {
+          search: searchQuery.trim() || undefined,
+          degreeLevel: degreeFilter || undefined,
+          limit: 100,
+        },
+        { showError, userId: user.id },
+      )
+    }, 400) // 400 ms debounce – responsive but avoids hammering the API on every keystroke
+
+    return () => clearTimeout(timer)
+  }, [searchQuery, degreeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savedIds = useMemo(() => admissions.filter(a => a.saved).map(a => a.id), [admissions])
 

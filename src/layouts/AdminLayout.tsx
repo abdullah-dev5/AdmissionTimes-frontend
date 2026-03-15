@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import type { ReactNode } from "react"
 import AdminSidebar from "../components/admin/AdminSidebar"
 import { useAuthStore } from "../store/authStore"
-import { supabase } from "../services/supabase"
+import { isRealtimeEnabled, supabase } from "../services/supabase"
 
 interface AdminLayoutProps {
 	children: ReactNode
@@ -20,19 +20,21 @@ function AdminLayout({ children }: AdminLayoutProps) {
 			window.dispatchEvent(new CustomEvent("admin:notifications-updated"))
 		}
 
-		const channel = supabase
-			.channel(`admin-notifications-live-${user.id}`)
-			.on(
-				"postgres_changes",
-				{
-					event: "INSERT",
-					schema: "public",
-					table: "notifications",
-					filter: `recipient_id=eq.${user.id}`,
-				},
-				() => emitRefresh()
-			)
-			.subscribe()
+		const channel = isRealtimeEnabled
+			? supabase
+					.channel(`admin-notifications-live-${user.id}`)
+					.on(
+						"postgres_changes",
+						{
+							event: "INSERT",
+							schema: "public",
+							table: "notifications",
+							filter: `recipient_id=eq.${user.id}`,
+						},
+						() => emitRefresh()
+					)
+					.subscribe()
+			: null
 
 		const pollId = window.setInterval(() => {
 			emitRefresh()
@@ -40,7 +42,9 @@ function AdminLayout({ children }: AdminLayoutProps) {
 
 		return () => {
 			window.clearInterval(pollId)
-			supabase.removeChannel(channel)
+			if (channel) {
+				supabase.removeChannel(channel).catch(() => {})
+			}
 		}
 	}, [user?.id, user?.role])
 

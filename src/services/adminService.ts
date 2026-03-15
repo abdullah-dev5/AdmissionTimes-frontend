@@ -281,6 +281,24 @@ export const adminService = {
   },
 
   /**
+   * Manually trigger deadline reminders (admin only)
+   * POST /api/v1/scheduler/reminder
+   *
+   * @param thresholdDays - Reminder thresholds in days (default: [7,3,1])
+   * @returns Reminder dispatch summary
+   */
+  triggerDeadlineReminders: async (
+    thresholdDays: number[] = [7, 3, 1],
+    forceRun: boolean = false
+  ): Promise<ApiResponse<{ targets: number; attempted: number; succeeded: number; failed: number; deduped?: number }>> => {
+    const response = await apiClient.post('/scheduler/reminder', {
+      threshold_days: thresholdDays,
+      force_run: forceRun,
+    });
+    return response.data;
+  },
+
+  /**
    * Get change logs
    * Fetches audit trail of changes made to admissions
    * 

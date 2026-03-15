@@ -375,6 +375,20 @@ export interface AdminDashboard {
   stats: AdminDashboardStats;
   recent_actions: AdminAuditLog[];
   pending_admissions: AdminAdmission[];
+  reminder_coverage?: {
+    look_ahead_days: number;
+    total_targets_next_7_days: number;
+    total_due_now: number;
+    total_sent_now: number;
+    total_missing_now: number;
+    by_threshold: Array<{
+      threshold_day: 7 | 3 | 1;
+      due_targets: number;
+      sent_targets: number;
+      missing_targets: number;
+    }>;
+    generated_at: string;
+  };
 }
 
 /**

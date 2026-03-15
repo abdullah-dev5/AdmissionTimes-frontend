@@ -167,33 +167,79 @@ const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission 
 }
 
 const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]; onAlertToggle: (id: string) => void }) => {
-  const groupedDeadlines = deadlines.reduce((acc, deadline) => {
-    const date = deadline.deadline
-    if (!acc[date]) {
-      acc[date] = []
-    }
-    acc[date].push(deadline)
-    return acc
-  }, {} as Record<string, (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]>)
+  const isClosedDeadline = (deadline: StudentAdmission & { daysRemaining: number }) =>
+    deadline.programStatus === 'Closed' || deadline.daysRemaining < 0
 
-  const sortedDates = Object.keys(groupedDeadlines).sort((a, b) => {
-    return new Date(a).getTime() - new Date(b).getTime()
-  })
+  const openDeadlines = deadlines.filter((deadline) => !isClosedDeadline(deadline))
+  const closedDeadlines = deadlines.filter((deadline) => isClosedDeadline(deadline))
+
+  const groupByDate = (items: (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]) => {
+    return items.reduce((acc, deadline) => {
+      const date = deadline.deadline
+      if (!acc[date]) {
+        acc[date] = []
+      }
+      acc[date].push(deadline)
+      return acc
+    }, {} as Record<string, (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]>)
+  }
+
+  const sortDatesAsc = (grouped: Record<string, (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]>) => {
+    return Object.keys(grouped).sort((a, b) => {
+      return new Date(a).getTime() - new Date(b).getTime()
+    })
+  }
+
+  const openGrouped = groupByDate(openDeadlines)
+  const closedGrouped = groupByDate(closedDeadlines)
+  const openDates = sortDatesAsc(openGrouped)
+  const closedDates = sortDatesAsc(closedGrouped)
 
   return (
     <div className="space-y-8">
-      {sortedDates.map((date) => (
-        <div key={date}>
+      {openDates.length > 0 && (
+        <section>
           <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>
-            {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            Upcoming Deadlines
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {groupedDeadlines[date].map((deadline) => (
-              <DeadlineCard key={deadline.id} deadline={deadline} onAlertToggle={onAlertToggle} />
+          <div className="space-y-8">
+            {openDates.map((date) => (
+              <div key={`open-${date}`}>
+                <h3 className="text-lg font-semibold mb-4" style={{ color: '#111827' }}>
+                  {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {openGrouped[date].map((deadline) => (
+                    <DeadlineCard key={deadline.id} deadline={deadline} onAlertToggle={onAlertToggle} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-      ))}
+        </section>
+      )}
+
+      {closedDates.length > 0 && (
+        <section>
+          <h2 className="text-xl font-semibold mb-4" style={{ color: '#6B7280' }}>
+            Closed / Passed
+          </h2>
+          <div className="space-y-8">
+            {closedDates.map((date) => (
+              <div key={`closed-${date}`}>
+                <h3 className="text-lg font-semibold mb-4" style={{ color: '#6B7280' }}>
+                  {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {closedGrouped[date].map((deadline) => (
+                    <DeadlineCard key={deadline.id} deadline={deadline} onAlertToggle={onAlertToggle} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

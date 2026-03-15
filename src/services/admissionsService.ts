@@ -4,305 +4,64 @@
  * Service for managing admission/program data.
  * Handles CRUD operations, verification workflows, and PDF parsing.
  * 
- * Phase 1: Supports both backend API and direct Supabase queries
- * - Use _direct methods for read-only operations (faster, 1 hop)
- * - Use regular methods for complex operations (backend logic)
- * 
  * @module services/admissionsService
  */
 
 import apiClient from './apiClient';
-import { supabase } from './supabase';
 import type { ApiResponse, PaginatedResponse, Admission } from '../types/api';
 
-// ⚡ Performance: In-memory cache for universities (5 min TTL)
-const universityCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 export const admissionsService = {
-  // ============================================================
-  // DIRECT SUPABASE QUERIES (Phase 1 - Fast Read Operations)
-  // ============================================================
-
-  /**
-   * List admissions directly from Supabase (fast, 1 hop)
-   * 
-   * Phase 1: Frontend reads directly without backend hop
-   * RLS policies enforce data access control
-   * 
-   * @param params - Filter and pagination params
-   * @returns Promise resolving to paginated admissions
-   */
-  listDirect: async (params?: {
-    search?: string;
-    degree_level?: string;
-    verification_status?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{
-    data: Admission[];
-    count: number;
-    page: number;
-    limit: number;
-  }> => {
-    try {
-      console.log('📊 [listDirect] Fetching admissions with params:', params);
-      
-      // Select admission data (universities will be fetched separately if needed)
-      let query = supabase
-        .from('admissions')
-        .select('*', { count: 'exact' });
-
-      // Only show active admissions (if specified)
-      if (params?.verification_status !== undefined) {
-        console.log('🔍 Filtering by is_active: true');
-        query = query.eq('is_active', true);
-      }
-
-      // Apply filters
-      if (params?.degree_level) {
-        console.log('🔍 Filtering by degree_level:', params.degree_level);
-        query = query.eq('degree_level', params.degree_level);
-      }
-      if (params?.verification_status) {
-        console.log('🔍 Filtering by verification_status:', params.verification_status);
-        query = query.eq('verification_status', params.verification_status);
-      }
-      if (params?.search) {
-        console.log('🔍 Searching for:', params.search);
-        query = query.or(
-          `title.ilike.%${params.search}%,description.ilike.%${params.search}%,field_of_study.ilike.%${params.search}%`
-        );
-      }
-
-      // Apply pagination - use higher default limit for student search
-      const page = params?.page || 1;
-      const limit = params?.limit || 1000;  // Higher default to fetch all admissions
-      const start = (page - 1) * limit;
-      query = query.range(start, start + limit - 1);
-
-      const { data, count, error } = await query;
-
-      if (error) {
-        console.error('❌ Supabase query error:', error);
-        throw error;
-      }
-
-      console.log(`✅ [listDirect] Retrieved ${data?.length || 0} admissions (total count: ${count})`);
-      
-      // ⚡ Fetch universities for admissions that have university_id (with caching)
-      let admissionsWithUniversities = data || [];
-      if (data && data.length > 0) {
-        console.log('📋 Sample admission:', data[0]);
-        
-        // Get unique university IDs
-        const universityIds = [...new Set(data.map(a => a.university_id).filter(Boolean))];
-        
-        if (universityIds.length > 0) {
-          const now = Date.now();
-          const universityMap = new Map();
-          const uncachedIds: string[] = [];
-          
-          // Check cache first
-          universityIds.forEach(id => {
-            const cached = universityCache.get(id);
-            if (cached && (now - cached.timestamp) < CACHE_TTL) {
-              universityMap.set(id, cached.data);
-            } else {
-              uncachedIds.push(id);
-            }
-          });
-          
-          console.log(`🏛️ Universities: ${universityIds.length - uncachedIds.length} cached, ${uncachedIds.length} to fetch`);
-          
-          // Fetch only uncached universities
-          if (uncachedIds.length > 0) {
-            const { data: universities, error: univError } = await supabase
-              .from('universities')
-              .select('id, name, logo_url, city, country')
-              .in('id', uncachedIds);
-            
-            if (!univError && universities) {
-              console.log('✅ Fetched', universities.length, 'universities from database');
-              
-              // Add to cache and map
-              universities.forEach(u => {
-                universityCache.set(u.id, { data: u, timestamp: now });
-                universityMap.set(u.id, u);
-              });
-            } else {
-              console.warn('⚠️ Failed to fetch universities:', univError);
-            }
-          }
-          
-          // Attach university data to each admission
-          admissionsWithUniversities = data.map(admission => ({
-            ...admission,
-            universities: admission.university_id ? universityMap.get(admission.university_id) || null : null
-          }));
-        }
-      }
-
-      return {
-        data: admissionsWithUniversities,
-        count: count || 0,
-        page,
-        limit,
-      };
-    } catch (error: any) {
-      console.error('❌ Failed to fetch admissions from Supabase:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Get admission by ID directly from Supabase (Phase 1)
-   * 
-   * @param id - Admission ID
-   * @returns Promise resolving to admission
-   */
-  getByIdDirect: async (id: string): Promise<Admission> => {
-    try {
-      const { data, error } = await supabase
-        .from('admissions')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error: any) {
-      console.error('❌ Failed to fetch admission:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Create admission directly to Supabase (Phase 1)
-   * 
-   * RLS policies enforce: created_by = auth.uid()
-   * 
-   * @param data - Admission data
-   * @returns Promise resolving to created admission
-   */
-  createDirect: async (data: Partial<Admission>): Promise<Admission> => {
-    try {
-      const { data: admission, error } = await supabase
-        .from('admissions')
-        .insert({
-          university_id: (data as any).university_id,
-          title: data.title,
-          description: data.description,
-          degree_level: data.degree_level,
-          program_type: (data as any).program_type,
-          field_of_study: (data as any).field_of_study,
-          duration: (data as any).duration,
-          tuition_fee: (data as any).tuition_fee,
-          currency: (data as any).currency,
-          application_fee: data.application_fee,
-          deadline: data.deadline,
-          start_date: (data as any).start_date,
-          location: data.location,
-          delivery_mode: (data as any).delivery_mode,
-          requirements: (data as any).requirements,
-          verification_status: (data as any).verification_status || 'pending',
-          // RLS will automatically set created_by = auth.uid()
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return admission;
-    } catch (error: any) {
-      console.error('❌ Failed to create admission:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Update admission directly to Supabase (Phase 1)
-   * 
-   * RLS policies enforce: only creator or admin can update
-   * 
-   * @param id - Admission ID
-   * @param data - Updated data
-   * @returns Promise resolving to updated admission
-   */
-  updateDirect: async (id: string, data: Partial<Admission>): Promise<Admission> => {
-    try {
-      // Only send fields that exist in the database schema
-      const updatePayload: any = {};
-      
-      // Only include fields that are present in the data and exist in DB
-      const allowedFields = [
-        'university_id',
-        'title',
-        'description',
-        'program_type',
-        'degree_level',
-        'field_of_study',
-        'duration',
-        'tuition_fee',
-        'currency',
-        'application_fee',
-        'deadline',
-        'start_date',
-        'location',
-        'delivery_mode',
-        'requirements',
-        'verification_status',
-        'updated_by',  // Track who is making the update (for auto status transitions)
-      ];
-      
-      for (const field of allowedFields) {
-        if (data.hasOwnProperty(field)) {
-          updatePayload[field] = (data as any)[field];
-        }
-      }
-      
-      const { data: admission, error } = await supabase
-        .from('admissions')
-        .update(updatePayload)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return admission;
-    } catch (error: any) {
-      console.error('❌ Failed to update admission:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Delete admission directly from Supabase (Phase 1)
-   * 
-   * RLS policies enforce: only university that created it or admin can delete
-   * 
-   * @param id - Admission ID
-   * @returns Promise resolving when deletion completes
-   */
-  deleteDirect: async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('admissions')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-    } catch (error: any) {
-      console.error('❌ Failed to delete admission:', error);
-      throw error;
-    }
-  },
-
   // ============================================================
   // BACKEND API METHODS (Complex operations, admin functions)
   // ============================================================
 
   /**
-   * List admissions with optional filters
+   * List admissions via public/student endpoint (GET /admissions)
+   * 
+   * Returns only verified admissions visible to students.
+   * Use this in student search flows instead of listDirect.
+   * 
+   * @param params - Filter and pagination params
+   * @returns Promise resolving to paginated admissions list
+   */
+  listPublic: async (params?: {
+    search?: string;
+    degree_level?: string;
+    field_of_study?: string;
+    delivery_mode?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<Admission>> => {
+    // Backend validator caps limit at 100; enforce here to prevent 400 errors
+    const safeParams = params ? { ...params, limit: Math.min(params.limit ?? 100, 100) } : undefined;
+    const response = await apiClient.get('/admissions', { params: safeParams });
+    return response.data;
+  },
+
+  /**
+   * List admissions via admin endpoint (GET /admin/admissions)
+   * 
+   * Returns all admissions regardless of status (admin view).
+   * Use this in admin dashboard and admin tooling.
+   * 
+   * @param params - Filter and pagination params
+   * @returns Promise resolving to paginated admissions list
+   */
+  listAdmin: async (params?: {
+    search?: string;
+    degree_level?: string;
+    verification_status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResponse<Admission>> => {
+    // Backend validator caps limit at 100; enforce here to prevent 400 errors
+    const safeParams = params ? { ...params, limit: Math.min(params.limit ?? 100, 100) } : undefined;
+    const response = await apiClient.get('/admin/admissions', { params: safeParams });
+    return response.data;
+  },
+
+  /**
+   * List admissions with optional filters (university endpoint)
    * 
    * @param params - Query parameters for filtering and pagination
    * @returns Promise resolving to paginated admissions list

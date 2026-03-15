@@ -36,6 +36,14 @@ const getSupabaseConfig = () => {
 const { url, key } = getSupabaseConfig();
 
 /**
+ * Frontend realtime feature flag.
+ *
+ * Keep disabled by default in local development where websocket access may be blocked,
+ * while polling continues to provide notification refresh.
+ */
+export const isRealtimeEnabled = import.meta.env.VITE_ENABLE_REALTIME === 'true';
+
+/**
  * Supabase client instance
  * 
  * This client is used for:
