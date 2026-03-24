@@ -4,13 +4,12 @@ import { type AuditItem, type AuditStatus } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
 import { formatDateTime } from "../../utils/dateUtils"
 
-const STATUS_OPTIONS: Array<"All" | AuditStatus> = ["All", "Pending", "Verified", "Rejected", "Disputed"]
+const STATUS_OPTIONS: Array<"All" | AuditStatus> = ["All", "Pending", "Verified", "Rejected"]
 
 const STATUS_STYLES: Record<AuditStatus, { bg: string; text: string }> = {
 	Pending: { bg: "bg-yellow-100", text: "text-yellow-700" },
 	Verified: { bg: "bg-green-100", text: "text-green-700" },
 	Rejected: { bg: "bg-red-100", text: "text-red-700" },
-	Disputed: { bg: "bg-orange-100", text: "text-orange-700" },
 }
 
 const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)

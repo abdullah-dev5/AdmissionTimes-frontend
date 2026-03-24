@@ -2,7 +2,7 @@
  * Student Admission Filters
  * 
  * Centralized filtering logic for student portal visibility rules.
- * Ensures rejected and disputed admissions are hidden consistently
+ * Ensures rejected admissions are hidden consistently
  * across all student pages.
  * 
  * @module utils/studentFilters
@@ -15,7 +15,7 @@ import type { StudentAdmission } from '../data/studentData'
  * 
  * BUSINESS RULES:
  * - Students can ONLY see: verified and pending admissions
- * - Students CANNOT see: rejected, disputed, or unknown status admissions
+ * - Students CANNOT see: rejected or unknown status admissions
  * 
  * @param admissions - Array of student admissions
  * @param debugLogging - Enable console logging for debugging (default: false)
@@ -36,8 +36,13 @@ export function filterStudentVisibleAdmissions(
   }
 
   const filtered = admissions.filter(a => {
-    // Only show verified and pending to students
-    const shouldShow = a.verificationStatus === 'verified' || a.verificationStatus === 'pending'
+    // Only show verified and pending to students.
+    // Fallback to mapped status in case raw verificationStatus is missing from API payload.
+    const shouldShow =
+      a.verificationStatus === 'verified' ||
+      a.verificationStatus === 'pending' ||
+      a.status === 'Verified' ||
+      a.status === 'Pending'
     
     // Debug logging for filtered out admissions
     if (debugLogging && !shouldShow && a.verificationStatus) {

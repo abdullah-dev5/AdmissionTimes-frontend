@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
+import { showError, showSuccess, showWarning } from '../../utils/swal'
 
 function Settings() {
   const { user, refreshUser } = useAuth()
@@ -100,10 +101,10 @@ function Settings() {
         display_name: profileData.displayName,
       })
       await refreshUser()
-      alert('Profile updated successfully!')
+      await showSuccess('Profile updated successfully!')
     } catch (error) {
       console.error('Failed to update profile:', error)
-      alert('Failed to update profile')
+      await showError('Failed to update profile')
     } finally {
       setIsSaving(false)
     }
@@ -125,10 +126,10 @@ function Settings() {
         contact_email: universityData.contactEmail || null,
         contact_phone: universityData.contactPhone || null,
       })
-      alert('University profile updated successfully!')
+      await showSuccess('University profile updated successfully!')
     } catch (error) {
       console.error('Failed to update university profile:', error)
-      alert('Failed to update university profile')
+      await showError('Failed to update university profile')
     } finally {
       setIsSaving(false)
     }
@@ -136,11 +137,11 @@ function Settings() {
 
   const handleChangePassword = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('New passwords do not match!')
+      await showWarning('New passwords do not match!')
       return
     }
     if (passwordData.newPassword.length < 8) {
-      alert('Password must be at least 8 characters long!')
+      await showWarning('Password must be at least 8 characters long!')
       return
     }
     setIsSaving(true)
@@ -148,7 +149,7 @@ function Settings() {
     await new Promise(resolve => setTimeout(resolve, 1000))
     setIsSaving(false)
     setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
-    alert('Password changed successfully!')
+    await showSuccess('Password changed successfully!')
   }
 
   return (

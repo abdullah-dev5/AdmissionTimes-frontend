@@ -89,7 +89,7 @@ const buildRemarksList = (item: VerificationItem | null) => {
 	if (!item) return []
 	const entries = [
 		{ label: "Rejection reason", value: item.rejectionReason },
-		{ label: "Dispute reason", value: item.disputeReason },
+		{ label: "Review reason", value: item.reviewReason },
 		{ label: "Verification comments", value: item.verificationComments },
 		{ label: "Admin notes", value: item.adminNotes },
 	]
@@ -103,7 +103,7 @@ function AdminVerificationCenter() {
 	const [universityFilter, setUniversityFilter] = useState<string>("All")
 	const [searchQuery, setSearchQuery] = useState("")
 	const [selectedItem, setSelectedItem] = useState<VerificationItem | null>(null)
-	const [actionType, setActionType] = useState<"Verify" | "Reject" | "Dispute" | "Revision" | null>(null)
+	const [actionType, setActionType] = useState<"Verify" | "Reject" | "Revision" | null>(null)
 	const [remarks, setRemarks] = useState("")
 	const [currentPage, setCurrentPage] = useState(1)
 	const itemsPerPage = 10
@@ -185,7 +185,6 @@ function AdminVerificationCenter() {
 			pending: "Pending",
 			verified: "Verified",
 			rejected: "Rejected",
-			disputed: "Disputed",
 		}
 		
 		return admissions.map((admission: any) => {
@@ -207,12 +206,11 @@ function AdminVerificationCenter() {
 			
 			return {
 				rejectionReason: admission.rejection_reason ?? null,
-				disputeReason: admission.dispute_reason ?? null,
+				reviewReason: admission.rejection_reason ?? null,
 				verificationComments: admission.verification_comments ?? null,
 				adminNotes: admission.admin_notes ?? null,
 				remarks:
 					admission.rejection_reason ||
-					admission.dispute_reason ||
 					admission.verification_comments ||
 					admission.admin_notes ||
 					null,
@@ -328,7 +326,7 @@ function AdminVerificationCenter() {
 		}
 	}
 
-	const handleActionSelect = (action: "Verify" | "Reject" | "Dispute" | "Revision") => {
+	const handleActionSelect = (action: "Verify" | "Reject" | "Revision") => {
 		setActionType(action)
 		setRemarks("")
 	}
@@ -349,10 +347,6 @@ function AdminVerificationCenter() {
 			setError('This admission is already rejected. No action needed.')
 			return
 		}
-		if (actionType === 'Dispute' && currentStatus === 'disputed') {
-			setError('This admission is already disputed. No action needed.')
-			return
-		}
 		if (actionType === 'Revision' && currentStatus === 'pending') {
 			setError('This admission is already pending. You can still send revision notes if needed.')
 		}
@@ -370,16 +364,13 @@ function AdminVerificationCenter() {
 			} else if (actionType === 'Reject') {
 				console.log('❌ Rejecting admission:', selectedItem.id)
 				await adminService.rejectAdmission(selectedItem.id, remarks)
-			} else if (actionType === 'Dispute') {
-				console.log('⚠️ Disputing admission:', selectedItem.id)
-				await adminService.disputeAdmission(selectedItem.id, remarks)
 			} else if (actionType === 'Revision') {
 				console.log('🟠 Requesting revision:', selectedItem.id)
 				await adminService.requestRevision(selectedItem.id, remarks)
 			}
 
 			// ✅ Notify watchers about the change (after successful action)
-			const resolvedChangeType = actionType === 'Verify' || actionType === 'Reject' || actionType === 'Dispute' || actionType === 'Revision'
+			const resolvedChangeType = actionType === 'Verify' || actionType === 'Reject' || actionType === 'Revision'
 				? 'Admin Edit'
 				: 'Manual Edit'
 
@@ -457,7 +448,7 @@ function AdminVerificationCenter() {
 						{/* Status Filter - Tabs */}
 						<div className="flex items-center gap-2 flex-wrap">
 							<span className="text-sm text-gray-600 mr-2">Status:</span>
-							{(["All", "Pending", "Verified", "Rejected", "Disputed"] as const).map((status) => (
+							{(["All", "Pending", "Verified", "Rejected"] as const).map((status) => (
 								<button
 									key={status}
 									onClick={() => {
@@ -865,8 +856,7 @@ function AdminVerificationCenter() {
 									
 									{/* ✅ Status warning if already processed */}
 									{(selectedItem.verificationStatusRaw === 'verified' || 
-									  selectedItem.verificationStatusRaw === 'rejected' || 
-									  selectedItem.verificationStatusRaw === 'disputed') && (
+									  selectedItem.verificationStatusRaw === 'rejected') && (
 										<div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
 											<p className="text-sm text-blue-800">
 												ℹ️ This admission is already <strong>{selectedItem.status}</strong>. 
@@ -903,20 +893,6 @@ function AdminVerificationCenter() {
 										>
 											Reject Admission
 											{selectedItem.verificationStatusRaw === 'rejected' && ' ✓'}
-										</button>
-										<button
-											onClick={() => handleActionSelect("Dispute")}
-											disabled={selectedItem.verificationStatusRaw === 'disputed'}
-											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
-												actionType === "Dispute"
-													? "text-white"
-													: "border border-gray-300 text-gray-700 hover:bg-gray-50"
-											} disabled:opacity-50 disabled:cursor-not-allowed`}
-											style={actionType === "Dispute" ? { backgroundColor: "#EA580C" } : {}}
-											title={selectedItem.verificationStatusRaw === 'disputed' ? 'Already disputed' : 'Mark as disputed'}
-										>
-											Mark as Disputed
-											{selectedItem.verificationStatusRaw === 'disputed' && ' ✓'}
 										</button>
 										<button
 											onClick={() => handleActionSelect("Revision")}

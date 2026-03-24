@@ -120,12 +120,12 @@ export const useChangeLogFilters = () => {
 		
 		// WHO made the change determines the type
 		if (actor === 'university') return 'Manual Edit'  // University rep created/updated
-		if (actor === 'admin') return 'Admin Edit'         // Admin verified/rejected/disputed
+		if (actor === 'admin') return 'Admin Edit'         // Admin verification/rejection actions
 		if (actor === 'system') return 'Scraper Update'    // Automated scraper/system
 		
 		// Fallback: infer from action if actor is unknown
 		const action = actionType?.toLowerCase() || ''
-		if (action === 'verified' || action === 'rejected' || action === 'disputed') {
+		if (action === 'verified' || action === 'rejected' || action === 'status_changed') {
 			return 'Admin Edit'
 		}
 		

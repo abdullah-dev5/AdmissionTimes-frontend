@@ -13,6 +13,8 @@ import { authService, type SignInData, type SignUpData } from '../services/authS
 import { supabase } from '../services/supabase'
 import type { User } from '../types/api'
 
+const isAuthDebugEnabled = import.meta.env.VITE_DEBUG_AUTH === 'true'
+
 // Re-export types for use in other modules
 export type { SignInData, SignUpData }
 
@@ -63,9 +65,9 @@ export const useAuthStore = create<AuthStoreState>()(
             const response = await authService.getCurrentUser()
             const userData = response.data
 
-            console.log('🔐 [AuthStore] checkAuth - User data:', userData)
+            if (isAuthDebugEnabled) console.log('🔐 [AuthStore] checkAuth - User data:', userData)
             if (userData.role !== 'student') {
-              console.log('🔐 [AuthStore] checkAuth - university_id:', userData.university_id)
+              if (isAuthDebugEnabled) console.log('🔐 [AuthStore] checkAuth - university_id:', userData.university_id)
             }
 
             set({ user: userData, isAuthenticated: true })
@@ -107,11 +109,11 @@ export const useAuthStore = create<AuthStoreState>()(
           const response = await authService.getCurrentUser()
           const userData = response.data
 
-          console.log('🔐 [AuthStore] User data received:', userData)
+          if (isAuthDebugEnabled) console.log('🔐 [AuthStore] User data received:', userData)
           if (userData.role !== 'student') {
-            console.log('🔐 [AuthStore] university_id:', userData.university_id)
+            if (isAuthDebugEnabled) console.log('🔐 [AuthStore] university_id:', userData.university_id)
           }
-          console.log('🔐 [AuthStore] role:', userData.role)
+          if (isAuthDebugEnabled) console.log('🔐 [AuthStore] role:', userData.role)
 
           set({ user: userData, isAuthenticated: true })
 

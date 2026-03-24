@@ -12,6 +12,21 @@ import type { ApiResponse, PaginatedResponse, Activity } from '../types/api';
 
 export const activityService = {
   /**
+   * Track activity event
+   *
+   * @param payload - Activity tracking payload
+   */
+  track: async (payload: {
+    activity_type: 'viewed' | 'searched' | 'compared' | 'watchlisted' | 'view' | 'search' | 'saved' | 'alert' | 'deadline' | 'notification';
+    entity_type: string;
+    entity_id: string;
+    metadata?: Record<string, any>;
+  }): Promise<ApiResponse<Activity>> => {
+    const response = await apiClient.post('/activity', payload);
+    return response.data;
+  },
+
+  /**
    * List activities with optional filters
    * 
    * @param params - Query parameters for filtering and pagination

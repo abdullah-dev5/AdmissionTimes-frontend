@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react"
+import type { AxiosError } from "axios"
 import UniversityMessageBubble from "./UniversityMessageBubble"
 import UniversityPromptChip from "./UniversityPromptChip"
 import LoadingDots from "../LoadingDots"
+import aiService, { type ChatHistoryEntry } from "../../../services/aiService"
 
 interface Message {
 	id: string
@@ -14,31 +16,26 @@ interface UniversityAIChatWindowProps {
 	isOpen: boolean
 	onClose: () => void
 	universityName?: string
-}
-
-// Mock responses for university-specific queries
-const mockResponses: Record<string, string> = {
-	"upload admission guide": "To upload an admission, go to 'Manage Admissions' > Click 'New Admission' > Fill out all required details (title, deadline, fees, requirements) > Upload supporting documents if needed > Click 'Publish'. You can also upload a PDF for auto-fill of admission details.",
-	"explain status pending audit": "Pending Audit means your admission submission is awaiting admin verification before being visible to students. The admin reviews your data for accuracy and compliance. You'll receive a notification once the review is complete.",
-	"show verified admissions": "You can view all verified admissions under the 'Verification Center' page, filtered by 'Verified' status. Verified admissions are live and visible to students.",
-	"system verification policy": "The verification process ensures data accuracy and compliance. After submission, admins review your admission within 2-3 business days. You'll be notified of the result (Verified, Rejected, or Disputed). If rejected, you can review feedback and resubmit.",
-	"explain status disputed": "Disputed status means there's a disagreement about your admission data. You can view admin remarks in the Verification Center and submit corrections or clarifications.",
-	"how to edit admission": "Go to 'Manage Admissions' > Find your admission > Click 'Edit' > Make changes > Save. Note: Edited admissions may require re-verification.",
-	"what is rejected status": "Rejected status means your admission submission didn't meet verification requirements. Check the admin remarks in Verification Center for specific issues. You can fix the problems and resubmit.",
+	aiContext?: string
 }
 
 const initialPrompts = [
-	"Upload admission guide",
-	"Explain status: Pending Audit",
-	"Show verified admissions",
-	"System verification policy",
+	"How do I publish a new admission?",
+	"Explain Pending Audit status",
+	"Show my verified admissions",
+	"What triggers re-verification?",
 ]
 
-function UniversityAIChatWindow({ isOpen, onClose, universityName = "University" }: UniversityAIChatWindowProps) {
+function UniversityAIChatWindow({
+	isOpen,
+	onClose,
+	universityName = "University",
+	aiContext = "University Portal",
+}: UniversityAIChatWindowProps) {
 	const [messages, setMessages] = useState<Message[]>([
 		{
 			id: "1",
-			text: `Hi ${universityName}! I'm your AI Assistant 🤖. How can I help you today?`,
+			text: `Hi ${universityName}! I'm your AI Assistant. I can help with admission publishing, verification workflow, and dashboard actions.`,
 			isUser: false,
 			timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
 		},
@@ -46,6 +43,7 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 	const [inputValue, setInputValue] = useState("")
 	const [isLoading, setIsLoading] = useState(false)
 	const messagesEndRef = useRef<HTMLDivElement>(null)
+	const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -55,14 +53,133 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 		scrollToBottom()
 	}, [messages])
 
-	const getMockResponse = (query: string): string => {
-		const lowerQuery = query.toLowerCase()
-		for (const [key, value] of Object.entries(mockResponses)) {
-			if (lowerQuery.includes(key.toLowerCase())) {
-				return value
-			}
+	useEffect(() => {
+		if (isOpen) {
+			resetInactivityTimer()
+		} else {
+			clearInactivityTimer()
 		}
-		return `I understand you're asking about: "${query}". For university-specific help, you can ask about uploading admissions, verification statuses, managing your submissions, or system policies. How can I assist you further?`
+
+		return () => clearInactivityTimer()
+	}, [isOpen])
+
+	const resetInactivityTimer = () => {
+		clearInactivityTimer()
+		inactivityTimerRef.current = setTimeout(() => {
+			onClose()
+		}, 10 * 60 * 1000)
+	}
+
+	const clearInactivityTimer = () => {
+		if (inactivityTimerRef.current) {
+			clearTimeout(inactivityTimerRef.current)
+			inactivityTimerRef.current = null
+		}
+	}
+
+	const buildFallback = (query: string): string => {
+		const lower = query.toLowerCase()
+		const suggestions: string[] = []
+
+		if (lower.includes("pending") || lower.includes("audit") || lower.includes("verify") || lower.includes("status")) {
+			suggestions.push("Open Verification Center and filter by Pending Audit to review current queue.")
+			suggestions.push("Check admin remarks on rejected rows before resubmitting.")
+		}
+
+		if (lower.includes("upload") || lower.includes("pdf") || lower.includes("admission") || lower.includes("publish")) {
+			suggestions.push("Use Manage Admissions > New Admission, then upload your PDF for auto-extraction.")
+			suggestions.push("Verify deadline, eligibility, and location fields before publishing.")
+		}
+
+		if (suggestions.length === 0) {
+			suggestions.push("Ask me: 'How do I publish a new admission?' or 'Explain Pending Audit status'.")
+			suggestions.push("You can also ask for checklist-style steps for any university workflow.")
+		}
+
+		return [
+			"AI is temporarily unavailable, but here are useful next steps:",
+			...suggestions.map((s) => `- ${s}`),
+		].join("\n")
+	}
+
+	const isRefusalReply = (text: string): boolean => {
+		const lower = text.toLowerCase()
+		return (
+			lower.includes("i can only help with") ||
+			lower.includes("i cannot assist") ||
+			lower.includes("i cannot access")
+		)
+	}
+
+	const buildGuidanceFallback = (query: string): string => {
+		const lower = query.toLowerCase()
+
+		if (lower.includes("pending") || lower.includes("audit") || lower.includes("status") || lower.includes("verify")) {
+			return [
+				"Pending Audit means your admission is queued for admin verification.",
+				"- Open Verification Center and review remarks for the specific row.",
+				"- Fix missing fields (deadline, eligibility, location, title).",
+				"- Resubmit and track until status changes to Verified.",
+			].join("\n")
+		}
+
+		if (lower.includes("upload") || lower.includes("publish") || lower.includes("admission")) {
+			return [
+				"Publishing flow for a new admission:",
+				"- Go to Manage Admissions and create a new admission.",
+				"- Upload PDF or fill fields manually, then verify extracted values.",
+				"- Submit for verification and monitor in Verification Center.",
+			].join("\n")
+		}
+
+		if (lower.includes("re-verification") || lower.includes("resubmit") || lower.includes("edit")) {
+			return [
+				"Re-verification is triggered when key admission fields are edited.",
+				"- Update details carefully and keep title, deadline, and eligibility consistent.",
+				"- Resubmit and check remarks for any rejection reasons.",
+			].join("\n")
+		}
+
+		if (lower.includes("verified") || lower.includes("my admissions") || lower.includes("all my")) {
+			return [
+				"To view your verified admissions quickly:",
+				"- Open Manage Admissions and apply Verification Status = Verified.",
+				"- Sort by latest deadline or update date.",
+				"- Open each record to review currently published details.",
+			].join("\n")
+		}
+
+		return [
+			"I can help with university workflow questions:",
+			"- Publishing new admissions",
+			"- Verification statuses and corrective actions",
+			"- Editing and resubmission checklists",
+		].join("\n")
+	}
+
+	const resolveAssistantReply = (query: string, answer: string | undefined): string => {
+		if (!answer) return buildFallback(query)
+		if (isRefusalReply(answer)) return buildGuidanceFallback(query)
+		return answer
+	}
+
+	const resolveRequestFailureReply = (query: string, error: unknown): string => {
+		const axiosError = error as AxiosError<{ message?: string }>
+		const status = axiosError.response?.status
+		const apiMessage = axiosError.response?.data?.message?.toLowerCase() || ""
+
+		if (status === 401) {
+			return "Your session has expired. Please sign in again, then retry your question."
+		}
+
+		if (status === 503 || apiMessage.includes("gemini") || apiMessage.includes("not configured")) {
+			return [
+				"AI service is temporarily unavailable right now.",
+				buildGuidanceFallback(query),
+			].join("\n")
+		}
+
+		return buildGuidanceFallback(query)
 	}
 
 	const handleSend = async (query?: string) => {
@@ -79,38 +196,38 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 		setMessages((prev) => [...prev, userMessage])
 		setInputValue("")
 		setIsLoading(true)
+		resetInactivityTimer()
 
-		// Simulate API call delay
-		setTimeout(() => {
-			try {
-				// In future: POST /api/ai/query?role=university
-				// const response = await fetch('/api/ai/query?role=university', {
-				//   method: 'POST',
-				//   headers: { 'Content-Type': 'application/json' },
-				//   body: JSON.stringify({ query: messageText, role: 'university' })
-				// })
-				// const data = await response.json()
+		// Pass last 4 turns so AI retains context across follow-up questions
+		const historySnapshot: ChatHistoryEntry[] = messages
+			.filter((m) => m.id !== "1")
+			.slice(-4)
+			.map((m) => ({ role: m.isUser ? "user" : "ai", text: m.text }))
 
-				const aiMessage: Message = {
-					id: (Date.now() + 1).toString(),
-					text: getMockResponse(messageText),
-					isUser: false,
-					timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-				}
+		try {
+			const response = await aiService.chat(messageText, aiContext, historySnapshot)
+			const answer = response.data?.answer?.trim()
+			const finalAnswer = resolveAssistantReply(messageText, answer)
 
-				setMessages((prev) => [...prev, aiMessage])
-			} catch (error) {
-				const errorMessage: Message = {
-					id: (Date.now() + 1).toString(),
-					text: "Sorry, I encountered an error. Please try again.",
-					isUser: false,
-					timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-				}
-				setMessages((prev) => [...prev, errorMessage])
-			} finally {
-				setIsLoading(false)
+			const aiMessage: Message = {
+				id: (Date.now() + 1).toString(),
+				text: finalAnswer,
+				isUser: false,
+				timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
 			}
-		}, 800)
+
+			setMessages((prev) => [...prev, aiMessage])
+		} catch (error) {
+			const errorMessage: Message = {
+				id: (Date.now() + 1).toString(),
+				text: resolveRequestFailureReply(messageText, error),
+				isUser: false,
+				timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+			}
+			setMessages((prev) => [...prev, errorMessage])
+		} finally {
+			setIsLoading(false)
+		}
 	}
 
 	const handleQuickAction = (prompt: string) => {
@@ -127,10 +244,16 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 	if (!isOpen) return null
 
 	return (
-		<div className="fixed bottom-20 right-6 w-full sm:w-96 max-w-sm bg-white shadow-xl rounded-2xl p-4 flex flex-col max-h-[60vh] z-[9999] overflow-hidden">
+		<div className="fixed bottom-20 right-6 w-full sm:w-96 max-w-sm bg-white shadow-xl rounded-2xl p-4 flex flex-col max-h-[60vh] z-[9999] overflow-hidden border border-blue-100">
 			{/* Header */}
 			<div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
-				<h3 className="text-sm font-semibold text-blue-600">AI Assistant 🤖</h3>
+				<div>
+					<h3 className="text-sm font-semibold text-blue-700">University AI Assistant</h3>
+					<div className="flex items-center gap-2">
+						<p className="text-[11px] text-gray-500">{aiContext}</p>
+						<span className="text-[11px] text-emerald-600">Online</span>
+					</div>
+				</div>
 				<button
 					onClick={onClose}
 					className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
@@ -158,13 +281,11 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 						</div>
 					</div>
 				)}
-				{messages.length === 1 && (
-					<div className="flex flex-wrap gap-2 mb-4">
-						{initialPrompts.map((prompt, index) => (
-							<UniversityPromptChip key={index} prompt={prompt} onClick={() => handleQuickAction(prompt)} />
-						))}
-					</div>
-				)}
+				<div className="flex flex-wrap gap-2 mb-4">
+					{initialPrompts.map((prompt, index) => (
+						<UniversityPromptChip key={index} prompt={prompt} onClick={() => handleQuickAction(prompt)} />
+					))}
+				</div>
 				<div ref={messagesEndRef} />
 			</div>
 
@@ -173,9 +294,12 @@ function UniversityAIChatWindow({ isOpen, onClose, universityName = "University"
 				<input
 					type="text"
 					value={inputValue}
-					onChange={(e) => setInputValue(e.target.value)}
+					onChange={(e) => {
+						setInputValue(e.target.value)
+						resetInactivityTimer()
+					}}
 					onKeyPress={handleKeyPress}
-					placeholder="Type your message..."
+					placeholder="Ask about verification, publishing, or status..."
 					className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 				/>
 				<button

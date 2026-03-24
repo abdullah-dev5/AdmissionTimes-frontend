@@ -4,9 +4,10 @@ import UniversityAIChatWindow from "./UniversityAIChatWindow"
 
 interface UniversityAIAssistantProps {
 	universityName?: string
+	aiContext?: string
 }
 
-function UniversityAIAssistant({ universityName }: UniversityAIAssistantProps) {
+function UniversityAIAssistant({ universityName, aiContext }: UniversityAIAssistantProps) {
 	const [isOpen, setIsOpen] = useState(false)
 
 	const toggleChat = () => {
@@ -20,7 +21,12 @@ function UniversityAIAssistant({ universityName }: UniversityAIAssistantProps) {
 	return (
 		<>
 			<UniversityAIChatButton isOpen={isOpen} onToggle={toggleChat} />
-			<UniversityAIChatWindow isOpen={isOpen} onClose={closeChat} universityName={universityName} />
+			<UniversityAIChatWindow
+				isOpen={isOpen}
+				onClose={closeChat}
+				universityName={universityName}
+				aiContext={aiContext}
+			/>
 		</>
 	)
 }

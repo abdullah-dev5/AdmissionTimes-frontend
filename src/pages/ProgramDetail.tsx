@@ -1,5 +1,5 @@
 import { Link, useParams, Navigate, useNavigate } from 'react-router-dom'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
 import { calculateDaysRemaining } from '../data/studentData'
@@ -7,6 +7,7 @@ import { useChangeLogFilters } from '../hooks/useChangeLogFilters'
 import UpdatedBadge from '../components/admin/UpdatedBadge'
 import { getRelativeTime } from '../utils/dateUtils'
 import { useToast } from '../contexts/ToastContext'
+import { activityService } from '../services/activityService'
 
 function ProgramDetail() {
   const { id } = useParams()
@@ -21,6 +22,17 @@ function ProgramDetail() {
   const { filteredLogs } = useChangeLogFilters()
   
   const program = id ? getAdmissionById(id) : undefined
+
+  useEffect(() => {
+    if (!program?.id) return
+
+    activityService.track({
+      activity_type: 'viewed',
+      entity_type: 'admission',
+      entity_id: program.id,
+      metadata: { source: 'program_detail', action: 'page_view' },
+    }).catch(() => {})
+  }, [program?.id])
   
   // Check if admission status is Updated (after admin verification)
   const isUpdated = program?.status === 'Updated'
@@ -59,6 +71,13 @@ function ProgramDetail() {
   const daysRemaining = calculateDaysRemaining(program.deadline)
 
   const handleCompare = () => {
+    activityService.track({
+      activity_type: 'compared',
+      entity_type: 'admission',
+      entity_id: program.id,
+      metadata: { source: 'program_detail', action: 'compare_click' },
+    }).catch(() => {})
+
     const savedIds = admissions.filter((a) => a.saved).map((a) => a.id)
     const ids = Array.from(new Set([program.id, ...savedIds])).slice(0, 4)
 
@@ -79,6 +98,13 @@ function ProgramDetail() {
         return
       }
 
+      activityService.track({
+        activity_type: 'alert',
+        entity_type: 'admission',
+        entity_id: program.id,
+        metadata: { source: 'program_detail', action: 'set_reminder' },
+      }).catch(() => {})
+
       await toggleAlert(program.id)
       showSuccess('Reminder enabled. Program added to watchlist automatically.')
     } catch (error) {
@@ -87,6 +113,13 @@ function ProgramDetail() {
   }
 
   const handleApplyNow = () => {
+    activityService.track({
+      activity_type: 'searched',
+      entity_type: 'admission',
+      entity_id: program.id,
+      metadata: { source: 'program_detail', action: 'apply_now_click' },
+    }).catch(() => {})
+
     if (program.officialUrl && !program.officialUrl.startsWith('/program/')) {
       window.open(program.officialUrl, '_blank', 'noopener,noreferrer')
       return

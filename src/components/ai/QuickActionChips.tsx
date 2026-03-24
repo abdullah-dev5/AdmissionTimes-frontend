@@ -9,50 +9,50 @@ function QuickActionChips({ onSelect, context }: QuickActionChipsProps) {
       return [
         'Show upcoming deadlines',
         'Compare saved programs',
-        'Recommendations',
-        'Application status'
+        'Any new verified programs?',
+        'Explain application statuses'
       ]
     } else if (context.includes('Search')) {
       return [
-        'Filter by deadline',
-        'Show verified only',
-        'Compare results',
-        'Save to watchlist'
+        'Show programs closing this month',
+        'Show verified programs only',
+        'How do I compare programs?',
+        'How do I save a program?'
       ]
     } else if (context.includes('Compare')) {
       return [
-        'Which is cheapest?',
+        'Which program has a lower fee?',
         'Compare deadlines',
-        'Show differences',
-        'Save comparison'
+        'Explain the differences',
+        'How do I add more programs?'
       ]
     } else if (context.includes('Deadline')) {
       return [
-        'Show urgent only',
-        'Set all alerts',
-        'Export calendar',
-        'Upcoming this week'
+        'Show urgent deadlines',
+        'How do alerts work?',
+        'What deadlines expire this week?',
+        'How do I set a reminder?'
       ]
     } else if (context.includes('Watchlist')) {
       return [
-        'Enable all alerts',
-        'Compare selected',
-        'Remove expired',
-        'Export list'
+        'How do I enable all alerts?',
+        'How do I compare saved programs?',
+        'Which programs have passed deadline?',
+        'How do I manage my watchlist?'
       ]
     } else if (context.includes('Notification')) {
       return [
-        'Mark all as read',
-        'Filter alerts',
-        'Settings',
-        'Clear all'
+        'What do notifications mean?',
+        'How do I manage alert settings?',
+        'Why am I not getting alerts?',
+        'Explain status change notifications'
       ]
     }
     return [
-      'Help me search',
-      'Show deadlines',
-      'Compare programs',
-      'Get recommendations'
+      'Help me find programs',
+      'Show upcoming deadlines',
+      'How do I compare programs?',
+      'Explain admission statuses'
     ]
   }
 

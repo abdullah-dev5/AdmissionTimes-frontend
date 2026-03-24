@@ -4,6 +4,8 @@ import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
 import { formatDateTime } from '../../utils/dateUtils'
+import { showConfirm } from '../../utils/swal'
+import { activityService } from '../../services/activityService'
 
 const formatDateTimeSafe = (value?: string) => {
   if (!value) return '—'
@@ -16,6 +18,7 @@ function UniversityDashboard() {
   const navigate = useNavigate()
   const admissions = useUniversityStore((state) => state.admissions)
   const storeStats = useUniversityStore((state) => state.stats)
+  const engagementTrends = useUniversityStore((state) => state.engagementTrends)
   const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const [activeTab, setActiveTab] = useState('Views')
   const [statusFilter, setStatusFilter] = useState<string>('All')
@@ -26,7 +29,7 @@ function UniversityDashboard() {
       { label: 'Active', statuses: ['Active', 'Closing Soon'], color: '#10B981' },
       { label: 'Pending', statuses: ['Pending Audit'], color: '#F59E0B' },
       { label: 'Verified', statuses: ['Verified'], color: '#2563EB' },
-      { label: 'Rejected', statuses: ['Rejected', 'Disputed'], color: '#EF4444' },
+      { label: 'Rejected', statuses: ['Rejected'], color: '#EF4444' },
       { label: 'Draft', statuses: ['Draft'], color: '#9CA3AF' },
       { label: 'Closed', statuses: ['Closed'], color: '#6B7280' },
     ]
@@ -45,12 +48,8 @@ function UniversityDashboard() {
   const stats = useMemo(() => {
     // Active admissions are those with is_active = true
     const active = admissions.filter(a => a.is_active === true).length
-    const totalViews = admissions.reduce((sum, a) => {
-      // Handle missing views field from API data
-      if (!a.views) return sum
-      const views = parseInt(a.views.replace('k', '000').replace(/[^\d]/g, '')) || 0
-      return sum + views
-    }, 0)
+    const totalReminders =
+      storeStats?.reminder_notifications ?? engagementTrends.reminders.reduce((sum, count) => sum + count, 0)
     const closingSoon = admissions.filter(a => {
       if (!a.deadline) return false
       const deadline = new Date(a.deadline)
@@ -61,8 +60,8 @@ function UniversityDashboard() {
     const verified = storeStats?.verified_admissions ?? admissions.filter(a => a.status === 'Verified').length
     const total = storeStats?.total_admissions ?? admissions.length
 
-    return { active, totalViews, closingSoon, verified, total }
-  }, [admissions, storeStats])
+    return { active, totalReminders, closingSoon, verified, total }
+  }, [admissions, storeStats, engagementTrends.reminders])
 
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {
@@ -102,16 +101,75 @@ function UniversityDashboard() {
     return filteredAdmissions.slice(0, 10)
   }, [filteredAdmissions])
 
+  const chartData = useMemo(() => {
+    const fallbackLabels = ['Oct 7', 'Oct 14', 'Oct 21', 'Oct 28', 'Nov 4']
+    const fallbackSeries = {
+      Views: [100, 300, 200, 400, 250],
+      Clicks: [90, 220, 170, 260, 210],
+      Reminders: [20, 40, 30, 50, 35],
+      Saved: [10, 18, 16, 25, 19],
+    }
+
+    const tabKey = activeTab as 'Views' | 'Clicks' | 'Reminders' | 'Saved'
+    const hasApiData =
+      engagementTrends.labels.length > 0 &&
+      (
+        engagementTrends.views.length > 0 ||
+        engagementTrends.clicks.length > 0 ||
+        engagementTrends.reminders.length > 0 ||
+        engagementTrends.saves.length > 0
+      )
+
+    const labels = hasApiData ? engagementTrends.labels : fallbackLabels
+    const series = hasApiData
+      ? {
+          Views: engagementTrends.views,
+          Clicks: engagementTrends.clicks,
+          Reminders: engagementTrends.reminders,
+          Saved: engagementTrends.saves,
+        }
+      : fallbackSeries
+
+    const values = (series[tabKey] || []).slice(0, labels.length)
+    const normalizedValues = values.length === labels.length ? values : labels.map((_, index) => values[index] || 0)
+    const maxValue = Math.max(...normalizedValues, 1)
+
+    return {
+      labels,
+      values: normalizedValues,
+      maxValue,
+    }
+  }, [activeTab, engagementTrends])
+
   const handleEdit = (id: string) => {
+    activityService.track({
+      activity_type: 'searched',
+      entity_type: 'admission',
+      entity_id: id,
+      metadata: { source: 'university_dashboard', action: 'edit_click' },
+    }).catch(() => {})
     navigate(`/university/manage-admissions?edit=${id}`)
   }
 
-  const handleView = () => {
+  const handleView = (id: string) => {
+    activityService.track({
+      activity_type: 'viewed',
+      entity_type: 'admission',
+      entity_id: id,
+      metadata: { source: 'university_dashboard', action: 'view_click' },
+    }).catch(() => {})
     navigate(`/university/verification-center`)
   }
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this admission?')) {
+  const handleDelete = async (id: string) => {
+    const confirmed = await showConfirm('Delete Admission?', 'Are you sure you want to delete this admission?', 'Delete')
+    if (confirmed) {
+      activityService.track({
+        activity_type: 'searched',
+        entity_type: 'admission',
+        entity_id: id,
+        metadata: { source: 'university_dashboard', action: 'delete_click' },
+      }).catch(() => {})
       deleteAdmission(id)
     }
   }
@@ -152,15 +210,13 @@ function UniversityDashboard() {
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Views</p>
-                    <p className="text-3xl font-bold" style={{ color: '#111827' }}>
-                      {stats.totalViews >= 1000 ? `${(stats.totalViews / 1000).toFixed(1)}k` : stats.totalViews}
-                    </p>
+                    <p className="text-sm text-gray-600 mb-1">Reminders Sent</p>
+                    <p className="text-3xl font-bold" style={{ color: '#111827' }}>{stats.totalReminders}</p>
                   </div>
                   <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E0E7FF' }}>
                     <svg className="w-6 h-6" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a3 3 0 006 0" />
                     </svg>
                   </div>
                 </div>
@@ -204,10 +260,21 @@ function UniversityDashboard() {
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold" style={{ color: '#111827' }}>Engagement Trends</h2>
                   <div className="flex items-center gap-2">
-                    {['Views', 'Clicks', 'Reminders'].map((tab) => (
+                    {['Views', 'Clicks', 'Reminders', 'Saved'].map((tab) => (
                       <button
                         key={tab}
-                        onClick={() => setActiveTab(tab)}
+                        onClick={() => {
+                          setActiveTab(tab)
+                          const firstAdmissionId = admissions[0]?.id
+                          if (!firstAdmissionId) return
+
+                          activityService.track({
+                            activity_type: tab === 'Views' ? 'viewed' : 'searched',
+                            entity_type: 'admission',
+                            entity_id: firstAdmissionId,
+                            metadata: { source: 'university_dashboard', action: `${tab.toLowerCase()}_tab_click` },
+                          }).catch(() => {})
+                        }}
                         className={`px-3 py-1 text-sm font-medium rounded cursor-pointer transition-colors ${
                           activeTab === tab
                             ? 'text-white'
@@ -221,14 +288,14 @@ function UniversityDashboard() {
                   </div>
                 </div>
                 <div className="h-64 flex items-end justify-between gap-2">
-                  {[100, 300, 200, 400, 250].map((height, index) => (
+                  {chartData.values.map((value, index) => (
                     <div key={index} className="flex-1 flex flex-col items-center">
                       <div
                         className="w-full rounded-t cursor-pointer transition-colors hover:opacity-80"
-                        style={{ backgroundColor: '#2563EB', height: `${(height / 500) * 100}%`, minHeight: '20px' }}
+                        style={{ backgroundColor: '#2563EB', height: `${(value / chartData.maxValue) * 100}%`, minHeight: '20px' }}
                       ></div>
                       <p className="text-xs text-gray-500 mt-2">
-                        {['Oct 7', 'Oct 14', 'Oct 21', 'Oct 28', 'Nov 4'][index]}
+                        {chartData.labels[index]}
                       </p>
                     </div>
                   ))}
@@ -314,7 +381,6 @@ function UniversityDashboard() {
                     <option>Pending Audit</option>
                     <option>Verified</option>
                     <option>Rejected</option>
-                    <option>Disputed</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
@@ -373,7 +439,7 @@ function UniversityDashboard() {
                                 </svg>
                               </button>
                               <button 
-                                onClick={handleView}
+                                onClick={() => handleView(admission.id)}
                                 className="p-1 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
                                 title="View Details"
                               >

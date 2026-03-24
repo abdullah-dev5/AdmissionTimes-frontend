@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
+import { showInfo, showWarning } from '../../utils/swal'
 
 function SearchAdmissions() {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ function SearchAdmissions() {
   const searchAdmissions = useStudentStore((state) => state.searchAdmissions)
   const { admissions: rawAdmissions, loading } = useStudentDashboardData()
   
-  // ✅ Filter admissions - HIDE rejected and disputed from students
+  // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
     () => filterStudentVisibleAdmissions(rawAdmissions, true),  // Enable debug logging
     [rawAdmissions]
@@ -183,24 +184,24 @@ function SearchAdmissions() {
     return filtered
   }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, feeRange, feeFilterActive, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
 
-  const toggleCompare = (id: string) => {
+  const toggleCompare = async (id: string) => {
     setCompareIds(prev => {
       if (prev.includes(id)) {
         return prev.filter(i => i !== id)
       } else if (prev.length < 4) {
         return [...prev, id]
       } else {
-        alert('You can compare up to 4 programs at once. Please remove one first.')
+        void showWarning('You can compare up to 4 programs at once. Please remove one first.')
         return prev
       }
     })
   }
 
-  const handleCompare = () => {
+  const handleCompare = async () => {
     if (compareIds.length >= 2) {
       navigate(`/student/compare?ids=${compareIds.join(',')}`)
     } else {
-      alert('Please select at least 2 programs to compare.')
+      await showWarning('Please select at least 2 programs to compare.')
     }
   }
 
@@ -226,9 +227,9 @@ function SearchAdmissions() {
             </div>
             <div className="flex items-center gap-3">
                 <button
-                onClick={() => {
+                onClick={async () => {
                   // In real app, this would trigger AI search
-                  alert('AI Search feature coming soon!')
+                  await showInfo('AI Search feature coming soon!')
                 }}
                 className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
                 style={{ backgroundColor: '#2563EB' }}
@@ -494,6 +495,7 @@ function SearchAdmissions() {
                 {filteredAdmissions.map((admission) => {
                   const statusColors = getStatusColor(admission.status)
                   const isSaved = savedIds.includes(admission.id)
+                  const isPending = admission.verificationStatus === 'pending' || admission.status === 'Pending'
                   return (
                     <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between mb-4 gap-3">
@@ -520,14 +522,14 @@ function SearchAdmissions() {
                             </svg>
                             Verified
                           </span>
-                        ) : (
+                        ) : isPending ? (
                           <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
                             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                             </svg>
                             Pending
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <h3 className="font-semibold text-lg mb-2 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
                       
@@ -591,6 +593,7 @@ function SearchAdmissions() {
                 {filteredAdmissions.map((admission) => {
                   const statusColors = getStatusColor(admission.status)
                   const isSaved = savedIds.includes(admission.id)
+                  const isPending = admission.verificationStatus === 'pending' || admission.status === 'Pending'
                   return (
                     <div key={admission.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
                       <div className="flex items-center justify-between gap-4">
@@ -615,14 +618,14 @@ function SearchAdmissions() {
                                   </svg>
                                   Verified
                                 </span>
-                              ) : (
+                              ) : isPending ? (
                                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
                                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                                   </svg>
                                   Pending
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                         </div>

@@ -13,15 +13,10 @@
  * @module contexts/ToastContext
  */
 
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { ToastContainer, type ToastType } from '../components/common/Toast';
+import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
+import Swal from 'sweetalert2';
 
-interface Toast {
-  id: string;
-  message: string;
-  type?: ToastType;
-  duration?: number;
-}
+type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface ToastContextType {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
@@ -39,22 +34,20 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
  * Wraps the application to provide toast notification functionality
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  /**
-   * Dismiss a toast by ID
-   */
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
-
   /**
    * Show a toast notification
    */
   const showToast = useCallback(
     (message: string, type: ToastType = 'info', duration: number = 3000) => {
-      const id = `toast-${Date.now()}-${Math.random()}`;
-      setToasts((prev) => [...prev, { id, message, type, duration }]);
+      void Swal.fire({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: duration,
+        timerProgressBar: true,
+        icon: type,
+        title: message,
+      });
     },
     []
   );
@@ -94,7 +87,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </ToastContext.Provider>
   );
 }

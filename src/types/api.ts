@@ -54,7 +54,7 @@ export interface PaginatedResponse<T> {
 export interface Admission {
   // Auto-set by backend (never ask user to provide)
   id: string;
-  verification_status: 'verified' | 'pending' | 'rejected' | 'draft' | 'disputed';
+  verification_status: 'verified' | 'pending' | 'rejected' | 'draft';
   created_at: string;
   updated_at: string;
   
@@ -82,7 +82,6 @@ export interface Admission {
   verified_at?: string | null;
   verified_by?: string | null;
   rejection_reason?: string | null;
-  dispute_reason?: string | null;
   verification_comments?: string | null;
   admin_notes?: string | null;
   
@@ -114,6 +113,65 @@ export interface University {
   updated_at: string;
 }
 
+export interface AiChatResponse {
+  intent: 'search_admissions' | 'clarification' | 'unsupported';
+  extracted_filters: {
+    search?: string;
+    degree_level?: string;
+    field_of_study?: string;
+    location?: string;
+    program_type?: string;
+    delivery_mode?: string;
+    deadline_within_days?: number;
+  };
+  clarification_needed: boolean;
+  clarification_question?: string;
+  answer: string;
+  result_count: number;
+  results: Array<{
+    id: string;
+    title: string;
+    degree_level: string | null;
+    location: string | null;
+    deadline: string | null;
+    verification_status: string;
+    university_id: string | null;
+  }>;
+}
+
+export interface AiSummarizeResponse {
+  title?: string | null;
+  degree_level?: string | null;
+  location?: string | null;
+  application_fee?: number | null;
+  deadline?: string | null;
+  description?: string | null;
+  eligibility?: string | null;
+  summary_text: string;
+  highlights: string[];
+  extracted_fields: string[];
+  confidence: number;
+  provider: 'gemini' | 'regex';
+  model?: string;
+  method: 'ai' | 'fallback';
+}
+
+export interface ParsedPdfData {
+  title: string;
+  degree_level: string;
+  deadline: string;
+  application_fee: number;
+  location: string;
+  description: string;
+  eligibility?: string | null;
+  summary_text?: string;
+  highlights?: string[];
+  provider?: 'gemini' | 'regex';
+  model?: string;
+  method?: 'ai' | 'fallback';
+  confidence: number;
+  extracted_fields: string[];
+}
 /**
  * Notification entity
  * Represents a user notification
@@ -131,7 +189,6 @@ export interface Notification {
     | 'admission_updated_saved'
     | 'deadline_near'
     | 'system_broadcast'
-    | 'dispute_raised'
     | 'system_error';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   title: string;
@@ -285,7 +342,7 @@ export interface ChangeLog {
   admission_id: string;
   actor_type: 'admin' | 'university' | 'system';
   changed_by: string | null;
-  action_type: 'created' | 'updated' | 'verified' | 'rejected' | 'disputed' | 'status_changed';
+  action_type: 'created' | 'updated' | 'verified' | 'rejected' | 'status_changed';
   field_name: string | null;
   old_value: any | null;
   new_value: any | null;
@@ -356,6 +413,8 @@ export interface UniversityDashboard {
     verified_admissions: number;
     recent_changes: number;
     unread_notifications: number;
+    reminder_notifications?: number;
+    saved_admissions?: number;
   };  recent_admissions: Array<Admission & {
     degree_level?: string;
     field_of_study?: string;
@@ -365,6 +424,13 @@ export interface UniversityDashboard {
   }>;
   recent_changes: ChangeLog[];
   recent_notifications: Notification[];
+  engagement_trends?: {
+    labels: string[];
+    views: number[];
+    clicks: number[];
+    reminders: number[];
+    saves?: number[];
+  };
 }
 
 /**
@@ -399,7 +465,6 @@ export interface AdminDashboardStats {
   pending: number;
   verified: number;
   rejected: number;
-  disputed: number;
 }
 
 /**
@@ -437,11 +502,10 @@ export interface AdminAuditLog {
  * Admin Verify Request DTO
  */
 export interface AdminVerifyAdmissionDTO {
-  verification_status: 'verified' | 'rejected' | 'disputed';
+  verification_status: 'verified' | 'rejected';
   rejection_reason?: string | null;
   admin_notes?: string | null;
   verification_comments?: string | null;
-  dispute_reason?: string | null;
 }
 
 /**
@@ -449,7 +513,7 @@ export interface AdminVerifyAdmissionDTO {
  */
 export interface AdminBulkVerifyDTO {
   admission_ids: string[];
-  verification_status: 'verified' | 'rejected' | 'disputed';
+  verification_status: 'verified' | 'rejected';
   rejection_reason?: string | null;
   admin_notes?: string | null;
 }

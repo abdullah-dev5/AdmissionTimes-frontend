@@ -28,7 +28,7 @@ function StudentDashboard() {
   const allAdmissions = useStudentStore((state) => state.admissions)
   const notifications = useStudentStore((state) => state.notifications)
   
-  // ✅ Filter admissions - HIDE rejected and disputed from students
+  // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
     () => filterStudentVisibleAdmissions(rawAdmissions, true),
     [rawAdmissions]
@@ -347,9 +347,16 @@ function StudentDashboard() {
                             <p className="text-xs text-gray-600 mb-3 line-clamp-2">{admission.aiSummary}</p>
                           )}
                           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                            <span className="text-xs font-medium px-3 py-1 rounded-full" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-                              {admission.programStatus}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium px-3 py-1 rounded-full" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
+                                {admission.programStatus}
+                              </span>
+                              {admission.verificationStatus === 'pending' && (
+                                <span className="text-xs font-medium px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-600">Deadline: {admission.deadlineDisplay}</p>
                           </div>
                         </Link>

@@ -14,15 +14,14 @@ import { notificationsService } from '../services/notificationsService'
 import { transformUniversityDashboard } from '../utils/dashboardTransformers'
 import { transformAdmissionToApi, transformApiAdmissionToFrontend } from '../utils/admissionUtils'
 import {
-  sharedAdmissions,
-  sharedChangeLogs,
-  sharedNotifications,
   type Admission,
   type AuditItem,
   type AuditStatus,
   type ChangeLogItem,
   type NotificationItem,
 } from '../data/universityData'
+
+const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
 interface UniversityStoreState {
   // State
@@ -36,7 +35,15 @@ interface UniversityStoreState {
     verified_admissions: number
     recent_changes: number
     unread_notifications: number
+    reminder_notifications?: number
   } | null
+  engagementTrends: {
+    labels: string[]
+    views: number[]
+    clicks: number[]
+    reminders: number[]
+    saves: number[]
+  }
   loading: boolean
   error: string | null
   fetchedUserId: string | null
@@ -58,18 +65,9 @@ interface UniversityStoreState {
   reset: () => void
 }
 
-const cloneAdmissions = () => sharedAdmissions.map((admission) => ({ ...admission }))
-const cloneChangeLogs = () =>
-  [...sharedChangeLogs].map((log) => ({
-    ...log,
-    diff: log.diff.map((entry) => ({ ...entry })),
-  }))
-const cloneNotifications = () =>
-  [...sharedNotifications].map((notification) => ({ ...notification })).sort((a, b) => (a.time < b.time ? 1 : -1))
-
 const deriveAudits = (admissions: Admission[]): AuditItem[] =>
   admissions
-    .filter((admission) => ['Pending Audit', 'Verified', 'Rejected', 'Disputed'].includes(admission.status))
+    .filter((admission) => ['Pending Audit', 'Verified', 'Rejected'].includes(admission.status))
     .map((admission, index) => ({
       id: index + 1,
       title: admission.title,
@@ -78,7 +76,6 @@ const deriveAudits = (admissions: Admission[]): AuditItem[] =>
       lastAction: admission.lastAction || '',
       remarks:
         admission.rejection_reason ||
-        admission.dispute_reason ||
         admission.verification_comments ||
         admission.admin_notes ||
         admission.remarks ||
@@ -123,6 +120,13 @@ const initialState = {
   notifications: [] as NotificationItem[],
   audits: [] as AuditItem[],
   stats: null,
+  engagementTrends: {
+    labels: [],
+    views: [],
+    clicks: [],
+    reminders: [],
+    saves: [],
+  },
   loading: false,
   error: null,
   fetchedUserId: null,
@@ -139,19 +143,24 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       const response = await dashboardService.getUniversityDashboard()
 
-      console.log('🟢 [UniversityStore] Dashboard API response:', response)
-      console.log('🟢 [UniversityStore] Response data:', response?.data)
+      if (isDashboardDebugEnabled) {
+        console.log('🟢 [UniversityStore] Dashboard API response:', response)
+        console.log('🟢 [UniversityStore] Response data:', response?.data)
+      }
 
       if (response?.data) {
         const transformed = transformUniversityDashboard(response.data)
-        const admissions = transformed.admissions.length > 0 ? transformed.admissions : cloneAdmissions()
-        const notifications = transformed.notifications.length > 0 ? transformed.notifications : cloneNotifications()
-        const changeLogs = transformed.changeLogs.length > 0 ? transformed.changeLogs : cloneChangeLogs()
+        const admissions = transformed.admissions
+        const notifications = transformed.notifications
+        const changeLogs = transformed.changeLogs
+        const engagementTrends = transformed.engagementTrends
         const audits = deriveAudits(admissions)
         const stats = response.data.stats || deriveStats(admissions, changeLogs, notifications)
 
-        console.log('🟢 [UniversityStore] Transformed admissions count:', transformed.admissions.length)
-        console.log('🟢 [UniversityStore] About to set admissions state with:', transformed.admissions)
+        if (isDashboardDebugEnabled) {
+          console.log('🟢 [UniversityStore] Transformed admissions count:', transformed.admissions.length)
+          console.log('🟢 [UniversityStore] About to set admissions state with:', transformed.admissions)
+        }
 
         set({
           admissions,
@@ -159,39 +168,49 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           changeLogs,
           audits,
           stats,
+          engagementTrends,
           fetchedUserId: options?.userId || null,
         })
 
-        console.log('🟢 [UniversityStore] ✅ State updated successfully')
+        if (isDashboardDebugEnabled) console.log('🟢 [UniversityStore] ✅ State updated successfully')
       } else {
-        const admissions = cloneAdmissions()
-        const notifications = cloneNotifications()
-        const changeLogs = cloneChangeLogs()
+        const admissions: Admission[] = []
+        const notifications: NotificationItem[] = []
+        const changeLogs: ChangeLogItem[] = []
         set({
           admissions,
           notifications,
           changeLogs,
+          engagementTrends: {
+            labels: [],
+            views: [],
+            clicks: [],
+            reminders: [],
+            saves: [],
+          },
           audits: deriveAudits(admissions),
           stats: deriveStats(admissions, changeLogs, notifications),
           fetchedUserId: options?.userId || null,
         })
-        console.warn('[UniversityStore] No data in response, using fallback mock data')
+        console.warn('[UniversityStore] No data in response, showing empty dashboard state')
       }
     } catch (err: any) {
       console.error('[UniversityStore] Failed to fetch dashboard data:', err)
       const errorMsg = err.message || 'Failed to load dashboard data'
-      set({ error: errorMsg })
-
-      // Fallback to mock data on error
-      const admissions = cloneAdmissions()
-      const notifications = cloneNotifications()
-      const changeLogs = cloneChangeLogs()
       set({
-        admissions,
-        notifications,
-        changeLogs,
-        audits: deriveAudits(admissions),
-        stats: deriveStats(admissions, changeLogs, notifications),
+        error: errorMsg,
+        admissions: [],
+        notifications: [],
+        changeLogs: [],
+        engagementTrends: {
+          labels: [],
+          views: [],
+          clicks: [],
+          reminders: [],
+          saves: [],
+        },
+        audits: [],
+        stats: deriveStats([], [], []),
       })
 
       if (options?.showError) {
@@ -418,13 +437,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
   // Refresh Notifications
   refreshNotifications: () => {
-    set((state) => {
-      const notifications = cloneNotifications()
-      return {
-        notifications,
-        stats: deriveStats(state.admissions, state.changeLogs, notifications),
-      }
-    })
+    void get().fetchNotifications({ page: 1, limit: 50 })
   },
 
   // Append Change Log

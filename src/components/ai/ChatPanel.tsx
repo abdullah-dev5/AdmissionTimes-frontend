@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
+import type { AxiosError } from 'axios'
 import { useAi } from '../../contexts/AiContext'
 import MessageBubble from './MessageBubble'
 import LoadingDots from './LoadingDots'
 import ContextBadge from './ContextBadge'
 import QuickActionChips from './QuickActionChips'
+import aiService, { type ChatHistoryEntry } from '../../services/aiService'
 
 interface Message {
   id: string
@@ -79,23 +81,21 @@ function ChatPanel() {
     setIsLoading(true)
     resetInactivityTimer()
 
-    try {
-      const response = await fetch('/api/ai/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: messageText,
-          context: context
-        })
-      })
+    // Build last 4 turns as history so AI never loses context of recent exchanges
+    const historySnapshot: ChatHistoryEntry[] = messages
+      .filter(m => m.id !== '1') // skip welcome message
+      .slice(-4)
+      .map(m => ({ role: m.isUser ? 'user' : 'ai', text: m.text }))
 
-      const data = await response.json()
+    try {
+      const response = await aiService.chat(messageText, context, historySnapshot)
+      const data = response.data
+      const answer = data.answer?.trim()
+      const finalAnswer = resolveAssistantReply(messageText, answer, context)
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: data.response || getMockResponse(messageText),
+        text: finalAnswer,
         isUser: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
@@ -104,7 +104,7 @@ function ChatPanel() {
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: getMockResponse(messageText),
+        text: resolveRequestFailureReply(messageText, context, error),
         isUser: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
@@ -114,24 +114,107 @@ function ChatPanel() {
     }
   }
 
-  const getMockResponse = (query: string): string => {
+  const isRefusalReply = (text: string): boolean => {
+    const lower = text.toLowerCase()
+    return (
+      lower.includes('i can only help with') ||
+      lower.includes('i cannot assist') ||
+      lower.includes('i cannot access or explain') ||
+      lower.includes('cannot manage')
+    )
+  }
+
+  const getGuidanceResponse = (query: string, activeContext: string): string => {
     const lowerQuery = query.toLowerCase()
-    
-    if (lowerQuery.includes('deadline') || lowerQuery.includes('upcoming')) {
-      return 'You have 3 upcoming deadlines in the next 7 days. The closest is FAST University\'s BS Computer Science program, due in 3 days. Would you like me to set an alert for this?'
-    } else if (lowerQuery.includes('compare') || lowerQuery.includes('comparison')) {
-      return 'To compare programs, select at least 2 programs from your watchlist or search results, then click "Compare Selected". I can help you identify key differences like fees, deadlines, and program features.'
-    } else if (lowerQuery.includes('recommend') || lowerQuery.includes('suggest')) {
-      return 'Based on your saved programs and interests, I recommend checking out NUST\'s MS Data Science program and LUMS\'s MBA program. Both match your profile with 85%+ compatibility scores.'
-    } else if (lowerQuery.includes('alert') || lowerQuery.includes('reminder')) {
-      return 'I can help you set alerts for important deadlines. Alerts are sent 7 days, 3 days, and 1 day before each deadline. Would you like me to enable alerts for all your saved programs?'
-    } else if (lowerQuery.includes('cheap') || lowerQuery.includes('lowest') || lowerQuery.includes('fee')) {
-      return 'Among your saved programs, FAST University has the lowest fee at PKR 75,000. COMSATS follows at PKR 85,000, and LUMS at PKR 98,000.'
-    } else if (lowerQuery.includes('status') || lowerQuery.includes('application')) {
-      return 'You currently have 8 active applications. 3 are under review, 2 are pending document submission, and 3 have been accepted. Check your dashboard for detailed status updates.'
-    } else {
-      return 'I understand you\'re asking about: ' + query + '. Let me help you with that. You can search for specific programs, compare options, or set up deadline alerts. How would you like to proceed?'
+
+    if (lowerQuery.includes('compare')) {
+      return [
+        'You can compare programs using this flow:',
+        '- Open Compare and select at least two saved programs.',
+        '- Review fee, deadline, location, and eligibility side by side.',
+        '- Save the better option to your watchlist for reminders.',
+      ].join('\n')
     }
+
+    if (lowerQuery.includes('alert') || lowerQuery.includes('reminder') || lowerQuery.includes('watchlist')) {
+      return [
+        'Here is how to manage alerts and watchlist:',
+        '- Open Watchlist and enable alerts for selected programs.',
+        '- Check Deadlines for urgent items this week.',
+        '- Remove expired programs to keep your list clean.',
+      ].join('\n')
+    }
+
+    if (lowerQuery.includes('status') || lowerQuery.includes('application')) {
+      return [
+        'Application status guide:',
+        '- Pending: update is still being processed.',
+        '- Verified: listing is approved by admins.',
+        '- Rejected: check remarks in notifications or dashboard.',
+      ].join('\n')
+    }
+
+    return [
+      `I can help with ${activeContext} tasks in a practical way:`,
+      '- Find programs by field, city, degree, and deadline.',
+      '- Compare saved programs by fee, deadline, and eligibility.',
+      '- Explain statuses and suggest next actions.',
+    ].join('\n')
+  }
+
+  const resolveAssistantReply = (query: string, answer: string | undefined, activeContext: string): string => {
+    if (!answer) return getFallbackResponse(query, activeContext)
+    if (isRefusalReply(answer)) return getGuidanceResponse(query, activeContext)
+    return answer
+  }
+
+  const resolveRequestFailureReply = (query: string, activeContext: string, error: unknown): string => {
+    const axiosError = error as AxiosError<{ message?: string }>
+    const status = axiosError.response?.status
+    const apiMessage = axiosError.response?.data?.message?.toLowerCase() || ''
+
+    if (status === 401) {
+      return 'Your session has expired. Please sign in again, then retry your request.'
+    }
+
+    if (status === 503 || apiMessage.includes('gemini') || apiMessage.includes('not configured')) {
+      return [
+        'AI service is temporarily unavailable right now.',
+        getGuidanceResponse(query, activeContext),
+      ].join('\n')
+    }
+
+    return getGuidanceResponse(query, activeContext)
+  }
+
+  const getFallbackResponse = (query: string, activeContext: string): string => {
+    const lowerQuery = query.toLowerCase()
+    const suggestions: string[] = []
+
+    if (lowerQuery.includes('deadline') || lowerQuery.includes('alert') || lowerQuery.includes('reminder')) {
+      suggestions.push('Open Deadlines to see upcoming dates and urgent items.')
+      suggestions.push('Use Watchlist alerts so you receive reminders before due dates.')
+    }
+
+    if (lowerQuery.includes('compare') || lowerQuery.includes('fee') || lowerQuery.includes('cheap')) {
+      suggestions.push('Open Compare and pick at least two programs from your saved list.')
+      suggestions.push('Use Search filters for location, degree level, and fee range first.')
+    }
+
+    if (lowerQuery.includes('status') || lowerQuery.includes('application')) {
+      suggestions.push('Check Dashboard stats for active applications and urgent tasks.')
+      suggestions.push('Open Notifications for recent status updates from universities.')
+    }
+
+    if (suggestions.length === 0) {
+      suggestions.push(`Try asking a shorter query in ${activeContext}.`)
+      suggestions.push('You can ask for deadlines, comparison, eligibility, or fee insights.')
+    }
+
+    return [
+      'AI response is temporarily unavailable. You can still continue with these steps:',
+      ...suggestions.map((s) => `- ${s}`),
+    ].join('\n')
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -144,8 +227,8 @@ function ChatPanel() {
   if (!isOpen) return null
 
   return (
-    <div className="fixed bottom-24 right-6 w-[400px] max-w-[calc(100vw-48px)] h-[600px] max-h-[calc(100vh-120px)] bg-white rounded-2xl shadow-lg border border-gray-200 flex flex-col z-[9999] overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+    <div className="fixed bottom-24 right-6 w-[400px] max-w-[calc(100vw-48px)] h-[600px] max-h-[calc(100vh-120px)] bg-white rounded-2xl shadow-2xl border border-blue-100 flex flex-col z-[9999] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-white">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: '#2563EB' }}>
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +237,10 @@ function ChatPanel() {
           </div>
           <div>
             <h3 className="text-sm font-semibold" style={{ color: '#111827' }}>AI Assistant</h3>
-            <ContextBadge context={context} />
+            <div className="flex items-center gap-2">
+              <ContextBadge context={context} />
+              <span className="text-[11px] text-emerald-600">Online</span>
+            </div>
           </div>
         </div>
         <button
@@ -198,13 +284,13 @@ function ChatPanel() {
                 resetInactivityTimer()
               }}
               onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
+              placeholder="Ask about deadlines, compare, fees..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             <button
               onClick={() => handleSend()}
               disabled={!inputValue.trim() || isLoading}
-              className="px-4 py-2 text-white rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              className="px-4 py-2 text-white rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 shadow-sm"
               style={{ backgroundColor: '#2563EB' }}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

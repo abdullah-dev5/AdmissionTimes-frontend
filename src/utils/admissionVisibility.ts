@@ -2,12 +2,12 @@
  * Admission visibility and status utilities
  */
 
-export type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'disputed'
+export type VerificationStatus = 'pending' | 'verified' | 'rejected'
 
 /**
  * Check if admission should be visible to students
  * Students can ONLY see verified and pending admissions
- * Rejected and disputed admissions are HIDDEN
+ * Rejected admissions are HIDDEN
  */
 export const isVisibleToStudents = (verificationStatus: string | undefined | null): boolean => {
 	if (!verificationStatus) return false
@@ -22,9 +22,6 @@ export const isVisibleToStudents = (verificationStatus: string | undefined | nul
 	
 	// ❌ HIDE rejected admissions
 	if (status === 'rejected') return false
-	
-	// ❌ HIDE disputed admissions
-	if (status === 'disputed') return false
 	
 	// Default: show (for backwards compatibility)
 	return true
@@ -86,13 +83,6 @@ export const getStatusBadgeConfig = (verificationStatus: string | undefined | nu
 				bgColor: '#FEE2E2',
 				textColor: '#EF4444',
 				icon: '✕',
-			}
-		case 'disputed':
-			return {
-				label: 'Disputed',
-				bgColor: '#FFEDD5',
-				textColor: '#EA580C',
-				icon: '⚠',
 			}
 		default:
 			return {
@@ -170,8 +160,6 @@ export const getStatusMessage = (
 				return 'Your admission is awaiting admin verification'
 			case 'rejected':
 				return 'Your admission has been rejected. Please review the rejection reason.'
-			case 'disputed':
-				return 'Your admission has been disputed. An admin will contact you.'
 			default:
 				return ''
 		}
@@ -185,8 +173,6 @@ export const getStatusMessage = (
 			return 'This admission needs verification'
 		case 'rejected':
 			return 'This admission has been rejected'
-		case 'disputed':
-			return 'This admission has been disputed'
 		default:
 			return ''
 	}

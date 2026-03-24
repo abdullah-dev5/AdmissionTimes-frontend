@@ -234,19 +234,19 @@ function Features() {
             </div>
             <div className="flex flex-wrap items-center gap-6 mb-4 md:mb-0">
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/privacy')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 Privacy Policy
               </button>
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/terms')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 Terms of Service
               </button>
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/about')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 About
