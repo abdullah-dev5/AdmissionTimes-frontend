@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
-import { TEST_UNIVERSITIES, isDevelopmentMode } from '../constants/testUniversities'
 
 function SignUp() {
   const navigate = useNavigate()
@@ -11,21 +10,17 @@ function SignUp() {
     email: '',
     password: '',
     confirmPassword: '',
-    user_type: 'student' as 'student' | 'university' | 'admin',
     display_name: '',
-    university_id: '',
   })
   const [errors, setErrors] = useState<{
     email?: string
     password?: string
     confirmPassword?: string
-    user_type?: string
     display_name?: string
-    university_id?: string
   }>({})
   const [apiError, setApiError] = useState<string>('')
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -62,15 +57,6 @@ function SignUp() {
       newErrors.confirmPassword = 'Passwords do not match'
     }
 
-    if (!formData.user_type) {
-      newErrors.user_type = 'Please select an account type'
-    }
-
-    // TODO: Enable university_id validation later
-    // if (formData.user_type === 'university' && !formData.university_id) {
-    //   newErrors.university_id = 'University ID is required for university accounts'
-    // }
-
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -85,16 +71,15 @@ function SignUp() {
 
     try {
       console.log('[SignUp] Starting signup with:', { 
-        email: formData.email.trim(), 
-        user_type: formData.user_type 
+        email: formData.email.trim(),
+        user_type: 'student',
       })
       
       await signUp({
         email: formData.email.trim(),
         password: formData.password,
-        user_type: formData.user_type,
+        user_type: 'student',
         display_name: formData.display_name || undefined,
-        university_id: formData.university_id || undefined,
       })
       
       console.log('[SignUp] Signup successful!')
@@ -133,83 +118,6 @@ function SignUp() {
             {apiError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-red-700 font-medium text-sm">Error: {apiError}</p>
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="user_type" className="block text-sm font-medium mb-2" style={{ color: '#111827' }}>
-                Account Type *
-              </label>
-              <select
-                id="user_type"
-                name="user_type"
-                value={formData.user_type}
-                onChange={handleChange}
-                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                  errors.user_type
-                    ? 'border-red-500 focus:ring-red-500'
-                    : 'border-gray-300 focus:ring-blue-500'
-                }`}
-                disabled={isLoading}
-              >
-                <option value="student">Student</option>
-                <option value="university">University Representative</option>
-                <option value="admin">Admin</option>
-              </select>
-              {errors.user_type && <p className="mt-1 text-sm text-red-600">{errors.user_type}</p>}
-            </div>
-
-            {formData.user_type === 'university' && (
-              <div>
-                <label htmlFor="university_id" className="block text-sm font-medium mb-2" style={{ color: '#111827' }}>
-                  {isDevelopmentMode() ? 'Select University (Optional)' : 'University ID (Optional)'}
-                </label>
-                {isDevelopmentMode() ? (
-                  <>
-                    <select
-                      id="university_id"
-                      name="university_id"
-                      value={formData.university_id}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                        errors.university_id
-                          ? 'border-red-500 focus:ring-red-500'
-                          : 'border-gray-300 focus:ring-blue-500'
-                      }`}
-                      disabled={isLoading}
-                    >
-                      <option value="">-- Select a University --</option>
-                      {TEST_UNIVERSITIES.map((university) => (
-                        <option key={university.id} value={university.id}>
-                          {university.name} ({university.country})
-                        </option>
-                      ))}
-                    </select>
-                    {errors.university_id && <p className="mt-1 text-sm text-red-600">{errors.university_id}</p>}
-                    <p className="mt-1 text-xs text-gray-500">
-                      Optional for now - Select from available universities for testing
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      id="university_id"
-                      name="university_id"
-                      value={formData.university_id}
-                      onChange={handleChange}
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                        errors.university_id
-                          ? 'border-red-500 focus:ring-red-500'
-                          : 'border-gray-300 focus:ring-blue-500'
-                      }`}
-                      placeholder="Enter your university ID"
-                      disabled={isLoading}
-                    />
-                    {errors.university_id && <p className="mt-1 text-sm text-red-600">{errors.university_id}</p>}
-                    <p className="mt-1 text-xs text-gray-500">Optional for now - Contact admin to get your university ID</p>
-                  </>
-                )}
               </div>
             )}
 

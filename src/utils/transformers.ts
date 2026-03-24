@@ -25,6 +25,11 @@ export function transformAdmission(
   universityName?: string
 ): StudentAdmission {
   const backendAny = backend as any;
+  const rawVerificationStatus =
+    backend.verification_status ||
+    backendAny.verification_status ||
+    backendAny.status ||
+    undefined;
   const uuidLikePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const fallbackUniversityId = backend.university_id || backendAny.university_id;
@@ -73,8 +78,8 @@ export function transformAdmission(
     feeNumeric: backend.application_fee,
     location: backend.location,
     city: extractCity(backend.location),
-    status: mapVerificationStatus(backend.verification_status),
-    verificationStatus: mapRawVerificationStatus(backend.verification_status),
+    status: mapVerificationStatus(rawVerificationStatus),
+    verificationStatus: mapRawVerificationStatus(rawVerificationStatus),
     programStatus: calculateProgramStatus(backend.deadline),
     updated: formatRelativeTime(backend.updated_at),
     daysRemaining: calculateDaysRemaining(backend.deadline),
@@ -137,7 +142,6 @@ function mapRawVerificationStatus(
     pending: 'pending',
     rejected: 'rejected',
     draft: 'pending',  // Map draft to pending
-    disputed: 'under_review',  // Map disputed to under_review
     under_review: 'under_review',
   };
   // Default to 'rejected' for unknown statuses (safer - hides from students)
@@ -296,7 +300,6 @@ function mapNotificationType(
     admission_rejected: 'admission',
     admission_revision_required: 'admission',
     admission_updated_saved: 'admission',
-    dispute_raised: 'admission',
     system_broadcast: 'system',
     system_error: 'system',
   };
@@ -326,8 +329,6 @@ function getNotificationIcon(notificationType: string | null | undefined): strin
     admission_revision_required: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
     // Admission updated - speaker icon
     admission_updated_saved: 'M11 5.882V19.24a1.961 1.961 0 01-1.936-1.954V5.882m0 0a1.961 1.961 0 011.936-1.954h6.128a1.961 1.961 0 011.936 1.954m0 0A1.966 1.966 0 0120 5.882v12.358A1.966 1.966 0 0118.128 20H6.128A1.966 1.966 0 014 18.24V5.882m16 0A1.966 1.966 0 0019.964 3.88V1.96a1.961 1.961 0 00-1.936-1.954h-6.128a1.961 1.961 0 00-1.936 1.954v1.92m0 0A1.966 1.966 0 004 5.882',
-    // Dispute raised - exclamation icon
-    dispute_raised: 'M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     // System broadcast - speaker volume icon
     system_broadcast: 'M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728m-.9-1.425a7 7 0 010-9.9m1.31-2.567a11 11 0 010 15.456M3.05 11a7 7 0 009.9 0M5.555 7.555A11 11 0 0015.455 17m-2.333-2.333A7 7 0 005.888 7.888',
     // System error - x icon

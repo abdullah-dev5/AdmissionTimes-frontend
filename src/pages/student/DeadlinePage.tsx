@@ -98,6 +98,7 @@ const AlertToggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => 
 const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission & { daysRemaining: number; alertEnabled: boolean }; onAlertToggle: (id: string) => void }) => {
   const statusColors = getStatusColor(deadline.status)
   const isClosed = deadline.programStatus === 'Closed' || deadline.daysRemaining < 0
+  const isPending = deadline.verificationStatus === 'pending' || deadline.status === 'Pending'
 
   return (
     <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${isClosed ? 'opacity-60' : ''}`}>
@@ -114,6 +115,11 @@ const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission 
         <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
           {deadline.programStatus}
         </span>
+        {isPending && (
+          <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap bg-yellow-100 text-yellow-700">
+            Pending
+          </span>
+        )}
       </div>
       
       {/* ✅ Show Updated Tag if status is Updated (after admin verification) */}
@@ -503,7 +509,7 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
 function DeadlinePage() {
   const { admissions: rawAdmissions } = useStudentDashboardData()
   
-  // ✅ Filter admissions - HIDE rejected and disputed from students
+  // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
     () => filterStudentVisibleAdmissions(rawAdmissions),
     [rawAdmissions]

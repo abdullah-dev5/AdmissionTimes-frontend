@@ -8,7 +8,7 @@
  */
 
 import apiClient from './apiClient';
-import type { ApiResponse, PaginatedResponse, Admission } from '../types/api';
+import type { ApiResponse, PaginatedResponse, Admission, ParsedPdfData } from '../types/api';
 
 export const admissionsService = {
   // ============================================================
@@ -165,24 +165,13 @@ export const admissionsService = {
   },
 
   /**
-   * Dispute rejection (university action)
-   * 
-   * @param id - Admission ID
-   * @returns Promise resolving to admission in dispute
-   */
-  dispute: async (id: string): Promise<ApiResponse<Admission>> => {
-    const response = await apiClient.patch(`/admissions/${id}/dispute`);
-    return response.data;
-  },
-
-  /**
    * Parse PDF file to extract admission data
    * 
    * @param file - PDF file to parse
    * @param universityId - University ID associated with the PDF
    * @returns Promise resolving to parsed admission data
    */
-  parsePDF: async (file: File, universityId: string): Promise<ApiResponse<any>> => {
+  parsePDF: async (file: File, universityId: string): Promise<ApiResponse<ParsedPdfData>> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('university_id', universityId);

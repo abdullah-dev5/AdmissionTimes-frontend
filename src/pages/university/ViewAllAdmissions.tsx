@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
+import { showConfirm, showError, showSuccess } from '../../utils/swal'
 
 type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected'
 
@@ -22,13 +23,13 @@ function ViewAllAdmissions() {
       if (verification === 'draft') return 'draft'
       if (verification === 'pending') return 'pending'
       if (verification === 'verified') return 'verified'
-      if (verification === 'rejected' || verification === 'disputed') return 'rejected'
+      if (verification === 'rejected') return 'rejected'
 
       const status = (adm.status || '').toLowerCase()
       if (status === 'draft') return 'draft'
       if (status === 'pending audit' || status === 'pending') return 'pending'
       if (status === 'verified') return 'verified'
-      if (status === 'rejected' || status === 'disputed') return 'rejected'
+      if (status === 'rejected') return 'rejected'
       return 'pending'
     }
 
@@ -57,13 +58,14 @@ function ViewAllAdmissions() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
+    const confirmed = await showConfirm('Delete Admission?', `Are you sure you want to delete "${title}"?`, 'Delete')
+    if (confirmed) {
       const result = await deleteAdmission(id)
       
       if (result.success) {
-        alert('Admission deleted successfully!')
+        await showSuccess('Admission deleted successfully!')
       } else {
-        alert(`Failed to delete admission: ${result.error || 'Unknown error'}`)
+        await showError(`Failed to delete admission: ${result.error || 'Unknown error'}`)
       }
     }
   }
@@ -79,13 +81,13 @@ function ViewAllAdmissions() {
       if (verification === 'draft') return 'draft'
       if (verification === 'pending') return 'pending'
       if (verification === 'verified') return 'verified'
-      if (verification === 'rejected' || verification === 'disputed') return 'rejected'
+      if (verification === 'rejected') return 'rejected'
 
       const status = (adm.status || '').toLowerCase()
       if (status === 'draft') return 'draft'
       if (status === 'pending audit' || status === 'pending') return 'pending'
       if (status === 'verified') return 'verified'
-      if (status === 'rejected' || status === 'disputed') return 'rejected'
+      if (status === 'rejected') return 'rejected'
       return 'pending'
     }
 

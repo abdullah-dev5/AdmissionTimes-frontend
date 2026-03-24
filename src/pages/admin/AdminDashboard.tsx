@@ -93,7 +93,6 @@ function AdminDashboard() {
 			Verified: 0,
 			Pending: 0,
 			Rejected: 0,
-			Disputed: 0,
 		}
 
 		const mapStatus = (value: string): VerificationStatus => {
@@ -102,8 +101,6 @@ function AdminDashboard() {
 					return "Verified"
 				case "rejected":
 					return "Rejected"
-				case "disputed":
-					return "Disputed"
 				default:
 					return "Pending"
 			}
@@ -132,7 +129,7 @@ function AdminDashboard() {
 			}
 		})
 
-		const statusOrder: VerificationStatus[] = ["Verified", "Pending", "Rejected", "Disputed"]
+		const statusOrder: VerificationStatus[] = ["Verified", "Pending", "Rejected"]
 		const statusBreakdown = statusOrder.map((status) => ({
 			status,
 			count: statusCounts[status],
@@ -202,7 +199,6 @@ function AdminDashboard() {
 				const type = (item.action_type || item.change_type).toLowerCase()
 				if (type === 'verified') actionType = 'Verified'
 				else if (type === 'rejected') actionType = 'Rejected'
-				else if (type === 'disputed') actionType = 'Disputed'
 			}
 			
 			// Get admission title from map, with fallbacks

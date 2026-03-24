@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
+import { showError, showInfo, showSuccess } from '../../utils/swal'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -165,21 +166,21 @@ function ComparePage() {
     return savedAdmissions.slice(0, 3)
   }, [idsParam, getAdmissionById, savedAdmissions])
 
-  const handleSave = () => {
-    alert('Comparison saved! You can access it from your saved comparisons.')
+  const handleSave = async () => {
+    await showSuccess('Comparison saved! You can access it from your saved comparisons.')
   }
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const url = window.location.href
-    navigator.clipboard.writeText(url).then(() => {
-      alert('Comparison link copied to clipboard!')
-    }).catch(() => {
-      alert('Failed to copy link. Please copy manually: ' + url)
+    navigator.clipboard.writeText(url).then(async () => {
+      await showSuccess('Comparison link copied to clipboard!')
+    }).catch(async () => {
+      await showError('Failed to copy link. Please copy manually: ' + url)
     })
   }
 
-  const handleExport = () => {
-    alert('PDF export feature coming soon!')
+  const handleExport = async () => {
+    await showInfo('PDF export feature coming soon!')
   }
 
   const count = selectedAdmissions.length

@@ -1,21 +1,20 @@
 // Shared mock data for University Module - ensures consistency across all pages
 
-export type AdmissionStatus = "Active" | "Closing Soon" | "Draft" | "Closed" | "Pending Audit" | "Verified" | "Rejected" | "Disputed"
+export type AdmissionStatus = "Active" | "Closing Soon" | "Draft" | "Closed" | "Pending Audit" | "Verified" | "Rejected"
 
-export type AuditStatus = "Pending" | "Verified" | "Rejected" | "Disputed"
+export type AuditStatus = "Pending" | "Verified" | "Rejected"
 
 export interface Admission {
 	id: string
 	title: string
 	deadline: string
 	status: AdmissionStatus
-	verification_status?: 'verified' | 'pending' | 'rejected' | 'draft' | 'disputed'
+	verification_status?: 'verified' | 'pending' | 'rejected' | 'draft'
 	views?: string // Optional - may not be present in API data
 	verifiedBy?: string
 	lastAction?: string
 	remarks?: string
 	rejection_reason?: string
-	dispute_reason?: string
 	verification_comments?: string
 	admin_notes?: string
 	
@@ -165,8 +164,8 @@ export const sharedAdmissions: Admission[] = [
 		id: "5",
 		title: "BBA Honors",
 		deadline: "2025-07-20",
-		status: "Disputed",
-		verification_status: "disputed",
+		status: "Rejected",
+		verification_status: "rejected",
 		views: "320",
 		verifiedBy: "Admin",
 		lastAction: "2025-02-04",
@@ -182,7 +181,7 @@ export const sharedAdmissions: Admission[] = [
 
 // Audit items derived from admissions
 export const sharedAudits: AuditItem[] = sharedAdmissions
-	.filter((a) => ["Pending Audit", "Verified", "Rejected", "Disputed"].includes(a.status))
+	.filter((a) => ["Pending Audit", "Verified", "Rejected", "Rejected"].includes(a.status))
 	.map((a, idx) => ({
 		id: idx + 1,
 		title: a.title,
@@ -223,7 +222,7 @@ export const sharedChangeLogs: ChangeLogItem[] = [
 		admission: "BBA Honors",
 		modifiedBy: "Rep_01",
 		date: "2025-02-04 11:15",
-		diff: [{ field: "Status", old: "Verified", new: "Disputed" }],
+		diff: [{ field: "Status", old: "Verified", new: "Rejected" }],
 	},
 ]
 
@@ -249,7 +248,7 @@ export const sharedNotifications: NotificationItem[] = [
 	{
 		id: 3,
 		title: "Admission Update",
-		message: "Admission 'BBA Honors' has been marked as Disputed.",
+		message: "Admission 'BBA Honors' has been marked as Rejected.",
 		type: "Data Update",
 		time: "2025-02-07T08:30:00Z",
 		read: false,
@@ -290,8 +289,6 @@ export const getStatusColor = (status: AdmissionStatus | AuditStatus) => {
 		case "Closed":
 		case "Rejected":
 			return { bg: "#FEE2E2", text: "#EF4444" }
-		case "Disputed":
-			return { bg: "#FED7AA", text: "#EA580C" }
 		default:
 			return { bg: "#F3F4F6", text: "#6B7280" }
 	}
@@ -300,4 +297,5 @@ export const getStatusColor = (status: AdmissionStatus | AuditStatus) => {
 export const getAdmissionById = (id: string): Admission | undefined => {
 	return sharedAdmissions.find((a) => a.id === id)
 }
+
 

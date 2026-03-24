@@ -383,7 +383,7 @@ create table public.admissions (
   verified_at timestamp with time zone null,
   verified_by uuid null,
   rejection_reason text null,
-  dispute_reason text null,
+  review_reason text null,
   created_by uuid null,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
@@ -394,16 +394,16 @@ create table public.admissions (
   updated_by uuid null,
   constraint admissions_pkey primary key (id),
   constraint admissions_updated_by_fkey foreign KEY (updated_by) references users (id),
-  constraint check_dispute_reason check (
+  constraint check_review_reason check (
     (
       (
         (
-          verification_status = 'disputed'::verification_status
+          verification_status = 'rejected'::verification_status
         )
-        and (dispute_reason is not null)
+        and (review_reason is not null)
       )
       or (
-        verification_status <> 'disputed'::verification_status
+        verification_status <> 'rejected'::verification_status
       )
     )
   ),
@@ -535,7 +535,7 @@ create table public.admin_audit_logs (
           array[
             'verify'::character varying,
             'reject'::character varying,
-            'dispute'::character varying,
+            'reject'::character varying,
             'update_notes'::character varying,
             'bulk_verify'::character varying
           ]

@@ -33,9 +33,24 @@ function AdminSidebar() {
 			link: "/admin/notifications",
 		},
 		{
+			name: "Email Logs",
+			icon: "M16 12H8m8 4H8m8-8H8m-2 12h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
+			link: "/admin/email-logs",
+		},
+		{
+			name: "Create Uni Rep",
+			icon: "M12 4a4 4 0 110 8 4 4 0 010-8zm0 10c4.418 0 8 1.79 8 4v2H4v-2c0-2.21 3.582-4 8-4z",
+			link: "/admin/create-university-rep",
+		},
+		{
 			name: "Scraper Logs",
 			icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4",
 			link: "/admin/scraper-logs",
+		},
+		{
+			name: "Deadline System",
+			icon: "M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v11a2 2 0 002 2z",
+			link: "/admin/deadline-system",
 		},
 		{/*{
 			name: "Analytics",

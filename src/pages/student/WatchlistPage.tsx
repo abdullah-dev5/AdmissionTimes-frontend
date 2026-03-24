@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
+import { showConfirm, showInfo, showSuccess, showWarning } from '../../utils/swal'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -242,12 +243,6 @@ const WatchlistCard = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-sm">
-          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-gray-700">{program.fee}</span>
-        </div>
       </div>
 
       <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
@@ -391,7 +386,7 @@ function WatchlistPage() {
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
   const { admissions: rawAdmissions } = useStudentDashboardData()
   
-  // ✅ Filter admissions - HIDE rejected and disputed from students
+  // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
     () => filterStudentVisibleAdmissions(rawAdmissions),
     [rawAdmissions]
@@ -434,8 +429,9 @@ function WatchlistPage() {
     toggleAlert(id, { showError, showSuccess })
   }
 
-  const handleRemove = (id: string) => {
-    if (window.confirm('Remove this program from your watchlist?')) {
+  const handleRemove = async (id: string) => {
+      const confirmed = await showConfirm('Remove Program?', 'Remove this program from your watchlist?', 'Remove')
+      if (confirmed) {
       const program = savedPrograms.find(program => program.id === id)
       if (program?.alertEnabled) {
         toggleAlert(id, { showError, showSuccess })
@@ -447,23 +443,23 @@ function WatchlistPage() {
     }
   }
 
-  const handleCompare = () => {
+  const handleCompare = async () => {
     if (selectedIds.length >= 2 && selectedIds.length <= 4) {
       navigate(`/student/compare?ids=${selectedIds.join(',')}`)
     } else if (selectedIds.length < 2) {
-      alert('Please select at least 2 programs to compare.')
+      await showWarning('Please select at least 2 programs to compare.')
     } else {
-      alert('Please select a maximum of 4 programs to compare.')
+      await showWarning('Please select a maximum of 4 programs to compare.')
     }
   }
 
-  const handleSaveRecommendation = (id: string) => {
+  const handleSaveRecommendation = async (id: string) => {
     const isSaved = savedPrograms.some(program => program.id === id)
     if (!isSaved) {
       toggleSaved(id, { showError })
-      alert('Program saved to watchlist!')
+      await showSuccess('Program saved to watchlist!')
     } else {
-      alert('Program already saved to watchlist.')
+      await showInfo('Program already saved to watchlist.')
     }
   }
 

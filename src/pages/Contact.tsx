@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { showSuccess } from '../utils/swal'
 
 function Contact() {
   const navigate = useNavigate()
@@ -10,10 +11,10 @@ function Contact() {
     message: ''
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     // In a real app, this would send the form data to a backend
-    alert('Thank you for your message! We will get back to you soon.')
+    await showSuccess('Thank you for your message! We will get back to you soon.', 'Message Sent')
     setFormData({ name: '', email: '', subject: '', message: '' })
   }
 
@@ -227,19 +228,19 @@ function Contact() {
             </div>
             <div className="flex flex-wrap items-center gap-6 mb-4 md:mb-0">
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/privacy')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 Privacy Policy
               </button>
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/terms')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 Terms of Service
               </button>
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/about')}
                 className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
               >
                 About

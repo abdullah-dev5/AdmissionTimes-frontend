@@ -17,6 +17,117 @@ import type {
   AdminBulkVerifyDTO,
 } from '../types/api';
 
+export interface CreateUniversityRepPayload {
+  email: string;
+  display_name: string;
+  university_name: string;
+  city?: string;
+  country?: string;
+  website?: string;
+}
+
+export interface CreateUniversityRepResult {
+  user: {
+    id: string;
+    email: string;
+    role: 'university';
+    university_id: string;
+    display_name: string;
+  };
+  university: {
+    id: string;
+    name: string;
+  };
+  credentials: {
+    temporary_password: string;
+    show_once: true;
+  };
+}
+
+export interface EmailDeliveryLog {
+  id: string;
+  notification_id: string;
+  recipient_email: string;
+  subject: string;
+  status: 'sent' | 'failed';
+  error_message: string | null;
+  attempt_number: number;
+  provider_message_id: string | null;
+  created_at: string;
+  notification_type?: string;
+  notification_title?: string;
+  related_entity_type?: string | null;
+  related_entity_id?: string | null;
+}
+
+export interface EmailLogListResult {
+  logs: EmailDeliveryLog[];
+  meta: {
+    status: 'sent' | 'failed' | null;
+    limit: number;
+    count: number;
+  };
+}
+
+export interface EmailReplayResultByLog {
+  log_id: string;
+  notification_id: string;
+  recipient_email: string;
+  replayed: boolean;
+}
+
+export interface EmailReplayResultByNotification {
+  notification_id: string;
+  recipient_email: string;
+  replayed: boolean;
+}
+
+export interface ManualReminderCleanupResult {
+  deleted_count: number;
+}
+
+export interface SchedulerJobMetrics {
+  lastRunAt: string | null;
+  lastDurationMs: number;
+  lastStatus: 'success' | 'failed' | 'idle';
+  totalRuns: number;
+  totalFailures: number;
+  lastError: string | null;
+}
+
+export interface SchedulerHealthResult {
+  deadlineReminders: SchedulerJobMetrics;
+  recommendationGeneration: SchedulerJobMetrics;
+  recommendationCleanup: SchedulerJobMetrics;
+}
+
+export interface ReminderDeliveryLog {
+  id: string;
+  deadline_id: string;
+  recipient_id: string;
+  threshold_day: number;
+  notification_id: string | null;
+  status: 'sent' | 'failed' | 'deduped';
+  event_key: string;
+  error_message: string | null;
+  created_at: string;
+  sent_at: string | null;
+  deadline_type?: string | null;
+  deadline_date?: string | null;
+  admission_id?: string | null;
+  admission_title?: string | null;
+}
+
+export interface ReminderLogListResult {
+  success: boolean;
+  data: ReminderDeliveryLog[];
+  meta: {
+    status: 'sent' | 'failed' | 'deduped' | null;
+    limit: number;
+    count: number;
+  };
+}
+
 export const adminService = {
   /**
    * Get admin dashboard with statistics and recent activity
@@ -57,7 +168,7 @@ export const adminService = {
    * 
    * @param page - Page number (default: 1)
    * @param limit - Items per page (default: 20)
-   * @param status - Filter by status: pending, verified, rejected, disputed (optional)
+   * @param status - Filter by status: pending, verified, rejected (optional)
    * @returns Promise resolving to paginated list of all admissions
    */
   getAllAdmissions: async (
@@ -162,24 +273,6 @@ export const adminService = {
     return adminService.verifyAdmission(admissionId, {
       verification_status: 'verified',
       verification_comments: verificationComments,
-    });
-  },
-
-  /**
-   * Dispute an admission (mark as disputed for review)
-   * 
-   * @param admissionId - Admission ID
-   * @param reason - Reason for dispute
-   * @returns Promise resolving to updated admission
-   */
-  disputeAdmission: async (
-    admissionId: string,
-    reason: string
-  ): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('🟡 [adminService] Disputing admission:', admissionId);
-    return adminService.verifyAdmission(admissionId, {
-      verification_status: 'disputed',
-      admin_notes: reason,
     });
   },
 
@@ -299,6 +392,26 @@ export const adminService = {
   },
 
   /**
+   * Get scheduler health (admin only)
+   * GET /api/v1/scheduler/health
+   */
+  getSchedulerHealth: async (): Promise<{ success: boolean; data: SchedulerHealthResult }> => {
+    const response = await apiClient.get('/scheduler/health');
+    return response.data;
+  },
+
+  /**
+   * Get reminder delivery logs (admin only)
+   * GET /api/v1/scheduler/reminder-logs
+   */
+  getReminderLogs: async (
+    params?: { status?: 'sent' | 'failed' | 'deduped'; limit?: number }
+  ): Promise<ReminderLogListResult> => {
+    const response = await apiClient.get('/scheduler/reminder-logs', { params });
+    return response.data;
+  },
+
+  /**
    * Get change logs
    * Fetches audit trail of changes made to admissions
    * 
@@ -357,6 +470,61 @@ export const adminService = {
    */
   getAnalyticsStats: async (): Promise<ApiResponse<any>> => {
     const response = await apiClient.get('/analytics/stats');
+    return response.data;
+  },
+
+  /**
+   * Create university representative from admin panel (Flow C)
+   * POST /api/v1/admin/university-reps
+   */
+  createUniversityRep: async (
+    payload: CreateUniversityRepPayload
+  ): Promise<ApiResponse<CreateUniversityRepResult>> => {
+    const response = await apiClient.post('/admin/university-reps', payload);
+    return response.data;
+  },
+
+  /**
+   * Get email delivery logs (admin only)
+   * GET /api/v1/notifications/admin/email-logs
+   */
+  getEmailDeliveryLogs: async (
+    params?: { status?: 'sent' | 'failed'; limit?: number }
+  ): Promise<ApiResponse<EmailLogListResult>> => {
+    const response = await apiClient.get('/notifications/admin/email-logs', {
+      params,
+    });
+    return response.data;
+  },
+
+  /**
+   * Replay email by log id (admin only)
+   * POST /api/v1/notifications/admin/email-logs/:id/replay
+   */
+  replayEmailFromLog: async (logId: string): Promise<ApiResponse<EmailReplayResultByLog>> => {
+    const response = await apiClient.post(`/notifications/admin/email-logs/${logId}/replay`);
+    return response.data;
+  },
+
+  /**
+   * Replay email by notification id (admin only)
+   * POST /api/v1/notifications/admin/notifications/:id/replay-email
+   */
+  replayEmailByNotificationId: async (
+    notificationId: string
+  ): Promise<ApiResponse<EmailReplayResultByNotification>> => {
+    const response = await apiClient.post(
+      `/notifications/admin/notifications/${notificationId}/replay-email`
+    );
+    return response.data;
+  },
+
+  /**
+   * Cleanup manual reminder test notifications (admin only)
+   * DELETE /api/v1/notifications/admin/manual-test-cleanup
+   */
+  cleanupManualReminderTestNotifications: async (): Promise<ApiResponse<ManualReminderCleanupResult>> => {
+    const response = await apiClient.delete('/notifications/admin/manual-test-cleanup');
     return response.data;
   },
 };

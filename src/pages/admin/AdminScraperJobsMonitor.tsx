@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import AdminLayout from "../../layouts/AdminLayout"
+import { showInfo, showSuccess } from "../../utils/swal"
 import {
 	scraperJobs,
 	scraperSummary,
@@ -21,26 +22,26 @@ function AdminScraperJobsMonitor() {
 		return scraperJobs.slice(startIndex, startIndex + itemsPerPage)
 	}, [currentPage])
 
-	const handleRunAll = () => {
+	const handleRunAll = async () => {
 		// Mock API call - in production, this would be:
 		// POST /api/admin/scraper/run-all
 		console.log("Running scraper for all universities")
 		// Show toast: "Scraper started successfully."
-		alert("Scraper started successfully.")
+		await showSuccess("Scraper started successfully.")
 	}
 
-	const handleRerun = (universityId: string) => {
+	const handleRerun = async (universityId: string) => {
 		// Mock API call - in production, this would be:
 		// POST /api/admin/scraper/rerun/:universityId
 		console.log("Rerunning scraper for university:", universityId)
-		alert("Scraper rerun initiated.")
+		await showInfo("Scraper rerun initiated.")
 	}
 
-	const handleRetry = (job: ScraperJob) => {
+	const handleRetry = async (job: ScraperJob) => {
 		// Mock API call - in production, this would be:
 		// POST /api/admin/scraper/rerun/:universityId
 		console.log("Retrying scraper job:", job.jobId)
-		handleRerun(job.universityId)
+		await handleRerun(job.universityId)
 	}
 
 	const formatDateTime = (dateString: string) => {

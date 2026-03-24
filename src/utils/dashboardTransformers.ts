@@ -10,6 +10,8 @@
 import type { UniversityDashboard } from '../types/api'
 import type { Admission, ChangeLogItem, NotificationItem } from '../data/universityData'
 
+const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
+
 /**
  * Transform backend UniversityDashboard to frontend data structures
  * 
@@ -22,9 +24,10 @@ import type { Admission, ChangeLogItem, NotificationItem } from '../data/univers
  * @returns Object with transformed admissions, changeLogs, and notifications
  */
 export function transformUniversityDashboard(data: UniversityDashboard) {
-  console.log('🔵 [dashboardTransformers] Raw API data:', data)
-  console.log('🔵 [dashboardTransformers] recent_admissions count:', data.recent_admissions?.length || 0)
-  console.log('🔵 [dashboardTransformers] recent_admissions raw:', JSON.stringify(data.recent_admissions, null, 2))
+  if (isDashboardDebugEnabled) {
+    console.log('🔵 [dashboardTransformers] Raw API data:', data)
+    console.log('🔵 [dashboardTransformers] recent_admissions count:', data.recent_admissions?.length || 0)
+  }
   
   // Transform recent_admissions (all admissions) to Admission objects
   // Maps all 25 database fields from backend to frontend Admission type
@@ -70,7 +73,6 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     verifiedBy: admission.verified_by,
     verified_by: admission.verified_by,
     rejection_reason: admission.rejection_reason,
-    dispute_reason: admission.dispute_reason,
     verification_comments: admission.verification_comments,
     admin_notes: admission.admin_notes,
     
@@ -85,7 +87,6 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     views: admission.views?.toString() || '0',
     remarks:
       admission.rejection_reason ||
-      admission.dispute_reason ||
       admission.verification_comments ||
       admission.admin_notes ||
       admission.remarks ||
@@ -94,8 +95,9 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     academicYear: admission.academic_year || extractYear(admission.deadline || admission.created_at || ''),
   }));
 
-  console.log('🔵 [dashboardTransformers] Transformed admissions count:', admissions.length)
-  console.log('🔵 [dashboardTransformers] Transformed admissions:', admissions.map(a => ({ id: a.id, title: a.title, status: a.status, verification_status: a.verification_status })))
+  if (isDashboardDebugEnabled) {
+    console.log('🔵 [dashboardTransformers] Transformed admissions count:', admissions.length)
+  }
 
   // Transform recent_changes to ChangeLogItem objects
   const changeLogs: ChangeLogItem[] = (data.recent_changes || []).map((change: any, index: number) => {
@@ -143,6 +145,13 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     admissions,
     changeLogs,
     notifications,
+    engagementTrends: {
+      labels: data.engagement_trends?.labels || [],
+      views: data.engagement_trends?.views || [],
+      clicks: data.engagement_trends?.clicks || [],
+      reminders: data.engagement_trends?.reminders || [],
+      saves: data.engagement_trends?.saves || [],
+    },
   };
 }
 
@@ -152,12 +161,11 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
  * @param status - Backend verification status
  * @returns Frontend AdmissionStatus
  */
-function mapVerificationStatusToAdmissionStatus(status: string): 'Active' | 'Verified' | 'Rejected' | 'Pending Audit' | 'Draft' | 'Closed' | 'Disputed' {
+function mapVerificationStatusToAdmissionStatus(status: string): 'Active' | 'Verified' | 'Rejected' | 'Pending Audit' | 'Draft' | 'Closed' {
   const statusMap: Record<string, any> = {
     'verified': 'Verified',
     'pending': 'Pending Audit',
     'rejected': 'Rejected',
-    'disputed': 'Disputed',
     'draft': 'Draft',
     'active': 'Active',
     'closed': 'Closed',
@@ -178,7 +186,6 @@ function mapNotificationCategory(notificationType: string): 'Admin Feedback' | '
     admission_verified: 'Admin Feedback',
     admission_rejected: 'Admin Feedback',
     admission_revision_required: 'Admin Feedback',
-    dispute_raised: 'Admin Feedback',
     admission_updated_saved: 'Data Update',
     deadline_near: 'System Alert',
     system_broadcast: 'System Alert',

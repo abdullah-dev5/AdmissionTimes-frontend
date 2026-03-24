@@ -93,7 +93,7 @@ export function UpdateNotificationToast({
 		}
 
 		const value = String(change_type).toLowerCase()
-		if (["verify", "verified", "reject", "rejected", "dispute", "disputed", "admin_edit", "admin edit"].includes(value)) {
+		if (["verify", "verified", "reject", "rejected", "admin_edit", "admin edit"].includes(value)) {
 			return "Admin Edit" as const
 		}
 		if (["scraper", "scraper_update", "scraper update", "system"].includes(value)) {

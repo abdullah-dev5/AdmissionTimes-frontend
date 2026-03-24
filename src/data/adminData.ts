@@ -12,7 +12,7 @@ export interface PendingVerification {
 export interface AdminAction {
 	id: number
 	admission: string
-	action: "Verified" | "Rejected" | "Disputed"
+	action: "Verified" | "Rejected"
 	admin: string
 	timestamp: string
 	remarks: string
@@ -27,7 +27,6 @@ export type NotificationType =
 	| "admission_updated_saved"
 	| "deadline_near"
 	| "system_broadcast"
-	| "dispute_raised"
 	| "system_error"
 
 export interface AdminNotification {
@@ -90,7 +89,7 @@ export interface SystemMetrics {
 	aiSummary?: string
 }
 
-export type VerificationStatus = "Pending" | "Verified" | "Rejected" | "Disputed"
+export type VerificationStatus = "Pending" | "Verified" | "Rejected"
 
 export interface VerificationItem {
 	id: string
@@ -101,7 +100,7 @@ export interface VerificationItem {
 	status: VerificationStatus
 	verificationStatusRaw?: string
 	rejectionReason?: string | null
-	disputeReason?: string | null
+	reviewReason?: string | null
 	verificationComments?: string | null
 	adminNotes?: string | null
 	remarks?: string | null
@@ -198,7 +197,7 @@ export const recentAdminActions: AdminAction[] = [
 	{
 		id: 4,
 		admission: "BBA Honors",
-		action: "Disputed",
+		action: "Rejected",
 		admin: "Admin",
 		timestamp: "2025-02-07 14:20",
 		remarks: "University requested recheck on deadline.",
@@ -279,9 +278,9 @@ export const adminNotifications: AdminNotification[] = [
 	},
 	{
 		id: 7,
-		title: "Admission Disputed",
-		message: "Admission 'BBA Honors' from IBA has been marked as disputed. University requested recheck on deadline.",
-		type: "dispute_raised",
+		title: "Admission Rejected",
+		message: "Admission 'BBA Honors' from IBA has been marked as rejected. University requested recheck on deadline.",
+		type: "admission_rejected",
 		timestamp: "2025-02-07T14:20:00Z",
 		timeAgo: "1 day ago",
 		unread: false,
@@ -464,7 +463,7 @@ export const verificationItems: VerificationItem[] = [
 		university: "IBA",
 		submittedBy: "Rep_04",
 		submittedOn: "2025-02-03",
-		status: "Disputed",
+		status: "Rejected",
 		metadata: {
 			title: "BBA Honors",
 			degree: "Bachelor of Business Administration",
@@ -640,9 +639,9 @@ export const adminChangeLogs: AdminChangeLog[] = [
 		summary: "Deadline, Status",
 		diff: [
 			{ field: "Deadline", oldValue: "2025-07-15", newValue: "2025-07-20" },
-			{ field: "Status", oldValue: "Verified", newValue: "Disputed" },
+			{ field: "Status", oldValue: "Verified", newValue: "Rejected" },
 		],
-		reasonForChange: "University requested deadline extension. Status changed to Disputed for review.",
+		reasonForChange: "University requested deadline extension. Status changed to Rejected for review.",
 		verificationLogId: 4,
 	},
 	{
@@ -777,8 +776,6 @@ export const getActionColor = (action: AdminAction["action"]) => {
 			return { bg: "#D1FAE5", text: "#10B981" }
 		case "Rejected":
 			return { bg: "#FEE2E2", text: "#EF4444" }
-		case "Disputed":
-			return { bg: "#FED7AA", text: "#EA580C" }
 		default:
 			return { bg: "#F3F4F6", text: "#6B7280" }
 	}
@@ -1028,7 +1025,7 @@ export const admissionAnalytics: AdmissionAnalytics = {
 		{ status: "Verified", count: 245, percentage: 43.2 },
 		{ status: "Pending", count: 189, percentage: 33.3 },
 		{ status: "Rejected", count: 89, percentage: 15.7 },
-		{ status: "Disputed", count: 44, percentage: 7.8 },
+		{ status: "Rejected", count: 44, percentage: 7.8 },
 	],
 	universityDistribution: [
 		{ university: "FAST University", count: 125 },
@@ -1059,7 +1056,7 @@ export const admissionAnalytics: AdmissionAnalytics = {
 		{ title: "MS Data Science", university: "NUST", views: "980", status: "Verified" },
 		{ title: "MBA Executive", university: "LUMS", views: "890", status: "Verified" },
 		{ title: "PhD Computer Science", university: "FAST University", views: "750", status: "Verified" },
-		{ title: "BBA Honors", university: "IBA", views: "650", status: "Disputed" },
+		{ title: "BBA Honors", university: "IBA", views: "650", status: "Rejected" },
 	],
 }
 
@@ -1245,10 +1242,9 @@ export const getVerificationStatusColor = (status: VerificationStatus) => {
 			return { bg: "#D1FAE5", text: "#10B981" }
 		case "Rejected":
 			return { bg: "#FEE2E2", text: "#EF4444" }
-		case "Disputed":
-			return { bg: "#FED7AA", text: "#EA580C" }
 		default:
 			return { bg: "#F3F4F6", text: "#6B7280" }
 	}
 }
+
 

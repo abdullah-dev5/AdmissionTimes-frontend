@@ -5,6 +5,8 @@ import { getStatusColor, type Admission } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateForInput, sanitizeAdmission } from '../../utils/admissionUtils'
+import { admissionsService } from '../../services/admissionsService'
+import { showConfirm, showError, showSuccess, showWarning } from '../../utils/swal'
 
 function ManageAdmissions() {
   const navigate = useNavigate()
@@ -23,8 +25,8 @@ function ManageAdmissions() {
   // Determine if we need to change status to pending on edit
   const requiresStatusReset = useMemo(() => {
     if (!existingAdmission) return false
-    // If admission is verified, rejected, or disputed, editing should reset to pending
-    return ['verified', 'rejected', 'disputed'].includes(existingAdmission.verification_status || '')
+    // If admission is verified or rejected, editing should reset to pending
+    return ['verified', 'rejected'].includes(existingAdmission.verification_status || '')
   }, [existingAdmission])
 
   const [formData, setFormData] = useState({
@@ -43,8 +45,8 @@ function ManageAdmissions() {
     // OPTIONAL: Descriptions (no defaults)
     overview: existingAdmission?.overview || '',
     eligibility: existingAdmission?.eligibility || '',
-    
-    // OPTIONAL: Web Links (no defaults - don't suggest URLs)
+
+    // OPTIONAL: Official links
     websiteUrl: existingAdmission?.websiteUrl || '',
     admissionPortalLink: existingAdmission?.admissionPortalLink || '',
   })
@@ -52,7 +54,6 @@ function ManageAdmissions() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -68,29 +69,31 @@ function ManageAdmissions() {
         fee: sanitized.fee || '', // Empty if no fee
         overview: sanitized.overview || '',
         eligibility: sanitized.eligibility || '',
-        websiteUrl: sanitized.websiteUrl || '', // Empty if no URL
-        admissionPortalLink: sanitized.admissionPortalLink || '', // Empty if no URL
+        websiteUrl: sanitized.websiteUrl || '',
+        admissionPortalLink: sanitized.admissionPortalLink || '',
       })
     }
   }, [existingAdmission])
 
-  // Mock function to extract data from PDF (in real app, this would call an API)
-  const extractDataFromPDF = async (_file: File): Promise<Partial<typeof formData>> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // Mock extracted data - in real app, this would come from OCR/AI extraction
+  const extractDataFromPDF = async (file: File): Promise<Partial<typeof formData>> => {
+    if (!universityId) {
+      throw new Error('University ID not found. Please re-login and try again.')
+    }
+
+    const response = await admissionsService.parsePDF(file, universityId)
+    const parsed = response.data
+
     return {
-      programTitle: 'Bachelor of Science in Computer Science',
-      degreeType: 'BS',
-      department: 'School of Engineering and Computer Science',
-      academicYear: '2025-2026',
-      applicationDeadline: '2025-07-15',
-      fee: '5000',
-      overview: 'This program provides comprehensive training in computer science fundamentals, software engineering, and modern technologies. Students will gain hands-on experience through projects and internships.',
-      eligibility: 'Minimum 60% marks in F.Sc/ICS/A-Level or equivalent. Entry test required. Mathematics and Physics background preferred.',
-      websiteUrl: 'https://university.edu/cs',
-      admissionPortalLink: 'https://university.edu/admissions/cs',
+      programTitle: parsed.title || '',
+      degreeType: parsed.degree_level || '',
+      department: parsed.location || '',
+      academicYear: '',
+      applicationDeadline: formatDateForInput(parsed.deadline) || '',
+      fee: typeof parsed.application_fee === 'number' ? String(parsed.application_fee) : '',
+      overview: parsed.summary_text || parsed.description || '',
+      eligibility: parsed.eligibility || '',
+      websiteUrl: '',
+      admissionPortalLink: '',
     }
   }
 
@@ -107,15 +110,13 @@ function ManageAdmissions() {
   }
 
   const processFile = async (file: File) => {
-    // Validate file type
     if (file.type !== 'application/pdf') {
-      alert('Please upload a PDF file only.')
+      await showWarning('Please upload a PDF file only.')
       return
     }
 
-    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB.')
+      await showWarning('File size must be less than 10MB.')
       return
     }
 
@@ -124,18 +125,14 @@ function ManageAdmissions() {
     setExtractionStatus('Processing PDF and extracting information...')
 
     try {
-      // Extract data from PDF
       const extractedData = await extractDataFromPDF(file)
-      
-      // Auto-fill form with extracted data
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         ...extractedData,
       }))
-      
-      setExtractionStatus('Information extracted successfully! Please review and edit as needed.')
-      
-      // Clear status after 5 seconds
+
+      setExtractionStatus('AI-assisted extraction completed. Please review and edit as needed.')
+
       setTimeout(() => {
         setExtractionStatus(null)
       }, 5000)
@@ -144,26 +141,6 @@ function ManageAdmissions() {
       console.error('PDF extraction error:', error)
     } finally {
       setIsProcessing(false)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      processFile(file)
     }
   }
 
@@ -227,7 +204,7 @@ function ManageAdmissions() {
 
   const handleSaveDraft = async () => {
     if (!universityId) {
-      alert('University ID not found. Please re-login and try again.')
+      await showError('University ID not found. Please re-login and try again.')
       return
     }
 
@@ -247,7 +224,7 @@ function ManageAdmissions() {
     )
     
     if (result?.success) {
-      alert('Draft saved successfully!')
+      await showSuccess('Draft saved successfully!')
     }
     // Error alert is shown by context
   }
@@ -255,12 +232,12 @@ function ManageAdmissions() {
   const handlePublish = async () => {
     // Only title is truly required - all other fields are optional
     if (!formData.programTitle || !formData.programTitle.trim()) {
-      alert('Program Title is required')
+      await showWarning('Program Title is required')
       return
     }
 
     if (!universityId) {
-      alert('University ID not found. Please re-login and try again.')
+      await showError('University ID not found. Please re-login and try again.')
       return
     }
 
@@ -276,7 +253,7 @@ function ManageAdmissions() {
     console.log('🟡 [ManageAdmissions] Publish verification_status:', payloadWithStatus.verification_status)
     console.log('🟡 [ManageAdmissions] Changes:', diff)
     
-    // Show appropriate message based on whether editing verified/rejected/disputed admission
+    // Show appropriate message based on whether editing verified/rejected admission
     let successMessage = ''
     if (isEditMode) {
       if (requiresStatusReset) {
@@ -295,7 +272,7 @@ function ManageAdmissions() {
     )
 
     if (result?.success) {
-      alert(successMessage)
+      await showSuccess(successMessage)
       navigate('/university/admissions')
     }
     // Error alert is shown by context
@@ -311,11 +288,25 @@ function ManageAdmissions() {
     navigate(`/university/manage-admissions?edit=${id}`)
   }
 
-  const handleDeleteRecent = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this admission?')) {
+  const handleDeleteRecent = async (id: string) => {
+    const confirmed = await showConfirm('Delete Admission?', 'Are you sure you want to delete this admission?', 'Delete')
+    if (confirmed) {
       deleteAdmission(id)
-      alert('Admission deleted!')
+      await showSuccess('Admission deleted!')
     }
+  }
+
+  const sanitizeVerifier = (value?: string) => {
+    if (!value) return ''
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    return uuidPattern.test(value) ? '' : value
+  }
+
+  const formatDeadlineDisplay = (value?: string) => {
+    if (!value) return '—'
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   return (
@@ -333,7 +324,7 @@ function ManageAdmissions() {
                 </p>
               </div>
 
-              {/* Alert banner for verified/rejected/disputed admissions that will reset to pending */}
+              {/* Alert banner for verified/rejected admissions that will reset to pending */}
               {requiresStatusReset && (
                 <div className="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
                   <div className="flex items-start gap-3">
@@ -353,15 +344,7 @@ function ManageAdmissions() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                  {/* PDF/Brochure Upload Section */}
-                  <div 
-                    className={`bg-white rounded-lg shadow-sm p-6 border-2 border-dashed transition-colors ${
-                      isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                    }`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                  >
+                  <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-dashed border-gray-300">
                     <div className="flex items-start gap-4">
                       <div className="flex-shrink-0">
                         <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -371,9 +354,9 @@ function ManageAdmissions() {
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload PDF/Brochure (Optional)</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                          Upload a PDF or brochure to automatically extract and fill admission information. Supported formats: PDF (max 10MB).
+                          Upload a brochure PDF to auto-extract and prefill admission details.
                         </p>
-                        
+
                         {!uploadedFile ? (
                           <div>
                             <input
@@ -394,7 +377,6 @@ function ManageAdmissions() {
                               >
                                 {isProcessing ? 'Processing...' : 'Choose PDF File'}
                               </button>
-                              <span className="text-sm text-gray-500">or drag and drop here</span>
                             </div>
                           </div>
                         ) : (
@@ -429,8 +411,8 @@ function ManageAdmissions() {
 
                         {extractionStatus && !isProcessing && (
                           <div className={`mt-4 p-3 rounded-lg text-sm ${
-                            extractionStatus.includes('Error') 
-                              ? 'bg-red-50 text-red-700' 
+                            extractionStatus.includes('Error')
+                              ? 'bg-red-50 text-red-700'
                               : 'bg-green-50 text-green-700'
                           }`}>
                             {extractionStatus}
@@ -571,7 +553,7 @@ function ManageAdmissions() {
                   </div>
 
                   <div className="bg-white rounded-lg shadow-sm p-6">
-                    <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links & Attachments</h2>
+                    <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links</h2>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">University Website URL</label>
@@ -590,26 +572,6 @@ function ManageAdmissions() {
                           onChange={(e) => setFormData({ ...formData, admissionPortalLink: e.target.value })}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Upload Prospectus (PDF)</label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 cursor-pointer transition-colors">
-                          <svg className="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p className="text-sm text-gray-600">Upload a file or drag and drop</p>
-                          <p className="text-xs text-gray-500 mt-1">PDF up to 10MB</p>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Upload Brochure (PDF)</label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 cursor-pointer transition-colors">
-                          <svg className="w-12 h-12 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p className="text-sm text-gray-600">Upload a file or drag and drop</p>
-                          <p className="text-xs text-gray-500 mt-1">PDF up to 10MB</p>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -701,14 +663,14 @@ function ManageAdmissions() {
                                 </button>
                               </div>
                             </div>
-                            <p className="text-xs text-gray-600 mb-2">Deadline: {admission.deadline}</p>
+                            <p className="text-xs text-gray-600 mb-2">Deadline: {formatDeadlineDisplay(admission.deadline)}</p>
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.bg }}></div>
                               <span className="text-xs font-medium" style={{ color: statusColors.text }}>{admission.status}</span>
                             </div>
-                            {admission.verifiedBy && (
+                            {sanitizeVerifier(admission.verifiedBy) && (
                               <span className="text-xs font-medium text-green-600">
-                                Verified by {admission.verifiedBy}
+                                Verified by {sanitizeVerifier(admission.verifiedBy)}
                               </span>
                             )}
                           </div>

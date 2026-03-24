@@ -19,7 +19,6 @@ import type { Admission as ApiAdmission } from '../types/api'
 export function sanitizeAdmission(admission: Partial<Admission>): Admission {
   const remarks =
     admission.rejection_reason ||
-    admission.dispute_reason ||
     admission.verification_comments ||
     admission.admin_notes ||
     admission.remarks ||
@@ -75,8 +74,6 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     status = 'Verified'
   } else if (verificationStatus === 'rejected') {
     status = 'Rejected'
-  } else if (verificationStatus === 'disputed') {
-    status = 'Disputed'
   } else if (verificationStatus === 'pending') {
     status = 'Pending Audit'
   } else if (verificationStatus === 'draft') {
@@ -85,7 +82,6 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
 
   const remarks =
     apiAdmission.rejection_reason ||
-    apiAdmission.dispute_reason ||
     apiAdmission.verification_comments ||
     apiAdmission.admin_notes ||
     ''
@@ -101,7 +97,6 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     lastAction: apiAdmission.updated_at || apiAdmission.created_at || new Date().toISOString(),
     remarks,
     rejection_reason: apiAdmission.rejection_reason || undefined,
-    dispute_reason: apiAdmission.dispute_reason || undefined,
     verification_comments: apiAdmission.verification_comments || undefined,
     admin_notes: apiAdmission.admin_notes || undefined,
     

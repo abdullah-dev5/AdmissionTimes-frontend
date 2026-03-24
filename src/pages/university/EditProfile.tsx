@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
+import { showError, showSuccess } from '../../utils/swal'
 
 function EditProfile() {
   const { user, refreshUser } = useAuth()
@@ -106,7 +107,7 @@ function EditProfile() {
       })
 
       await refreshUser()
-      alert('Profile updated successfully!')
+      await showSuccess('Profile updated successfully!')
       navigate('/university/settings')
     } catch (error: any) {
       console.error('Failed to update profile:', error)
@@ -115,7 +116,7 @@ function EditProfile() {
       console.error('User context:', user)
       
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to update profile'
-      alert(`Error: ${errorMessage}`)
+      await showError(errorMessage)
     } finally {
       setIsSaving(false)
     }
