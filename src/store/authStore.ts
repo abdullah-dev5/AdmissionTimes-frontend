@@ -76,6 +76,17 @@ export const useAuthStore = create<AuthStoreState>()(
           }
         } catch (error: any) {
           console.error('Auth check failed:', error)
+
+          // If persisted refresh token is invalid/revoked, clear local session to stop retry noise.
+          const message = String(error?.message || '')
+          if (message.toLowerCase().includes('invalid refresh token')) {
+            try {
+              await supabase.auth.signOut({ scope: 'local' })
+            } catch {
+              // ignore cleanup failure
+            }
+          }
+
           set({ user: null, isAuthenticated: false })
           if (options?.showError) {
             options.showError('Failed to check authentication')

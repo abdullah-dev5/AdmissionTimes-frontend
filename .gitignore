@@ -21,4 +21,9 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
+
+# Environment files
+.env
+.env.*
+!.env.example
 *.sw?
