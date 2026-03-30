@@ -39,7 +39,6 @@ See **[project-docs/README.md](project-docs/README.md)** for complete project do
 ✅ **Smart Recommendations** - Collaborative filtering suggestions  
 ✅ **Email Notifications** - System + email alerts  
 ✅ **Responsive Design** - Mobile, tablet, desktop support  
-✅ **Dark/Light Theme** (planned)
 
 ---
 

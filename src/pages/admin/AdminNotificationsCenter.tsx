@@ -3,6 +3,7 @@ import AdminLayout from "../../layouts/AdminLayout"
 import { adminService } from "../../services/adminService"
 import { type NotificationType } from "../../data/adminData"
 import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
+import { formatDisplayDateTime } from "../../utils/dateUtils"
 
 function AdminNotificationsCenter() {
 	const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
@@ -299,7 +300,7 @@ function AdminNotificationsCenter() {
 							<strong>Reminder dispatch:</strong> targets={secretResult.targets}, attempted={secretResult.attempted}, succeeded={secretResult.succeeded}, deduped={secretResult.deduped}, failed={secretResult.failed}
 						</p>
 						<p className="text-xs text-emerald-700 mt-1">
-							Triggered at {new Date(secretResult.timestamp).toLocaleString()}. If deduped &gt; 0, matching reminders already existed for the same key and email side-effects were skipped.
+							Triggered at {formatDisplayDateTime(secretResult.timestamp)}. If deduped &gt; 0, matching reminders already existed for the same key and email side-effects were skipped.
 						</p>
 					</div>
 				)}
@@ -410,7 +411,7 @@ function AdminNotificationsCenter() {
 							const isRead = typeof notification.is_read === "boolean" ? notification.is_read : !notification.unread
 							const timeLabel =
 								notification.timeAgo ||
-								new Date(notification.created_at || notification.timestamp).toLocaleString()
+								formatDisplayDateTime(notification.created_at || notification.timestamp)
 							const iconColor = getNotificationIconColor(normalizedType)
 							return (
 								<div

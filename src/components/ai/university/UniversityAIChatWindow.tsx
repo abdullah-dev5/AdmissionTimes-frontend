@@ -4,6 +4,7 @@ import UniversityMessageBubble from "./UniversityMessageBubble"
 import UniversityPromptChip from "./UniversityPromptChip"
 import LoadingDots from "../LoadingDots"
 import aiService, { type ChatHistoryEntry } from "../../../services/aiService"
+import { formatDisplayTime } from "../../../utils/dateUtils"
 
 interface Message {
 	id: string
@@ -37,7 +38,7 @@ function UniversityAIChatWindow({
 			id: "1",
 			text: `Hi ${universityName}! I'm your AI Assistant. I can help with admission publishing, verification workflow, and dashboard actions.`,
 			isUser: false,
-			timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+			timestamp: formatDisplayTime(new Date().toISOString()),
 		},
 	])
 	const [inputValue, setInputValue] = useState("")
@@ -190,7 +191,7 @@ function UniversityAIChatWindow({
 			id: Date.now().toString(),
 			text: messageText,
 			isUser: true,
-			timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+			timestamp: formatDisplayTime(new Date().toISOString()),
 		}
 
 		setMessages((prev) => [...prev, userMessage])
@@ -213,7 +214,7 @@ function UniversityAIChatWindow({
 				id: (Date.now() + 1).toString(),
 				text: finalAnswer,
 				isUser: false,
-				timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+				timestamp: formatDisplayTime(new Date().toISOString()),
 			}
 
 			setMessages((prev) => [...prev, aiMessage])
@@ -222,7 +223,7 @@ function UniversityAIChatWindow({
 				id: (Date.now() + 1).toString(),
 				text: resolveRequestFailureReply(messageText, error),
 				isUser: false,
-				timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+				timestamp: formatDisplayTime(new Date().toISOString()),
 			}
 			setMessages((prev) => [...prev, errorMessage])
 		} finally {

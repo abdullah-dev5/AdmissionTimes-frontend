@@ -2,6 +2,73 @@
  * Utility functions for date formatting and manipulation
  */
 
+const DEFAULT_LOCALE = "en-US"
+
+const parseDateSafe = (value?: string | null): Date | null => {
+	if (!value) return null
+	const parsed = new Date(value)
+	if (Number.isNaN(parsed.getTime())) return null
+	return parsed
+}
+
+export const formatDisplayDate = (
+	value?: string | null,
+	fallback: string = "-"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return value || fallback
+
+	return parsed.toLocaleDateString(DEFAULT_LOCALE, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+	})
+}
+
+export const formatDisplayDateLong = (
+	value?: string | null,
+	fallback: string = "-"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return value || fallback
+
+	return parsed.toLocaleDateString(DEFAULT_LOCALE, {
+		weekday: "long",
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	})
+}
+
+export const formatDisplayTime = (
+	value?: string | null,
+	fallback: string = "--:--"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return fallback
+
+	return parsed.toLocaleTimeString(DEFAULT_LOCALE, {
+		hour: "2-digit",
+		minute: "2-digit",
+	})
+}
+
+export const formatDisplayDateTime = (
+	value?: string | null,
+	fallback: string = "-"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return value || fallback
+
+	return parsed.toLocaleString(DEFAULT_LOCALE, {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	})
+}
+
 /**
  * Formats a date string to a readable format
  * @param dateString - ISO date string
@@ -9,7 +76,7 @@
  */
 export const formatDateTime = (dateString: string): string => {
 	const date = new Date(dateString)
-	return date.toLocaleString("en-US", {
+	return date.toLocaleString(DEFAULT_LOCALE, {
 		year: "numeric",
 		month: "short",
 		day: "numeric",
@@ -63,7 +130,7 @@ export const getRelativeTime = (dateString: string): string => {
 	if (diffWeeks < 4) return `${diffWeeks} week${diffWeeks !== 1 ? "s" : ""} ago`
 	if (diffMonths < 12) return `${diffMonths} month${diffMonths !== 1 ? "s" : ""} ago`
 
-	return date.toLocaleDateString("en-US", {
+	return date.toLocaleDateString(DEFAULT_LOCALE, {
 		year: "numeric",
 		month: "short",
 		day: "numeric",
@@ -99,7 +166,7 @@ export const formatDateTimeWithTimezone = (dateString: string, timezone?: string
 		timeZoneName: "short",
 		...(timezone && { timeZone: timezone }),
 	}
-	return date.toLocaleString("en-US", options)
+	return date.toLocaleString(DEFAULT_LOCALE, options)
 }
 
 /**

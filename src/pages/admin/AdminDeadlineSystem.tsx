@@ -5,6 +5,7 @@ import {
   type ReminderDeliveryLog,
   type SchedulerHealthResult,
 } from "../../services/adminService"
+import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { showConfirm, showError, showSuccess } from "../../utils/swal"
 
 function AdminDeadlineSystem() {
@@ -134,13 +135,6 @@ function AdminDeadlineSystem() {
     }
   }, [logs])
 
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return "-"
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return value
-    return date.toLocaleString()
-  }
-
   return (
     <AdminLayout>
       <div className="p-6">
@@ -203,7 +197,7 @@ function AdminDeadlineSystem() {
               Reminder run: targets={lastTriggerResult.targets}, attempted={lastTriggerResult.attempted}, succeeded={lastTriggerResult.succeeded}, failed={lastTriggerResult.failed}, deduped={lastTriggerResult.deduped || 0}
             </p>
             <p className="text-xs text-emerald-700 mt-1">
-              Triggered at {formatDateTime(lastTriggerResult.timestamp)}
+              Triggered at {formatDisplayDateTime(lastTriggerResult.timestamp)}
             </p>
           </div>
         )}
@@ -215,7 +209,7 @@ function AdminDeadlineSystem() {
               {loadingHealth ? "Loading..." : (health?.deadlineReminders?.lastStatus || "idle")}
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              Last run: {formatDateTime(health?.deadlineReminders?.lastRunAt)}
+              Last run: {formatDisplayDateTime(health?.deadlineReminders?.lastRunAt)}
             </p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
@@ -272,7 +266,7 @@ function AdminDeadlineSystem() {
                 <tbody>
                   {logs.map((item) => (
                     <tr key={item.id} className="border-b border-gray-100 align-top">
-                      <td className="py-3 px-2 text-sm text-gray-700">{formatDateTime(item.created_at)}</td>
+                      <td className="py-3 px-2 text-sm text-gray-700">{formatDisplayDateTime(item.created_at)}</td>
                       <td className="py-3 px-2 text-sm">
                         <span
                           className="px-2 py-1 rounded-full text-xs font-medium"
@@ -299,7 +293,7 @@ function AdminDeadlineSystem() {
                         {item.admission_title || item.admission_id || "-"}
                       </td>
                       <td className="py-3 px-2 text-sm text-gray-700">
-                        {formatDateTime(item.deadline_date || null)}
+                        {formatDisplayDateTime(item.deadline_date || null)}
                       </td>
                       <td className="py-3 px-2 text-sm text-gray-700 font-mono max-w-[180px] truncate" title={item.notification_id || "-"}>
                         {item.notification_id || "-"}
