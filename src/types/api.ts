@@ -114,7 +114,7 @@ export interface University {
 }
 
 export interface AiChatResponse {
-  intent: 'search_admissions' | 'clarification' | 'unsupported';
+  intent: 'search_admissions' | 'guidance' | 'clarification' | 'unsupported';
   extracted_filters: {
     search?: string;
     degree_level?: string;

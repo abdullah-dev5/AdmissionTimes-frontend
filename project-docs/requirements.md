@@ -1,35 +1,46 @@
-# Requirements & Features
+# Frontend Requirements
 
-- Date: 2026-02-18
-- Status: Backend and frontend aligned for core domains; docs synchronized for merge
+## Functional Requirements
 
-## Core Requirements
+1. Authentication and identity
+- Sign in and sign up via Supabase-backed auth.
+- Resolve backend identity using `/auth/me` after session recovery.
 
-- JWT auth with role-based access.
-- Admissions CRUD with verification lifecycle.
-- Deadlines with upcoming and urgent views.
-- Watchlists with alert toggles.
-- Notifications with read/unread support.
-- Analytics endpoints for admin dashboards.
+2. Student flows
+- Dashboard, search, detail, watchlist, deadlines, notifications, compare, recommendations.
+- AI assistant access with role/context payload.
 
-## Functional Areas
+3. University flows
+- Admissions management and verification-related pages.
+- Change-log and notification center views.
 
-### Student
-- Search, save, compare, and track admissions.
-- Deadlines and notifications tied to watchlists.
+4. Admin flows
+- Pending verification queue and decision workflows.
+- Dashboard and operational analytics.
 
-### University
-- Manage admissions and submit for verification.
-- View verification outcomes and changelog.
-
-### Admin
-- Verify or reject admissions and view system analytics.
+5. Preferences and alerts
+- User preference updates using `/users/me/preferences`.
+- Toggle channels and categories without breaking other preferences.
 
 ## Non-Functional Requirements
 
-- API consistency across web and mobile clients.
-- Role-based access enforcement in backend services.
-- Soft delete for admissions.
+- Type-safe API integration and DTO transformation.
+- Route-level role protection.
+- Consistent toast/dialog UX patterns.
+- Responsive behavior across desktop/tablet/mobile web.
+
+## Contract Expectations
+
+- API path assumptions in `src/services` must match backend route aliases.
+- Unsupported enum values must not be surfaced in UI docs.
+- PUT/PATCH semantics for preferences must be clearly documented.
+
+## Known Risk Areas
+
+- Change logs route naming differences (`/change-logs` vs `/changelogs`) require backend alias certainty.
+- Preference category partial updates require merge-safe backend behavior.
+
+Updated: 2026-03-30
 
 
 

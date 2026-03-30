@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { getStatusColor } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
+import { formatDisplayDate } from '../../utils/dateUtils'
 import { showConfirm, showError, showSuccess } from '../../utils/swal'
 
 type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected'
@@ -278,13 +279,7 @@ function ViewAllAdmissions() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-600">
-                            {admission.deadline
-                              ? new Date(admission.deadline).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })
-                              : '—'}
+                            {formatDisplayDate(admission.deadline, '—')}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -300,13 +295,7 @@ function ViewAllAdmissions() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-600">
-                            {admission.lastAction
-                              ? new Date(admission.lastAction).toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })
-                              : '—'}
+                            {formatDisplayDate(admission.lastAction, '—')}
                           </div>
                         </td>
                         <td className="px-6 py-4">

@@ -128,6 +128,24 @@ export interface ReminderLogListResult {
   };
 }
 
+export interface EmailMetricsResult {
+  readiness: {
+    enabled: boolean;
+    ready: boolean;
+    lastVerifyAt: string | null;
+    lastVerifyError: string | null;
+  };
+  retry_backlog: number;
+  sent_1h: number;
+  failed_1h: number;
+  sent_24h: number;
+  failed_24h: number;
+  failure_rate_1h: number;
+  failure_rate_24h: number;
+  permanent_skips_24h: number;
+  retry_attempts_24h: number;
+}
+
 export const adminService = {
   /**
    * Get admin dashboard with statistics and recent activity
@@ -525,6 +543,67 @@ export const adminService = {
    */
   cleanupManualReminderTestNotifications: async (): Promise<ApiResponse<ManualReminderCleanupResult>> => {
     const response = await apiClient.delete('/notifications/admin/manual-test-cleanup');
+    return response.data;
+  },
+
+  /**
+   * Get email transport readiness (admin only)
+   * GET /api/v1/notifications/admin/email-readiness
+   */
+  getEmailReadiness: async (): Promise<ApiResponse<{
+    enabled: boolean;
+    ready: boolean;
+    lastVerifyAt: string | null;
+    lastVerifyError: string | null;
+  }>> => {
+    const response = await apiClient.get('/notifications/admin/email-readiness');
+    return response.data;
+  },
+
+  /**
+   * Force email transport verification (admin only)
+   * POST /api/v1/notifications/admin/email-readiness/verify
+   */
+  verifyEmailReadiness: async (): Promise<ApiResponse<{
+    enabled: boolean;
+    ready: boolean;
+    lastVerifyAt: string | null;
+    lastVerifyError: string | null;
+  }>> => {
+    const response = await apiClient.post('/notifications/admin/email-readiness/verify');
+    return response.data;
+  },
+
+  /**
+   * Process email retry backlog now (admin only)
+   * POST /api/v1/notifications/admin/email-retries/process
+   */
+  processEmailRetries: async (params?: {
+    limit?: number;
+    max_failed_attempts?: number;
+    min_age_seconds?: number;
+    max_age_hours?: number;
+  }): Promise<ApiResponse<{
+    backlog: number;
+    backlog_failed: number;
+    backlog_unattempted: number;
+    attempted: number;
+    queued: number;
+    attempted_unattempted: number;
+    attempted_failed: number;
+    skipped_permanent: number;
+    blocked_by_readiness: boolean;
+  }>> => {
+    const response = await apiClient.post('/notifications/admin/email-retries/process', params || {});
+    return response.data;
+  },
+
+  /**
+   * Get email delivery metrics summary (admin only)
+   * GET /api/v1/notifications/admin/email-metrics
+   */
+  getEmailMetrics: async (): Promise<ApiResponse<EmailMetricsResult>> => {
+    const response = await apiClient.get('/notifications/admin/email-metrics');
     return response.data;
   },
 };

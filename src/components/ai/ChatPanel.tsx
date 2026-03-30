@@ -6,6 +6,7 @@ import LoadingDots from './LoadingDots'
 import ContextBadge from './ContextBadge'
 import QuickActionChips from './QuickActionChips'
 import aiService, { type ChatHistoryEntry } from '../../services/aiService'
+import { formatDisplayTime } from '../../utils/dateUtils'
 
 interface Message {
   id: string
@@ -21,7 +22,7 @@ function ChatPanel() {
       id: '1',
       text: 'Hello! I\'m your AI assistant. How can I help you with admissions today?',
       isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: formatDisplayTime(new Date().toISOString())
     }
   ])
   const [inputValue, setInputValue] = useState('')
@@ -73,7 +74,7 @@ function ChatPanel() {
       id: Date.now().toString(),
       text: messageText,
       isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: formatDisplayTime(new Date().toISOString())
     }
 
     setMessages(prev => [...prev, userMessage])
@@ -97,7 +98,7 @@ function ChatPanel() {
         id: (Date.now() + 1).toString(),
         text: finalAnswer,
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: formatDisplayTime(new Date().toISOString())
       }
 
       setMessages(prev => [...prev, aiMessage])
@@ -106,7 +107,7 @@ function ChatPanel() {
         id: (Date.now() + 1).toString(),
         text: resolveRequestFailureReply(messageText, context, error),
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: formatDisplayTime(new Date().toISOString())
       }
       setMessages(prev => [...prev, errorMessage])
     } finally {

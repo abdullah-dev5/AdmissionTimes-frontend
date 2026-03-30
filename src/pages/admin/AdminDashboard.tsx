@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../contexts/AuthContext"
-import { adminService } from "../../services/adminService"
+import { adminService, type EmailMetricsResult } from "../../services/adminService"
 import { admissionsService } from "../../services/admissionsService"
 import { usersService } from "../../services/usersService"
 import AdminLayout from "../../layouts/AdminLayout"
@@ -13,6 +13,7 @@ import {
 import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
 import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
 import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
+import { formatDisplayDateTime } from "../../utils/dateUtils"
 
 // Tooltip Component
 function InfoTooltip({ description }: { description: string }) {
@@ -77,6 +78,7 @@ function AdminDashboard() {
 	const [changelogs, setChangelogs] = useState<any[]>([])
 	const [totalUsers, setTotalUsers] = useState(0)
 	const [totalAdmissions, setTotalAdmissions] = useState(0)
+	const [emailMetrics, setEmailMetrics] = useState<EmailMetricsResult | null>(null)
 	const [_loading, _setLoading] = useState(false)
 	const [_error, _setError] = useState<string | null>(null)
 
@@ -220,7 +222,7 @@ function AdminDashboard() {
 				admission: admissionTitle,
 				action: actionType,
 				admin: item.changed_by_name || safeLabel(item.changed_by || item.modified_by, 'System'),
-				timestamp: item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A',
+				timestamp: item.created_at ? formatDisplayDateTime(item.created_at, 'N/A') : 'N/A',
 				remarks: item.diff_summary || item.remarks || `Changed ${item.field_name || 'field'} from "${item.old_value}" to "${item.new_value}"`,
 			}
 		})
@@ -298,6 +300,15 @@ function AdminDashboard() {
 			console.log('✅ Total users:', userCount)
 			setTotalUsers(userCount)
 
+			// Fetch email metrics summary for admin observability
+			try {
+				const emailMetricsResponse = await adminService.getEmailMetrics()
+				setEmailMetrics(emailMetricsResponse.data || null)
+			} catch (metricsError) {
+				console.warn('[AdminDashboard] Email metrics unavailable:', metricsError)
+				setEmailMetrics(null)
+			}
+
 			console.debug('[AdminDashboard] All data fetched successfully')
 		} catch (err: any) {
 			console.error('[AdminDashboard] Failed to fetch dashboard data:', err)
@@ -360,7 +371,7 @@ function AdminDashboard() {
 				</div>
 
 				{/* System Metrics Cards */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
 					{/* Total Users */}
 					<div className="bg-white rounded-lg shadow-sm p-6">
 						<div className="flex items-center justify-between mb-4">
@@ -421,6 +432,42 @@ function AdminDashboard() {
 										strokeLinejoin="round"
 										strokeWidth={2}
 										d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+									/>
+								</svg>
+							</div>
+						</div>
+					</div>
+
+					{/* Email Delivery Health */}
+					<div className="bg-white rounded-lg shadow-sm p-6">
+						<div className="flex items-center justify-between mb-4">
+							<div>
+								<p className="text-sm text-gray-600 mb-1">Email Delivery Health</p>
+								<p
+									className="text-2xl font-bold"
+									style={{
+										color: emailMetrics?.readiness.ready ? "#166534" : "#B91C1C",
+									}}
+								>
+									{emailMetrics
+										? emailMetrics.readiness.enabled
+											? emailMetrics.readiness.ready
+												? "Ready"
+												: "Degraded"
+											: "Disabled"
+										: "Unknown"}
+								</p>
+								<p className="text-xs text-gray-500 mt-1">
+									Backlog: {emailMetrics?.retry_backlog ?? 0} | 24h fail: {emailMetrics?.failure_rate_24h ?? 0}%
+								</p>
+							</div>
+							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#F3F4F6" }}>
+								<svg className="w-6 h-6" style={{ color: emailMetrics?.readiness.ready ? "#059669" : "#DC2626" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										strokeWidth={2}
+										d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8m-18 8h18a2 2 0 002-2V8a2 2 0 00-2-2H3a2 2 0 00-2 2v6a2 2 0 002 2z"
 									/>
 								</svg>
 							</div>

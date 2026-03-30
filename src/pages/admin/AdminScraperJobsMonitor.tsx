@@ -8,6 +8,7 @@ import {
 	getScraperJobStatusColor,
 	type ScraperJob,
 } from "../../data/adminData"
+import { formatDisplayDateTime } from "../../utils/dateUtils"
 
 function AdminScraperJobsMonitor() {
 	const navigate = useNavigate()
@@ -42,17 +43,6 @@ function AdminScraperJobsMonitor() {
 		// POST /api/admin/scraper/rerun/:universityId
 		console.log("Retrying scraper job:", job.jobId)
 		await handleRerun(job.universityId)
-	}
-
-	const formatDateTime = (dateString: string) => {
-		const date = new Date(dateString)
-		return date.toLocaleString("en-US", {
-			year: "numeric",
-			month: "short",
-			day: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		})
 	}
 
 	return (
@@ -145,7 +135,7 @@ function AdminScraperJobsMonitor() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Last Execution</p>
 								<p className="text-lg font-bold" style={{ color: "#111827" }}>
-									{formatDateTime(scraperSummary.lastExecution)}
+									{formatDisplayDateTime(scraperSummary.lastExecution)}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEF3C7" }}>
@@ -196,10 +186,10 @@ function AdminScraperJobsMonitor() {
 												<p className="text-sm text-gray-600 font-mono">{job.jobId}</p>
 											</td>
 											<td className="py-4 px-4">
-												<p className="text-sm text-gray-600">{formatDateTime(job.startedAt)}</p>
+												<p className="text-sm text-gray-600">{formatDisplayDateTime(job.startedAt)}</p>
 											</td>
 											<td className="py-4 px-4">
-												<p className="text-sm text-gray-600">{formatDateTime(job.finishedAt)}</p>
+												<p className="text-sm text-gray-600">{formatDisplayDateTime(job.finishedAt)}</p>
 											</td>
 											<td className="py-4 px-4">
 												<span
@@ -346,13 +336,13 @@ function AdminScraperJobsMonitor() {
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Start Time</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatDateTime(selectedJob.startedAt)}
+												{formatDisplayDateTime(selectedJob.startedAt)}
 											</p>
 										</div>
 										<div>
 											<p className="text-sm text-gray-500 mb-1">End Time</p>
 											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatDateTime(selectedJob.finishedAt)}
+												{formatDisplayDateTime(selectedJob.finishedAt)}
 											</p>
 										</div>
 										<div>

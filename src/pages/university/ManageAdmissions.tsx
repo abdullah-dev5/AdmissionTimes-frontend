@@ -5,6 +5,7 @@ import { getStatusColor, type Admission } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateForInput, sanitizeAdmission } from '../../utils/admissionUtils'
+import { formatDisplayDate } from '../../utils/dateUtils'
 import { admissionsService } from '../../services/admissionsService'
 import { showConfirm, showError, showSuccess, showWarning } from '../../utils/swal'
 
@@ -303,10 +304,7 @@ function ManageAdmissions() {
   }
 
   const formatDeadlineDisplay = (value?: string) => {
-    if (!value) return '—'
-    const parsed = new Date(value)
-    if (Number.isNaN(parsed.getTime())) return value
-    return parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    return formatDisplayDate(value, '—')
   }
 
   return (

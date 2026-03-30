@@ -6,6 +6,7 @@ import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
+import { formatDisplayDateLong } from '../../utils/dateUtils'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 
 const DeadlineHeader = ({ 
@@ -212,7 +213,7 @@ const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmissi
             {openDates.map((date) => (
               <div key={`open-${date}`}>
                 <h3 className="text-lg font-semibold mb-4" style={{ color: '#111827' }}>
-                  {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  {formatDisplayDateLong(date)}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {openGrouped[date].map((deadline) => (
@@ -234,7 +235,7 @@ const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmissi
             {closedDates.map((date) => (
               <div key={`closed-${date}`}>
                 <h3 className="text-lg font-semibold mb-4" style={{ color: '#6B7280' }}>
-                  {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  {formatDisplayDateLong(date)}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {closedGrouped[date].map((deadline) => (

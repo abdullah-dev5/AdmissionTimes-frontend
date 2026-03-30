@@ -1,49 +1,44 @@
-# User Flow & Project Structure
+# User Structure and Flow (Frontend)
 
-- Date: 2026-02-18
+## Roles
 
-## User Flow (University Verification Center)
-1. Navigate to `/university/verification-center`.
-2. Review audits in the table.
-3. Filter by status and/or search by title.
-4. Click View Details to see modal with comments and timestamps.
-5. Click Download Log to trigger toast confirmation.
+- student
+- university
+- admin
 
-## Project Structure (Relevant)
-- `src/pages/university/VerificationCenter.tsx` — page and local components
-- `src/Router/router.tsx` — route mapping
+## Shared Entry Flow
 
-## User Flow (University Change Logs)
-1. Navigate to `/university/change-logs`.
-2. Select date range and admission; search if needed.
-3. Review logs and click View Diff for details.
+1. User opens app.
+2. Auth bootstrap restores Supabase session.
+3. Frontend calls `GET /auth/me`.
+4. Router redirects to role-specific area.
 
-## Project Structure (Relevant)
-- `src/pages/university/ChangeLogs.tsx` — page and local components
+## Student Flow
 
-## User Flow (University Notifications Center)
-1. Navigate to `/university/notifications-center`.
-2. Use tabs to filter by type; search if needed.
-3. Mark individual or all notifications as read.
-4. Click View Admission to open related admission context.
+1. Open dashboard (`/student/dashboard`).
+2. Explore admissions search/list.
+3. Save to watchlist and enable alert toggles.
+4. Check deadlines and notifications.
+5. Use recommendations and AI helper.
 
-## Project Structure (Relevant)
-- `src/pages/university/NotificationsCenter.tsx` — page and local components
+## University Flow
 
-## User Flow (University AI Assistant)
-1. User sees floating chat button (bottom-right) on any university page.
-2. Click button to expand chat window.
-3. View initial greeting with quick prompt chips.
-4. Click a prompt chip or type a question.
-5. View AI response with university-specific guidance.
-6. Continue conversation or close chat window.
+1. Open university dashboard.
+2. Create/update admissions.
+3. Submit records for verification.
+4. Review verification and change-log feedback.
 
-## Project Structure (Relevant)
-- `src/components/ai/university/UniversityAIAssistant.tsx` — main wrapper component
-- `src/components/ai/university/UniversityAIChatButton.tsx` — floating toggle button
-- `src/components/ai/university/UniversityAIChatWindow.tsx` — chat interface
-- `src/components/ai/university/UniversityMessageBubble.tsx` — message display
-- `src/components/ai/university/UniversityPromptChip.tsx` — quick action button
-- Integrated into all university pages via `<UniversityAIAssistant />` component
+## Admin Flow
 
+1. Open admin dashboard.
+2. Review pending admissions.
+3. Verify or request revisions.
+4. Monitor analytics and operational notifications.
 
+## Frontend Enforcement Points
+
+- Route-level constraints in router setup.
+- Store/state role guards in auth and role stores.
+- Service-layer endpoint segregation by role.
+
+Updated: 2026-03-30

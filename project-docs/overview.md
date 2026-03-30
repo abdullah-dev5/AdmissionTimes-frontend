@@ -1,32 +1,38 @@
-# Project Overview
+# Frontend Overview
 
-- Date: 2026-02-18
-- Status: Frontend and backend APIs aligned; docs synchronized for merge
+## Goal
 
-## Vision
+Provide a role-aware web interface for three personas:
 
-AdmissionTimes streamlines admissions discovery for students and admissions management for universities and admins.
+- Student: discovery, tracking, notifications, recommendations, AI guidance
+- University: admissions lifecycle and verification feedback
+- Admin: verification, operations, and analytics views
 
-## Current State
+## Implementation Shape
 
-- JWT auth integrated across frontend and backend.
-- Admissions, deadlines, analytics, watchlists, notifications, and users are API-aligned.
-- Soft delete and admin verification flows are supported in the backend.
+- UI: React 19 + TypeScript + Vite
+- Routing: React Router 7
+- State: Context + Zustand stores
+- API integration: centralized Axios client and service modules
+- Auth/session: Supabase session with backend user identity hydration
 
-## Modules
+## Current Reality
 
-### Student
-- Dashboard, search, watchlists, deadlines, notifications.
+- Frontend is backend-driven for primary business flows.
+- Service layer endpoints are defined in `src/services/*`.
+- AI chat support is wired through `/ai/*` backend endpoints.
+- Notification and preference controls exist, with category-level UX still partial.
 
-### University
-- Admissions CRUD, verification workflows, dashboards.
+## Design Rules
 
-### Admin
-- Verification, analytics, system monitoring.
+- Keep all backend calls inside services, not directly in page components.
+- Keep role gating in route and auth-store logic.
+- Prefer typed transformers for backend payload normalization.
 
-## Architecture
+## Alignment References
 
-- React + TypeScript frontend with service + context pattern.
-- Express + TypeScript backend with domain-driven architecture.
-- PostgreSQL + Supabase Auth for JWT.
+- Requirements and contract expectations: [requirements.md](requirements.md)
+- Concrete gap report: [frontend-backend-gap-analysis.md](frontend-backend-gap-analysis.md)
+
+Updated: 2026-03-30
 
