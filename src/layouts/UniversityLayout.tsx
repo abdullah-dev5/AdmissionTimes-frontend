@@ -8,7 +8,7 @@ import { useUniversityStore } from "../store/universityStore"
 import { useAuthStore } from "../store/authStore"
 import { isRealtimeEnabled, supabase } from "../services/supabase"
 
-const DASHBOARD_POLL_MS = Math.max(5000, Number(import.meta.env.VITE_DASHBOARD_POLL_MS || 10000))
+const DASHBOARD_POLL_MS = Math.max(5000, Number(import.meta.env.VITE_DASHBOARD_POLL_MS || 5000))
 
 interface UniversityLayoutProps {
 	children: ReactNode
@@ -37,26 +37,79 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 			return
 		}
 
+		let refreshTimeout: number | null = null
+
 		const refresh = () => {
 			fetchNotifications().catch(() => {})
 			fetchDashboardData({ userId: user.id }).catch(() => {})
 		}
 
-		const channel = isRealtimeEnabled
-			? supabase
-					.channel(`university-notifications-live-${user.id}`)
-					.on(
-						"postgres_changes",
-						{
-							event: "INSERT",
-							schema: "public",
-							table: "notifications",
-							filter: `recipient_id=eq.${user.id}`,
-						},
-						() => refresh()
-					)
-					.subscribe()
-			: null
+		const refreshDebounced = () => {
+			if (refreshTimeout !== null) {
+				window.clearTimeout(refreshTimeout)
+			}
+
+			refreshTimeout = window.setTimeout(() => {
+				refresh()
+				refreshTimeout = null
+			}, 300)
+		}
+
+		const channelNamePrefix = `university-live-${user.id}`
+		const channels = isRealtimeEnabled
+			? [
+					supabase
+						.channel(`${channelNamePrefix}-notifications`)
+						.on(
+							"postgres_changes",
+							{
+								event: "INSERT",
+								schema: "public",
+								table: "notifications",
+								filter: `recipient_id=eq.${user.id}`,
+							},
+							() => refreshDebounced()
+						)
+						.subscribe(),
+					supabase
+						.channel(`${channelNamePrefix}-admissions`)
+						.on(
+							"postgres_changes",
+							{
+								event: "*",
+								schema: "public",
+								table: "admissions",
+							},
+							() => refreshDebounced()
+						)
+						.subscribe(),
+					supabase
+						.channel(`${channelNamePrefix}-activity`)
+						.on(
+							"postgres_changes",
+							{
+								event: "INSERT",
+								schema: "public",
+								table: "user_activity",
+								filter: "entity_type=eq.admission",
+							},
+							() => refreshDebounced()
+						)
+						.subscribe(),
+					supabase
+						.channel(`${channelNamePrefix}-watchlists`)
+						.on(
+							"postgres_changes",
+							{
+								event: "*",
+								schema: "public",
+								table: "watchlists",
+							},
+							() => refreshDebounced()
+						)
+						.subscribe(),
+			  ]
+			: []
 
 		const pollId = window.setInterval(() => {
 			refresh()
@@ -64,8 +117,13 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 
 		return () => {
 			window.clearInterval(pollId)
-			if (channel) {
-				supabase.removeChannel(channel).catch(() => {})
+			if (refreshTimeout !== null) {
+				window.clearTimeout(refreshTimeout)
+			}
+			if (channels.length > 0) {
+				channels.forEach((channel) => {
+					supabase.removeChannel(channel).catch(() => {})
+				})
 			}
 		}
 	}, [user?.id, user?.role, fetchNotifications, fetchDashboardData])

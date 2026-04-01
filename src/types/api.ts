@@ -418,6 +418,7 @@ export interface UniversityDashboard {
   };  recent_admissions: Array<Admission & {
     degree_level?: string;
     field_of_study?: string;
+    views?: number;
   }>;  pending_verifications: Array<Admission & {
     verification_requested_at: string;
     verification_notes: string | null;
