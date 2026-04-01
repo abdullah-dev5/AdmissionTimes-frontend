@@ -102,33 +102,14 @@ function UniversityDashboard() {
   }, [filteredAdmissions])
 
   const chartData = useMemo(() => {
-    const fallbackLabels = ['Oct 7', 'Oct 14', 'Oct 21', 'Oct 28', 'Nov 4']
-    const fallbackSeries = {
-      Views: [100, 300, 200, 400, 250],
-      Clicks: [90, 220, 170, 260, 210],
-      Reminders: [20, 40, 30, 50, 35],
-      Saved: [10, 18, 16, 25, 19],
-    }
-
     const tabKey = activeTab as 'Views' | 'Clicks' | 'Reminders' | 'Saved'
-    const hasApiData =
-      engagementTrends.labels.length > 0 &&
-      (
-        engagementTrends.views.length > 0 ||
-        engagementTrends.clicks.length > 0 ||
-        engagementTrends.reminders.length > 0 ||
-        engagementTrends.saves.length > 0
-      )
-
-    const labels = hasApiData ? engagementTrends.labels : fallbackLabels
-    const series = hasApiData
-      ? {
-          Views: engagementTrends.views,
-          Clicks: engagementTrends.clicks,
-          Reminders: engagementTrends.reminders,
-          Saved: engagementTrends.saves,
-        }
-      : fallbackSeries
+    const labels = engagementTrends.labels || []
+    const series = {
+      Views: engagementTrends.views,
+      Clicks: engagementTrends.clicks,
+      Reminders: engagementTrends.reminders,
+      Saved: engagementTrends.saves,
+    }
 
     const values = (series[tabKey] || []).slice(0, labels.length)
     const normalizedValues = values.length === labels.length ? values : labels.map((_, index) => values[index] || 0)
@@ -288,17 +269,23 @@ function UniversityDashboard() {
                   </div>
                 </div>
                 <div className="h-64 flex items-end justify-between gap-2">
-                  {chartData.values.map((value, index) => (
-                    <div key={index} className="flex-1 flex flex-col items-center">
-                      <div
-                        className="w-full rounded-t cursor-pointer transition-colors hover:opacity-80"
-                        style={{ backgroundColor: '#2563EB', height: `${(value / chartData.maxValue) * 100}%`, minHeight: '20px' }}
-                      ></div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {chartData.labels[index]}
-                      </p>
+                  {chartData.values.length > 0 ? (
+                    chartData.values.map((value, index) => (
+                      <div key={index} className="flex-1 flex flex-col items-center">
+                        <div
+                          className="w-full rounded-t cursor-pointer transition-colors hover:opacity-80"
+                          style={{ backgroundColor: '#2563EB', height: `${(value / chartData.maxValue) * 100}%`, minHeight: '20px' }}
+                        ></div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {chartData.labels[index]}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">
+                      No engagement data collected yet.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
@@ -404,7 +391,7 @@ function UniversityDashboard() {
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">TITLE</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">DEADLINE</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">STATUS</th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">VIEWS</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">UNIQUE VIEWS</th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">ACTIONS</th>
                     </tr>
                   </thead>
@@ -425,7 +412,7 @@ function UniversityDashboard() {
                             </span>
                           </td>
                           <td className="py-4 px-4">
-                            <p className="text-sm text-gray-600">{admission.views}</p>
+                            <p className="text-sm text-gray-600">{admission.views || '0'}</p>
                           </td>
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-3">

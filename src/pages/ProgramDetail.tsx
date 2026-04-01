@@ -26,7 +26,7 @@ function ProgramDetail() {
   useEffect(() => {
     if (!program?.id) return
 
-    activityService.track({
+    activityService.trackCappedStudentEvent({
       activity_type: 'viewed',
       entity_type: 'admission',
       entity_id: program.id,
@@ -71,7 +71,7 @@ function ProgramDetail() {
   const daysRemaining = calculateDaysRemaining(program.deadline)
 
   const handleCompare = () => {
-    activityService.track({
+    activityService.trackCappedStudentEvent({
       activity_type: 'compared',
       entity_type: 'admission',
       entity_id: program.id,
@@ -98,7 +98,7 @@ function ProgramDetail() {
         return
       }
 
-      activityService.track({
+      activityService.trackCappedStudentEvent({
         activity_type: 'alert',
         entity_type: 'admission',
         entity_id: program.id,
@@ -113,7 +113,7 @@ function ProgramDetail() {
   }
 
   const handleApplyNow = () => {
-    activityService.track({
+    activityService.trackCappedStudentEvent({
       activity_type: 'searched',
       entity_type: 'admission',
       entity_id: program.id,

@@ -28,6 +28,7 @@ export interface Recommendation {
     program_name: string;
     degree_level: string;
     status: string;
+    verification_status?: string;
     deadline: string | null;
   };
 }

@@ -1,7 +1,56 @@
 import { useNavigate } from 'react-router-dom'
+import PublicHeader from '../components/common/PublicHeader'
+import PublicFooter from '../components/common/PublicFooter'
+import { useAuth } from '../contexts/AuthContext'
 
 function Features() {
   const navigate = useNavigate()
+  const { user, isAuthenticated } = useAuth()
+  const isLoggedIn = isAuthenticated || Boolean(user)
+  const userType = user?.role || user?.user_type
+
+  const primaryCtaLabel =
+    userType === 'student'
+      ? 'Search Admissions'
+      : userType === 'university' || userType === 'admin'
+        ? 'Go to Dashboard'
+        : 'Get Started'
+
+  const handleSearchCta = () => {
+    if (!isLoggedIn) {
+      navigate('/signin')
+      return
+    }
+
+    const userType = user?.role || user?.user_type
+    if (userType === 'student') {
+      navigate('/student/search')
+    } else if (userType === 'university') {
+      navigate('/university/dashboard')
+    } else if (userType === 'admin') {
+      navigate('/admin/dashboard')
+    } else {
+      navigate('/signin')
+    }
+  }
+
+  const handleSecondaryCta = () => {
+    if (!isLoggedIn) {
+      navigate('/signup')
+      return
+    }
+
+    const userType = user?.role || user?.user_type
+    if (userType === 'student') {
+      navigate('/student/dashboard')
+    } else if (userType === 'university') {
+      navigate('/university/dashboard')
+    } else if (userType === 'admin') {
+      navigate('/admin/dashboard')
+    } else {
+      navigate('/signin')
+    }
+  }
 
   const features = [
     {
@@ -96,68 +145,7 @@ function Features() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigate('/student/dashboard')}
-              className="flex items-center gap-2 cursor-pointer transition-all duration-300 hover:opacity-80 group"
-            >
-              <div className="w-8 h-8 rounded flex items-center justify-center transition-transform duration-300 group-hover:scale-110" style={{ backgroundColor: '#2563EB' }}>
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                </svg>
-              </div>
-              <span className="font-semibold text-xl transition-all duration-300" style={{ color: '#111827' }}>AdmissionTimes</span>
-            </button>
-            <nav className="hidden md:flex items-center gap-8">
-              <button 
-                onClick={() => navigate('/')}
-                className="text-sm font-medium cursor-pointer transition-colors" 
-                style={{ color: '#111827' }}
-              >
-                Home
-              </button>
-              <button 
-                onClick={() => navigate('/student/search')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Universities
-              </button>
-              <button 
-                onClick={() => navigate('/features')}
-                className="text-sm font-medium cursor-pointer transition-colors" 
-                style={{ color: '#111827' }}
-              >
-                Features
-              </button>
-              <button 
-                onClick={() => navigate('/contact')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Contact
-              </button>
-            </nav>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => navigate('/student/dashboard')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Sign In
-              </button>
-              <button 
-                onClick={() => navigate('/student/dashboard')}
-                className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90" 
-                style={{ backgroundColor: '#2563EB' }}
-              >
-                Register
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PublicHeader activePage="features" />
 
       {/* Main Content */}
       <main className="py-16 px-4">
@@ -198,72 +186,31 @@ function Features() {
               Ready to Get Started?
             </h2>
             <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-              Join thousands of students who are already using AdmissionTimes to find their perfect program.
+              {isLoggedIn
+                ? 'Continue with your personalized workspace and keep your admission workflow moving.'
+                : 'Join thousands of students who are already using AdmissionTimes to find their perfect program.'}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => navigate('/student/search')}
+                onClick={handleSearchCta}
                 className="px-8 py-4 text-lg font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
                 style={{ backgroundColor: '#2563EB' }}
               >
-                Search Admissions
+                {isLoggedIn ? primaryCtaLabel : 'Get Started'}
               </button>
               <button
-                onClick={() => navigate('/student/dashboard')}
+                onClick={handleSecondaryCta}
                 className="px-8 py-4 text-lg font-medium rounded-lg cursor-pointer transition-colors border-2"
                 style={{ borderColor: '#2563EB', color: '#2563EB' }}
               >
-                Create Account
+                {isLoggedIn ? 'Go to Dashboard' : 'Create Account'}
               </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-8 px-4">
-        <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <div className="flex items-center gap-2 mb-4 md:mb-0">
-              <div className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: '#2563EB' }}>
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-                </svg>
-              </div>
-              <span className="font-semibold" style={{ color: '#111827' }}>AdmissionTimes</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-6 mb-4 md:mb-0">
-              <button 
-                onClick={() => navigate('/privacy')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Privacy Policy
-              </button>
-              <button 
-                onClick={() => navigate('/terms')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Terms of Service
-              </button>
-              <button 
-                onClick={() => navigate('/about')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                About
-              </button>
-              <button 
-                onClick={() => navigate('/contact')}
-                className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
-              >
-                Contact
-              </button>
-            </div>
-            <p className="text-sm text-gray-600">
-              © 2024 AdmissionTimes. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }
