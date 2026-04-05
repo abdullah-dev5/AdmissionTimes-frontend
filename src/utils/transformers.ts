@@ -25,6 +25,30 @@ export function transformAdmission(
   universityName?: string
 ): StudentAdmission {
   const backendAny = backend as any;
+  const requirements = (backend.requirements && typeof backend.requirements === 'object' && !Array.isArray(backend.requirements))
+    ? backend.requirements
+    : {} as Record<string, any>
+  const requirementLinks = (requirements.links && typeof requirements.links === 'object' && !Array.isArray(requirements.links))
+    ? requirements.links
+    : {} as Record<string, any>
+
+  const officialLinks = [
+    ...(Array.isArray(requirements.officialLinks) ? requirements.officialLinks : []),
+    ...(Array.isArray(requirementLinks.officialLinks) ? requirementLinks.officialLinks : []),
+  ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+
+  const officialUrl =
+    officialLinks[0] ||
+    (typeof requirements.admissionPortalLink === 'string' ? requirements.admissionPortalLink : '') ||
+    (typeof requirementLinks.admissionPortalLink === 'string' ? requirementLinks.admissionPortalLink : '') ||
+    (typeof requirements.websiteUrl === 'string' ? requirements.websiteUrl : '') ||
+    (typeof requirementLinks.websiteUrl === 'string' ? requirementLinks.websiteUrl : '') ||
+    undefined
+
+  const eligibility =
+    (typeof requirements.eligibility === 'string' && requirements.eligibility) ||
+    (typeof requirements.criteria === 'string' && requirements.criteria) ||
+    undefined
   const rawVerificationStatus =
     backend.verification_status ||
     backendAny.verification_status ||
@@ -89,6 +113,8 @@ export function transformAdmission(
     watchlistId: watchlist?.id,  // Store watchlist ID for delete operations
     alertEnabled: watchlist?.alert_opt_in || false,
     aiSummary: backend.match_reason || backend.description || undefined,
+    eligibility,
+    officialUrl,
     logoBg: '#1F2937', // Default logo background color
   };
 }

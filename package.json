@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:consistency": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/consistency-guard.ps1",
+    "check:consistency:full": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/consistency-guard.ps1 -RunTypeChecks"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

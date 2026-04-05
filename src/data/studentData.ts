@@ -28,6 +28,7 @@ export interface StudentAdmission {
   matchNumeric?: number
   logoBg: string
   aiSummary?: string
+  eligibility?: string
   officialUrl?: string
   alertEnabled?: boolean
   saved?: boolean
