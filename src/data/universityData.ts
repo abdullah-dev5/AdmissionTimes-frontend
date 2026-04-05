@@ -25,6 +25,7 @@ export interface Admission {
 	
 	// Program details
 	department?: string
+	location?: string
 	duration?: string
 	delivery_mode?: string
 	

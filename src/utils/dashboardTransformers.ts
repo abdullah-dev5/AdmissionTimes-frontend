@@ -12,6 +12,13 @@ import type { Admission, ChangeLogItem, NotificationItem } from '../data/univers
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
+const toObject = (value: unknown): Record<string, any> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, any>
+  }
+  return {}
+}
+
 /**
  * Transform backend UniversityDashboard to frontend data structures
  * 
@@ -31,7 +38,28 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
   
   // Transform recent_admissions (all admissions) to Admission objects
   // Maps all 25 database fields from backend to frontend Admission type
-  const admissions: Admission[] = (data.recent_admissions || []).map((admission: any, _index: number) => ({
+  const admissions: Admission[] = (data.recent_admissions || []).map((admission: any, _index: number) => {
+    const requirements = toObject(admission.requirements)
+    const links = toObject(requirements.links)
+    const websiteUrl =
+      admission.website_url ||
+      (typeof requirements.websiteUrl === 'string' ? requirements.websiteUrl : '') ||
+      (typeof links.websiteUrl === 'string' ? links.websiteUrl : '') ||
+      (typeof links.officialWebsite === 'string' ? links.officialWebsite : '') ||
+      ''
+    const admissionPortalLink =
+      admission.admission_portal_link ||
+      (typeof requirements.admissionPortalLink === 'string' ? requirements.admissionPortalLink : '') ||
+      (typeof links.admissionPortalLink === 'string' ? links.admissionPortalLink : '') ||
+      (typeof links.portalUrl === 'string' ? links.portalUrl : '') ||
+      ''
+    const eligibility =
+      admission.eligibility ||
+      (typeof requirements.eligibility === 'string' ? requirements.eligibility : '') ||
+      (typeof requirements.criteria === 'string' ? requirements.criteria : '') ||
+      ''
+
+    return ({
     // Core identifiers
     id: admission.id || `admission-${_index}`,
     university_id: admission.university_id,
@@ -46,10 +74,11 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     field_of_study: admission.field_of_study,
     
     // Program details
-    department: admission.field_of_study || admission.department,
+    department: admission.field_of_study || admission.department || admission.location,
+    location: admission.location,
     duration: admission.duration,
     delivery_mode: admission.delivery_mode,
-    requirements: admission.requirements,
+    requirements,
     
     // Financial information
     fee: admission.application_fee?.toString() || admission.fee?.toString() || '0',
@@ -62,9 +91,9 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     
     // Web presence
     website_url: admission.website_url,
-    websiteUrl: admission.website_url,
+    websiteUrl,
     admission_portal_link: admission.admission_portal_link,
-    admissionPortalLink: admission.admission_portal_link,
+    admissionPortalLink,
     
     // Status & verification
     status: mapVerificationStatusToAdmissionStatus(admission.verification_status || admission.status || 'pending'),
@@ -91,9 +120,9 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
       admission.admin_notes ||
       admission.remarks ||
       '',
-    eligibility: admission.eligibility || '',
+    eligibility,
     academicYear: admission.academic_year || extractYear(admission.deadline || admission.created_at || ''),
-  }));
+  })});
 
   if (isDashboardDebugEnabled) {
     console.log('🔵 [dashboardTransformers] Transformed admissions count:', admissions.length)

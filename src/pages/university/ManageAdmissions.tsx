@@ -35,7 +35,7 @@ function ManageAdmissions() {
     programTitle: existingAdmission?.title || '',
     
     // OPTIONAL: Program Details (no defaults - leave empty if not provided)
-    degreeType: existingAdmission?.degreeType || '',
+    degreeType: existingAdmission?.degreeType || 'BS',
     department: existingAdmission?.department || '',
     academicYear: existingAdmission?.academicYear || '',
     
@@ -63,7 +63,7 @@ function ManageAdmissions() {
       const sanitized = sanitizeAdmission(existingAdmission)
       setFormData({
         programTitle: sanitized.title,
-        degreeType: sanitized.degreeType || '',  // Empty if not provided
+        degreeType: sanitized.degreeType || 'BS',
         department: sanitized.department || '',  // Empty if not provided
         academicYear: sanitized.academicYear || '', // Empty if not provided
         applicationDeadline: formatDateForInput(sanitized.deadline) || '', // Empty if no deadline
@@ -86,8 +86,8 @@ function ManageAdmissions() {
 
     return {
       programTitle: parsed.title || '',
-      degreeType: parsed.degree_level || '',
-      department: parsed.location || '',
+      degreeType: parsed.degree_level || 'BS',
+      department: parsed.field_of_study || parsed.location || '',
       academicYear: '',
       applicationDeadline: formatDateForInput(parsed.deadline) || '',
       fee: typeof parsed.application_fee === 'number' ? String(parsed.application_fee) : '',
@@ -464,10 +464,10 @@ function ManageAdmissions() {
                             onChange={(e) => setFormData({ ...formData, degreeType: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                           >
-                            <option>BS</option>
-                            <option>MS</option>
-                            <option>PhD</option>
-                            <option>MBA</option>
+                            <option value="BS">BS</option>
+                            <option value="MS">MS</option>
+                            <option value="PhD">PhD</option>
+                            <option value="MBA">MBA</option>
                           </select>
                         </div>
                         <div>

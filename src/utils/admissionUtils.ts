@@ -9,6 +9,22 @@
 import type { Admission } from '../data/universityData'
 import type { Admission as ApiAdmission } from '../types/api'
 
+const normalizeMoneyInput = (value: string | undefined): number | undefined => {
+  if (!value) return undefined
+  const sanitized = value.replace(/[^0-9.-]/g, '').trim()
+  if (!sanitized) return undefined
+
+  const parsed = Number(sanitized)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const toRequirementsObject = (value: unknown): Record<string, any> => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return { ...(value as Record<string, any>) }
+  }
+  return {}
+}
+
 /**
  * Ensure admission object has all required fields with defaults
  * Prevents errors when some fields are missing from API responses
@@ -33,8 +49,9 @@ export function sanitizeAdmission(admission: Partial<Admission>): Admission {
     verifiedBy: admission.verifiedBy || undefined,
     lastAction: admission.lastAction || new Date().toISOString(),
     remarks,
-    degreeType: admission.degreeType || '',
+    degreeType: admission.degreeType || 'BS',
     department: admission.department || '',
+    location: admission.location || '',
     academicYear: admission.academicYear || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
     fee: admission.fee || '0',
     overview: admission.overview || '',
@@ -86,6 +103,28 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     apiAdmission.admin_notes ||
     ''
 
+  const requirements = toRequirementsObject(apiAdmission.requirements)
+  const links = toRequirementsObject(requirements.links)
+
+  const eligibility =
+    (typeof requirements.eligibility === 'string' && requirements.eligibility) ||
+    (typeof requirements.criteria === 'string' && requirements.criteria) ||
+    ''
+
+  const websiteUrl =
+    apiAdmission.website_url ||
+    (typeof requirements.websiteUrl === 'string' ? requirements.websiteUrl : '') ||
+    (typeof links.websiteUrl === 'string' ? links.websiteUrl : '') ||
+    (typeof links.officialWebsite === 'string' ? links.officialWebsite : '') ||
+    ''
+
+  const admissionPortalLink =
+    apiAdmission.admission_portal_link ||
+    (typeof requirements.admissionPortalLink === 'string' ? requirements.admissionPortalLink : '') ||
+    (typeof links.admissionPortalLink === 'string' ? links.admissionPortalLink : '') ||
+    (typeof links.portalUrl === 'string' ? links.portalUrl : '') ||
+    ''
+
   return {
     id: apiAdmission.id,
     title: apiAdmission.title || 'Unknown Program',
@@ -101,12 +140,13 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     admin_notes: apiAdmission.admin_notes || undefined,
     
     // Program classification
-    degreeType: apiAdmission.degree_level || '',
+    degreeType: apiAdmission.degree_level || 'BS',
     program_type: apiAdmission.program_type || '',
     field_of_study: apiAdmission.field_of_study || '',
     
     // Program details
-    department: apiAdmission.location || '',
+    department: apiAdmission.field_of_study || apiAdmission.location || '',
+    location: apiAdmission.location || '',
     duration: apiAdmission.duration || '',
     delivery_mode: apiAdmission.delivery_mode || '',
     
@@ -117,12 +157,12 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     
     // Descriptions
     overview: apiAdmission.description || '',
-    eligibility: '',
-    requirements: apiAdmission.requirements,
+    eligibility,
+    requirements: requirements,
     
     // Web presence
-    websiteUrl: apiAdmission.website_url || '',
-    admissionPortalLink: apiAdmission.admission_portal_link || '',
+    websiteUrl,
+    admissionPortalLink,
     website_url: apiAdmission.website_url,
     admission_portal_link: apiAdmission.admission_portal_link,
     
@@ -180,25 +220,53 @@ export function transformAdmissionToApi(
   frontendAdmission: Admission,
   universityId: string
 ): Partial<ApiAdmission> {
+  const applicationFee = normalizeMoneyInput(frontendAdmission.fee)
+  const tuitionFee = normalizeMoneyInput(frontendAdmission.tuition_fee)
+  const uiLocation = frontendAdmission.location
+
+  const baseRequirements = toRequirementsObject(frontendAdmission.requirements)
+  const links = toRequirementsObject(baseRequirements.links)
+  const officialLinks: string[] = Array.from(
+    new Set(
+      [frontendAdmission.admissionPortalLink, frontendAdmission.websiteUrl]
+        .map((item) => (item || '').trim())
+        .filter(Boolean)
+    )
+  )
+
+  const requirements: Record<string, any> = {
+    ...baseRequirements,
+    eligibility: frontendAdmission.eligibility?.trim() || baseRequirements.eligibility || null,
+    websiteUrl: frontendAdmission.websiteUrl?.trim() || baseRequirements.websiteUrl || null,
+    admissionPortalLink: frontendAdmission.admissionPortalLink?.trim() || baseRequirements.admissionPortalLink || null,
+    links: {
+      ...links,
+      websiteUrl: frontendAdmission.websiteUrl?.trim() || links.websiteUrl || null,
+      admissionPortalLink: frontendAdmission.admissionPortalLink?.trim() || links.admissionPortalLink || null,
+      officialLinks: officialLinks.length > 0 ? officialLinks : links.officialLinks || [],
+    },
+    officialLinks,
+  }
+
   const payload: Partial<ApiAdmission> = {
     // Core identifiers
     university_id: universityId,
     title: frontendAdmission.title,
     
     // Program classification
-    degree_level: frontendAdmission.degreeType || frontendAdmission.program_type || '',
+    degree_level: frontendAdmission.degreeType || frontendAdmission.program_type || 'BS',
     program_type: frontendAdmission.program_type,
     field_of_study: frontendAdmission.field_of_study || frontendAdmission.department,
     
     // Program details
     delivery_mode: frontendAdmission.delivery_mode,
     duration: frontendAdmission.duration,
-    location: frontendAdmission.department || '',
-    requirements: frontendAdmission.requirements,
+    location: (uiLocation || frontendAdmission.department || '').trim() || undefined,
+    requirements,
     
     // Financial information
-    application_fee: parseFloat(frontendAdmission.fee || '0'),
-    tuition_fee: frontendAdmission.tuition_fee ? parseFloat(frontendAdmission.tuition_fee) : undefined,
+    application_fee: applicationFee,
+    tuition_fee: tuitionFee,
     currency: frontendAdmission.currency,
     
     // Important dates - convert to ISO8601 format
