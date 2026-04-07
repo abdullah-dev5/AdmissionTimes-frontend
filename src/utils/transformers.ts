@@ -25,6 +25,18 @@ export function transformAdmission(
   universityName?: string
 ): StudentAdmission {
   const backendAny = backend as any;
+  const normalizedDeadline =
+    (typeof backendAny.deadline_iso === 'string' && backendAny.deadline_iso) ||
+    (typeof backendAny.deadlineIso === 'string' && backendAny.deadlineIso) ||
+    backend.deadline ||
+    (typeof backendAny.deadline_date === 'string' && backendAny.deadline_date) ||
+    '';
+  const parsedDaysRemaining = Number(
+    backendAny.days_remaining ?? backendAny.daysRemaining
+  );
+  const parsedFeeAmount = Number(
+    backendAny.fee_amount ?? backendAny.feeAmount ?? backend.application_fee
+  );
   const requirements = (backend.requirements && typeof backend.requirements === 'object' && !Array.isArray(backend.requirements))
     ? backend.requirements
     : {} as Record<string, any>
@@ -38,6 +50,9 @@ export function transformAdmission(
   ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 
   const officialUrl =
+    (typeof backendAny.primary_apply_url === 'string' && backendAny.primary_apply_url) ||
+    (typeof backendAny.admission_portal_url === 'string' && backendAny.admission_portal_url) ||
+    (typeof backendAny.university_website_url === 'string' && backendAny.university_website_url) ||
     officialLinks[0] ||
     (typeof requirements.admissionPortalLink === 'string' ? requirements.admissionPortalLink : '') ||
     (typeof requirementLinks.admissionPortalLink === 'string' ? requirementLinks.admissionPortalLink : '') ||
@@ -46,6 +61,7 @@ export function transformAdmission(
     undefined
 
   const eligibility =
+    (typeof backendAny.eligibility_text === 'string' && backendAny.eligibility_text) ||
     (typeof requirements.eligibility === 'string' && requirements.eligibility) ||
     (typeof requirements.criteria === 'string' && requirements.criteria) ||
     undefined
@@ -84,8 +100,30 @@ export function transformAdmission(
   }
   
   // Map match score to match label and numeric value
-  const matchScore = backend.match_score || 0;
-  const matchLabel = getMatchLabel(matchScore);
+  const matchScore = Number(backend.match_score || backendAny.match_score || 0);
+  const matchLabel =
+    (typeof backendAny.match_label === 'string' && backendAny.match_label) ||
+    getMatchLabel(matchScore);
+
+  const degreeLabel = backendAny.degree_label || backend.degree_level || backendAny.degree || 'Degree Not Specified';
+  const degreeType = backendAny.degree_type || mapDegreeType(degreeLabel);
+  const feeNumeric =
+    Number.isFinite(parsedFeeAmount)
+      ? parsedFeeAmount
+      : backend.application_fee;
+  const feeDisplay =
+    (typeof backendAny.fee_display === 'string' && backendAny.fee_display) ||
+    formatCurrency(feeNumeric);
+  // Always derive timeline from deadline for UI consistency.
+  // Backend-provided days can become stale and conflict with deadline display.
+  const calculatedDaysRemaining = calculateDaysRemaining(normalizedDeadline);
+  const daysRemaining =
+    Number.isFinite(calculatedDaysRemaining)
+      ? calculatedDaysRemaining
+      : (Number.isFinite(parsedDaysRemaining) ? parsedDaysRemaining : -1);
+  const programStatus = Number.isFinite(daysRemaining)
+    ? calculateProgramStatusFromDays(daysRemaining)
+    : calculateProgramStatus(normalizedDeadline);
   
   return {
     id: backend.id,
@@ -94,19 +132,19 @@ export function transformAdmission(
     universityCity: backend.universities?.city || backendAny.university_city || undefined,      // University city
     universityCountry: backend.universities?.country || backendAny.university_country || undefined, // University country
     program: finalProgramTitle,
-    degree: backend.degree_level || backendAny.degree || 'Degree Not Specified',
-    degreeType: mapDegreeType(backend.degree_level || backendAny.degree),
-    deadline: backend.deadline,
-    deadlineDisplay: formatDate(backend.deadline),
-    fee: formatCurrency(backend.application_fee),
-    feeNumeric: backend.application_fee,
+    degree: degreeLabel,
+    degreeType,
+    deadline: normalizedDeadline,
+    deadlineDisplay: formatDate(normalizedDeadline),
+    fee: feeDisplay,
+    feeNumeric,
     location: backend.location,
     city: extractCity(backend.location),
     status: mapVerificationStatus(rawVerificationStatus),
     verificationStatus: mapRawVerificationStatus(rawVerificationStatus),
-    programStatus: calculateProgramStatus(backend.deadline),
+    programStatus,
     updated: formatRelativeTime(backend.updated_at),
-    daysRemaining: calculateDaysRemaining(backend.deadline),
+    daysRemaining,
     match: matchLabel,
     matchNumeric: matchScore,
     saved: !!watchlist,
@@ -140,6 +178,12 @@ export function transformNotification(backend: Notification): StudentNotificatio
   };
 }
 
+function calculateProgramStatusFromDays(daysRemaining: number): 'Open' | 'Closing Soon' | 'Closed' {
+  if (daysRemaining < 0) return 'Closed';
+  if (daysRemaining <= 7) return 'Closing Soon';
+  return 'Open';
+}
+
 /**
  * Map backend verification status to frontend status
  */
@@ -170,8 +214,8 @@ function mapRawVerificationStatus(
     draft: 'pending',  // Map draft to pending
     under_review: 'under_review',
   };
-  // Default to 'rejected' for unknown statuses (safer - hides from students)
-  return map[(status || '').toLowerCase()] || 'rejected';
+  // Default to pending to match mobile behavior and avoid hiding valid records
+  return map[(status || '').toLowerCase()] || 'pending';
 }
 
 /**
@@ -206,7 +250,22 @@ function calculateDaysRemaining(deadline: string | null | undefined): number {
   if (!deadline) {
     return -1; // Return -1 (past) if no deadline
   }
-  const deadlineDate = new Date(deadline);
+  const trimmed = String(deadline).trim();
+  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const deadlineDate = dateOnlyMatch
+    ? new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3]),
+        23,
+        59,
+        59,
+        999
+      )
+    : new Date(trimmed);
+  if (Number.isNaN(deadlineDate.getTime())) {
+    return -1;
+  }
   const now = new Date();
   const diffTime = deadlineDate.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

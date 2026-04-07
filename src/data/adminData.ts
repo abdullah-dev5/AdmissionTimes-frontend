@@ -122,6 +122,8 @@ export interface VerificationItem {
 		field: string
 		oldValue: string
 		newValue: string
+		changeCount?: number
+		latestAt?: string
 	}>
 }
 

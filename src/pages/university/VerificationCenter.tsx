@@ -24,8 +24,9 @@ const sanitizeActor = (value?: string) => {
 	let cleaned = splitBySeparator(value)
 	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
 	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
-	if (!cleaned || isUuid(cleaned)) return "System"
-	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	if (!cleaned || isUuid(cleaned)) return "Admin"
+	if (!Number.isNaN(Date.parse(cleaned))) return "Admin"
+	if (cleaned.toLowerCase() === "system") return "Admin"
 	return cleaned
 }
 

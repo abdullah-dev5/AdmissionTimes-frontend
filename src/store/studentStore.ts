@@ -4,7 +4,6 @@ import { dashboardService } from '../services/dashboardService'
 import { watchlistsService } from '../services/watchlistsService'
 import { notificationsService } from '../services/notificationsService'
 import { admissionsService } from '../services/admissionsService'
-import { supabase } from '../services/supabase'
 import { transformAdmission, transformNotification } from '../utils/transformers'
 import { buildSearchParams } from '../utils/studentUtils'
 
@@ -113,19 +112,7 @@ export const useStudentStore = create<StudentStore>()(
           // Transform recommended programs to StudentAdmission format
           const transformedAdmissions = response.data.recommended_programs.map((prog) =>
             transformAdmission(
-              {
-                id: prog.id,
-                university_id: prog.university_id,
-                title: prog.title,
-                degree_level: prog.degree_level,
-                deadline: prog.deadline,
-                application_fee: prog.application_fee,
-                location: prog.location,
-                description: null,
-                verification_status: prog.verification_status,
-                created_at: '',
-                updated_at: '',
-              },
+              prog as any,
               prog.saved
                 ? {
                     id: '',
@@ -133,7 +120,7 @@ export const useStudentStore = create<StudentStore>()(
                     admission_id: prog.id,
                     created_at: '',
                     updated_at: '',
-                    alert_opt_in: prog.alert_enabled,
+                    alert_opt_in: Boolean(prog.alert_enabled),
                     notes: null,
                   }
                 : undefined,
@@ -508,41 +495,26 @@ export const useStudentStore = create<StudentStore>()(
           
           console.log('🔍 [searchAdmissions] Built params:', params)
           
-          // Fetch verified + pending so student search can render both statuses.
-          // If caller explicitly requests a status, preserve that single-status behavior.
-          const admissionsPromise = (() => {
-            if (filters?.verificationStatus) {
-              return admissionsService.listPublic({
-                ...params,
-                verification_status: filters.verificationStatus,
-              } as any).then((res) => ({ data: res.data, total: res.pagination?.total ?? res.data.length }))
-            }
+          const admissionsFetch = filters?.verificationStatus
+            ? Promise.allSettled([
+                admissionsService.listPublic({
+                  ...params,
+                  verification_status: filters.verificationStatus,
+                } as any),
+              ])
+            : Promise.allSettled([
+                admissionsService.listPublic({
+                  ...params,
+                  verification_status: 'verified',
+                } as any),
+                admissionsService.listPublic({
+                  ...params,
+                  verification_status: 'pending',
+                } as any),
+              ])
 
-            return Promise.allSettled([
-              admissionsService.listPublic({ ...params, verification_status: 'verified' } as any),
-              admissionsService.listPublic({ ...params, verification_status: 'pending' } as any),
-            ]).then((settled) => {
-              const verifiedData = settled[0].status === 'fulfilled' ? settled[0].value.data : []
-              const pendingData = settled[1].status === 'fulfilled' ? settled[1].value.data : []
-
-              if (settled[1].status === 'rejected') {
-                console.warn('⚠️ [searchAdmissions] Pending admissions fetch failed, continuing with verified only')
-              }
-
-              const mergedMap = new Map<string, any>()
-              ;[...verifiedData, ...pendingData].forEach((admission) => {
-                if (!mergedMap.has(admission.id)) {
-                  mergedMap.set(admission.id, admission)
-                }
-              })
-
-              const merged = Array.from(mergedMap.values())
-              return { data: merged, total: merged.length }
-            })
-          })()
-
-          const [admissionsResult, watchlistsResponse] = await Promise.all([
-            admissionsPromise,
+          const [admissionsResults, watchlistsResponse] = await Promise.all([
+            admissionsFetch,
             options?.userId
               ? watchlistsService.list().catch(err => {
                   console.warn('⚠️ Failed to fetch watchlists:', err)
@@ -551,97 +523,29 @@ export const useStudentStore = create<StudentStore>()(
               : Promise.resolve({ data: [] })
           ])
 
-          let admissionsData: any[] = Array.isArray(admissionsResult.data) ? admissionsResult.data : []
+          const admissionsById = new Map<string, any>()
+          let total = 0
+          let anyFulfilled = false
 
-          // Safety fallback: if API path still returns verified-only, read verified+pending directly from Supabase.
-          if (!filters?.verificationStatus) {
-            const hasPendingFromApi = admissionsData.some((admission: any) => {
-              const raw = String(admission?.verification_status || admission?.status || '').toLowerCase()
-              return raw === 'pending' || raw === 'pending audit'
-            })
-
-            if (!hasPendingFromApi) {
-              console.warn('⚠️ [searchAdmissions] Pending missing from API response. Trying Supabase fallback...')
-
-              const query = supabase
-                .from('admissions')
-                .select(`
-                  id,
-                  title,
-                  degree_level,
-                  field_of_study,
-                  delivery_mode,
-                  deadline,
-                  application_fee,
-                  location,
-                  description,
-                  verification_status,
-                  created_at,
-                  updated_at,
-                  university_id
-                `)
-                .in('verification_status', ['verified', 'pending'])
-                .limit(filters?.limit || 100)
-
-              const search = filters?.search?.trim()
-              if (search) {
-                query.or(`title.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`)
-              }
-
-              if (filters?.degreeLevel) {
-                query.eq('degree_level', filters.degreeLevel)
-              }
-
-              if (filters?.fieldOfStudy) {
-                query.eq('field_of_study', filters.fieldOfStudy)
-              }
-
-              if (filters?.deliveryMode) {
-                query.eq('delivery_mode', filters.deliveryMode)
-              }
-
-              const { data: supabaseAdmissions, error: supabaseError } = await query
-
-              if (supabaseError) {
-                console.warn('⚠️ [searchAdmissions] Supabase fallback failed:', supabaseError.message)
-              } else if (Array.isArray(supabaseAdmissions) && supabaseAdmissions.length > 0) {
-                const universityIds = Array.from(
-                  new Set(
-                    supabaseAdmissions
-                      .map((admission: any) => admission?.university_id)
-                      .filter((id: string | null | undefined): id is string => !!id)
-                  )
-                )
-
-                let universityById = new Map<string, any>()
-                if (universityIds.length > 0) {
-                  const { data: universitiesData, error: universitiesError } = await supabase
-                    .from('universities')
-                    .select('id, name, city, country, logo_url')
-                    .in('id', universityIds)
-
-                  if (universitiesError) {
-                    console.warn('⚠️ [searchAdmissions] Universities lookup failed:', universitiesError.message)
-                  } else if (Array.isArray(universitiesData)) {
-                    universityById = new Map(universitiesData.map((university: any) => [university.id, university]))
-                  }
-                }
-
-                const hydratedSupabaseAdmissions = supabaseAdmissions.map((admission: any) => ({
-                  ...admission,
-                  universities: admission.university_id ? universityById.get(admission.university_id) ?? null : null,
-                }))
-
-                const merged = new Map<string, any>()
-                admissionsData.forEach((admission: any) => merged.set(admission.id, admission))
-                hydratedSupabaseAdmissions.forEach((admission: any) => merged.set(admission.id, admission))
-                admissionsData = Array.from(merged.values())
-                console.log(`✅ [searchAdmissions] Supabase fallback merged ${hydratedSupabaseAdmissions.length} records; total now ${admissionsData.length}`)
-              }
+          admissionsResults.forEach((result) => {
+            if (result.status !== 'fulfilled') {
+              return
             }
+            anyFulfilled = true
+            const rows = Array.isArray(result.value.data) ? result.value.data : []
+            total += result.value.pagination?.total ?? rows.length
+            rows.forEach((admission: any) => {
+              if (admission?.id) {
+                admissionsById.set(String(admission.id), admission)
+              }
+            })
+          })
+
+          if (!anyFulfilled) {
+            throw new Error('Failed to fetch admissions from backend')
           }
 
-          const total = admissionsResult.total
+          const admissionsData: any[] = Array.from(admissionsById.values())
           console.log(`✅ Fetched ${admissionsData.length} admissions out of ${total} total`)
 
           if (admissionsData.length === 0) {

@@ -164,6 +164,7 @@ export const highlightDifference = (oldValue: unknown, newValue: unknown): { has
  */
 export const sanitizeActorName = (value?: string): string => {
 	if (!value) return "—"
+	if (value.trim().toLowerCase() === "system") return "Admin"
 
 	// Remove UUID
 	let cleaned = value.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
@@ -172,10 +173,11 @@ export const sanitizeActorName = (value?: string): string => {
 	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
 
 	// If still empty or looks like UUID, return generic label
-	if (!cleaned || isUuid(cleaned)) return "System"
+	if (!cleaned || isUuid(cleaned)) return "Admin"
 
 	// If looks like a date, return generic label
-	if (!Number.isNaN(Date.parse(cleaned))) return "System"
+	if (!Number.isNaN(Date.parse(cleaned))) return "Admin"
+	if (cleaned.toLowerCase() === "system") return "Admin"
 
 	return cleaned
 }

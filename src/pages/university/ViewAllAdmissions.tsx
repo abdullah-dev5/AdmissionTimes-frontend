@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
-import { getStatusColor } from '../../data/universityData'
+import { getStatusColor, type Admission as UniversityAdmission } from '../../data/universityData'
 import { useUniversityStore } from '../../store/universityStore'
 import { formatDisplayDate } from '../../utils/dateUtils'
 import { showConfirm, showError, showSuccess } from '../../utils/swal'
+import { DEFAULT_ITEMS_PER_PAGE } from '../../constants/pagination'
 
 type StatusFilter = 'all' | 'draft' | 'pending' | 'verified' | 'rejected'
 
@@ -14,6 +15,8 @@ function ViewAllAdmissions() {
   const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [selectedAdmission, setSelectedAdmission] = useState<UniversityAdmission | null>(null)
 
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {
@@ -74,6 +77,30 @@ function ViewAllAdmissions() {
   const handleCreateNew = () => {
     navigate('/university/manage-admissions')
   }
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [statusFilter, searchQuery])
+
+  const totalPages = Math.ceil(filteredAdmissions.length / DEFAULT_ITEMS_PER_PAGE)
+  const paginatedAdmissions = useMemo(() => {
+    const start = (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
+    return filteredAdmissions.slice(start, start + DEFAULT_ITEMS_PER_PAGE)
+  }, [filteredAdmissions, currentPage])
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 1) return [1]
+    const pages = new Set<number>([1, totalPages, currentPage - 1, currentPage, currentPage + 1])
+    return Array.from(pages)
+      .filter((num) => num >= 1 && num <= totalPages)
+      .sort((a, b) => a - b)
+  }, [currentPage, totalPages])
 
   // Get counts for each status
   const statusCounts = useMemo(() => {
@@ -266,7 +293,7 @@ function ViewAllAdmissions() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredAdmissions.map((admission) => (
+                    {paginatedAdmissions.map((admission) => (
                       <tr key={admission.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">{admission.title}</div>
@@ -300,6 +327,26 @@ function ViewAllAdmissions() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedAdmission(admission)}
+                              className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="View full details"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M2.458 12C3.732 7.943 7.523 5 12 5s8.268 2.943 9.542 7c-1.274 4.057-5.065 7-9.542 7S3.732 16.057 2.458 12z"
+                                />
+                              </svg>
+                            </button>
                             <button
                               onClick={() => handleEdit(admission.id)}
                               className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -338,11 +385,191 @@ function ViewAllAdmissions() {
             )}
           </div>
 
+          {filteredAdmissions.length > 0 && totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+
+                {pageNumbers.map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 text-sm border rounded-lg transition-colors ${
+                      page === currentPage
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Results Summary */}
           {filteredAdmissions.length > 0 && (
             <div className="mt-4 text-sm text-gray-600 text-center">
-              Showing {filteredAdmissions.length} of {admissions.length} total admission
+              Showing {(currentPage - 1) * DEFAULT_ITEMS_PER_PAGE + 1}
+              {' - '}
+              {Math.min(currentPage * DEFAULT_ITEMS_PER_PAGE, filteredAdmissions.length)}
+              {' of '}
+              {filteredAdmissions.length} filtered admission
+              {filteredAdmissions.length !== 1 ? 's' : ''}
+              {' from '}
+              {admissions.length} total
               {admissions.length !== 1 ? 's' : ''}
+            </div>
+          )}
+
+          {selectedAdmission && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-sm">
+              <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                <div className="max-h-[92vh] overflow-y-auto modal-scrollbar">
+                <div className="sticky top-0 z-10 px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-blue-700 to-indigo-700 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-blue-100 mb-1">Admission Profile</p>
+                      <h2 className="text-2xl font-bold leading-tight">{selectedAdmission.title}</h2>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span
+                          className="inline-flex px-3 py-1 text-xs font-semibold rounded-full"
+                          style={{
+                            backgroundColor: getStatusColor(selectedAdmission.status).bg,
+                            color: getStatusColor(selectedAdmission.status).text,
+                          }}
+                        >
+                          {selectedAdmission.status}
+                        </span>
+                        <span className="inline-flex px-3 py-1 text-xs font-medium rounded-full bg-white/15 text-white border border-white/20">
+                          Verification: {selectedAdmission.verification_status || '—'}
+                        </span>
+                        <span className="inline-flex px-3 py-1 text-xs font-medium rounded-full bg-white/15 text-white border border-white/20">
+                          Updated: {formatDisplayDate(selectedAdmission.lastAction, '—')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedAdmission(null)}
+                      className="text-white/80 hover:text-white hover:bg-white/15 rounded-lg p-1.5 transition-colors"
+                      aria-label="Close details modal"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-6 bg-slate-50/60">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-slate-200 bg-white p-5">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-4">Academic Profile</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Degree Type</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.degreeType || selectedAdmission.program_type || '—'}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Department / Field</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.department || selectedAdmission.field_of_study || '—'}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Location</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.location || '—'}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Duration</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.duration || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-5">
+                      <h3 className="text-sm font-semibold text-slate-900 mb-4">Timeline and Fees</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Application Deadline</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{formatDisplayDate(selectedAdmission.deadline, '—')}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Start Date</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{formatDisplayDate(selectedAdmission.start_date, '—')}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Application Fee</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.fee || selectedAdmission.tuition_fee || '—'}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-sm text-slate-500">Currency</span>
+                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.currency || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Overview</h3>
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedAdmission.overview || '—'}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Eligibility</h3>
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedAdmission.eligibility || '—'}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-3">Official Links</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs text-slate-500 mb-1">Website URL</p>
+                        <p className="text-sm text-slate-900 break-all">{selectedAdmission.websiteUrl || selectedAdmission.website_url || '—'}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs text-slate-500 mb-1">Admission Portal</p>
+                        <p className="text-sm text-slate-900 break-all">{selectedAdmission.admissionPortalLink || selectedAdmission.admission_portal_link || '—'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
+                  <button
+                    onClick={() => setSelectedAdmission(null)}
+                    className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleEdit(selectedAdmission.id)
+                      setSelectedAdmission(null)
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Edit Admission
+                  </button>
+                </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

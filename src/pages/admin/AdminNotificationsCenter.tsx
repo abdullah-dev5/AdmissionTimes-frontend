@@ -4,6 +4,18 @@ import { adminService } from "../../services/adminService"
 import { type NotificationType } from "../../data/adminData"
 import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
+
+const getFriendlyErrorMessage = (raw?: string | null) => {
+	const message = (raw || "").toLowerCase()
+	if (!message) return "Something went wrong while loading notifications."
+	if (message.includes("401") || message.includes("unauthorized")) return "Your session has expired. Please sign in again."
+	if (message.includes("403") || message.includes("forbidden")) return "You do not have access to these notifications."
+	if (message.includes("timeout") || message.includes("network") || message.includes("fetch")) {
+		return "Connection issue detected. Please check your internet and try again."
+	}
+	return "We could not load notifications right now. Please try again shortly."
+}
 
 function AdminNotificationsCenter() {
 	const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
@@ -82,7 +94,7 @@ function AdminNotificationsCenter() {
 			}
 		} catch (err: any) {
 			console.error('❌ [AdminNotificationsCenter] Error fetching from API:', err)
-			setError(`API Error: ${err.message || 'Failed to fetch notifications'}`)
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to fetch notifications'))
 			// Do not fallback to mock data - show error to user
 			setApiNotifications([])
 		} finally {
@@ -107,6 +119,12 @@ function AdminNotificationsCenter() {
 	// Filter notifications based on tab and unread filter
 	const filteredNotifications = useMemo(() => {
 		let filtered = [...notificationsToUse]
+
+		// Hide deadline alerts from admin notifications UI entirely.
+		filtered = filtered.filter((notif) => {
+			const notifType = notif.notification_type || notif.type
+			return notifType !== "deadline_near"
+		})
 
 		// Filter by type (if type field exists)
 		if (activeTab !== "All") {
@@ -144,7 +162,7 @@ function AdminNotificationsCenter() {
 			await fetchNotifications()
 		} catch (err: any) {
 			console.error('🔴 Error marking all as read:', err)
-			setError(err.message || 'Failed to mark all as read')
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to mark all as read'))
 		}
 	}
 
@@ -157,7 +175,7 @@ function AdminNotificationsCenter() {
 			await fetchNotifications()
 		} catch (err: any) {
 			console.error('🔴 Error marking as read:', err)
-			setError(err.message || 'Failed to mark as read')
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to mark as read'))
 		}
 	}
 
@@ -183,7 +201,7 @@ function AdminNotificationsCenter() {
 			await fetchNotifications()
 		} catch (err: any) {
 			console.error('❌ [AdminNotificationsCenter] Secret reminder trigger failed:', err)
-			setError(err.message || 'Failed to trigger deadline reminders')
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to trigger deadline reminders'))
 		} finally {
 			setSecretRunning(false)
 		}
@@ -260,6 +278,16 @@ function AdminNotificationsCenter() {
 		}).length
 	}, [notificationsToUse])
 
+	const showInitialLoading = loading && notificationsToUse.length === 0
+
+	if (showInitialLoading) {
+		return (
+			<AdminLayout>
+				<LoadingSpinner fullScreen message="Loading notifications..." />
+			</AdminLayout>
+		)
+	}
+
 	return (
 		<AdminLayout>
 			<div className="p-6">
@@ -274,7 +302,7 @@ function AdminNotificationsCenter() {
 				{/* Error Banner */}
 				{error && (
 					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-					<p className="text-sm text-red-800"><strong>API Error:</strong> {error}</p>
+					<p className="text-sm text-red-800"><strong>Unable to continue:</strong> {error}</p>
 					<button
 						onClick={() => setError(null)}
 						className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
@@ -287,11 +315,7 @@ function AdminNotificationsCenter() {
 
 
 				{/* Loading Indicator */}
-				{loading && (
-					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-						<p className="text-sm text-blue-800">Loading notifications...</p>
-					</div>
-				)}
+				{loading && <LoadingSpinner size="sm" message="Refreshing notifications..." />}
 
 				{/* Secret Trigger Result Banner */}
 				{secretResult && (
@@ -310,16 +334,12 @@ function AdminNotificationsCenter() {
 					<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 						{/* Tabs */}
 						<div className="flex items-center gap-2 flex-wrap">
-							{(["All", "admission_verified", "admission_submitted", "deadline_near", "system_broadcast", "system_error"] as const).map((tab) => {
+							{(["All", "admission_submitted", "system_broadcast", "system_error"] as const).map((tab) => {
 								const tabLabel =
 									tab === "All"
 										? "All"
-										: tab === "admission_verified"
-											? "Verified Admissions"
 										: tab === "admission_submitted"
 											? "New Submissions"
-									: tab === "deadline_near"
-										? "Deadline Alerts"
 										: tab === "system_broadcast"
 											? "System Broadcasts"
 										: "System Errors"

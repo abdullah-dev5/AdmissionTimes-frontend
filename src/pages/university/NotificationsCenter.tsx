@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type NotificationItem } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 
 type NotificationType = NotificationItem["type"]
 
-const TABS: Array<"All" | NotificationType> = ["All", "Admin Feedback", "System Alert", "Data Update"]
+const TABS: Array<"All" | NotificationType> = ["All", "Admin Feedback", "System Alert"]
 
 const TYPE_STYLES: Record<NotificationType, { bg: string; text: string }> = {
 	"Admin Feedback": { bg: "bg-blue-100", text: "text-blue-700" },
@@ -215,6 +216,16 @@ function NotificationsCenter() {
 		} else {
 			navigate("/university/manage-admissions")
 		}
+	}
+
+	const showInitialLoading = loading && notifications.length === 0
+
+	if (showInitialLoading) {
+		return (
+			<UniversityLayout>
+				<LoadingSpinner fullScreen message="Loading notifications..." />
+			</UniversityLayout>
+		)
 	}
 
 	return (

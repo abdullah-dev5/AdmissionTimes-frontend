@@ -1,13 +1,59 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
+import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import { formatDisplayDateLong } from '../../utils/dateUtils'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
+
+const parseDeadlineDate = (deadline?: string | null): Date | null => {
+  if (!deadline) return null
+  const value = String(deadline).trim()
+  if (!value) return null
+
+  // Date-only values should stay open for the full local day.
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1])
+    const month = Number(dateOnlyMatch[2])
+    const day = Number(dateOnlyMatch[3])
+    return new Date(year, month - 1, day, 23, 59, 59, 999)
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const normalizeDeadlineDate = (deadline?: string | null) => {
+  const parsed = parseDeadlineDate(deadline)
+  if (!parsed) return ''
+  return toDateKey(parsed)
+}
+
+const calculateDaysFromDeadline = (deadline?: string | null) => {
+  const deadlineDate = parseDeadlineDate(deadline)
+  if (!deadlineDate) return -1
+  const now = new Date()
+  const diffMs = deadlineDate.getTime() - now.getTime()
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+}
+
+const deriveProgramStatusFromDays = (daysRemaining: number): StudentAdmission['programStatus'] => {
+  if (daysRemaining < 0) return 'Closed'
+  if (daysRemaining <= 7) return 'Closing Soon'
+  return 'Open'
+}
 
 const DeadlineHeader = ({ 
   onUniversityFilter, 
@@ -177,12 +223,20 @@ const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmissi
   const isClosedDeadline = (deadline: StudentAdmission & { daysRemaining: number }) =>
     deadline.programStatus === 'Closed' || deadline.daysRemaining < 0
 
-  const openDeadlines = deadlines.filter((deadline) => !isClosedDeadline(deadline))
-  const closedDeadlines = deadlines.filter((deadline) => isClosedDeadline(deadline))
+  const openDeadlines = deadlines
+    .filter((deadline) => !isClosedDeadline(deadline))
+    .sort((a, b) => a.daysRemaining - b.daysRemaining)
+
+  const closedDeadlines = deadlines
+    .filter((deadline) => isClosedDeadline(deadline))
+    .sort((a, b) => b.daysRemaining - a.daysRemaining)
 
   const groupByDate = (items: (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]) => {
     return items.reduce((acc, deadline) => {
-      const date = deadline.deadline
+      const date = normalizeDeadlineDate(deadline.deadline)
+      if (!date) {
+        return acc
+      }
       if (!acc[date]) {
         acc[date] = []
       }
@@ -197,10 +251,16 @@ const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmissi
     })
   }
 
+  const sortDatesDesc = (grouped: Record<string, (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]>) => {
+    return Object.keys(grouped).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime()
+    })
+  }
+
   const openGrouped = groupByDate(openDeadlines)
   const closedGrouped = groupByDate(closedDeadlines)
   const openDates = sortDatesAsc(openGrouped)
-  const closedDates = sortDatesAsc(closedGrouped)
+  const closedDates = sortDatesDesc(closedGrouped)
 
   return (
     <div className="space-y-8">
@@ -305,19 +365,7 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentMonth)
 
-  const formatDateForComparison = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  const normalizeDeadlineDate = (deadline: string) => {
-    // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:mm:ss" formats
-    if (!deadline) return ''
-    // Extract just the date part (first 10 characters: YYYY-MM-DD)
-    return deadline.substring(0, 10)
-  }
+  const formatDateForComparison = (date: Date) => toDateKey(date)
 
   const getDeadlineCountForDate = (date: Date) => {
     const dateStr = formatDateForComparison(date)
@@ -341,8 +389,10 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
       return false
     })
     if (dateDeadlines.length === 0) return null
-    if (dateDeadlines.some(d => d.status === 'Closed' || d.daysRemaining < 0)) return 'closed'
-    if (dateDeadlines.some(d => d.daysRemaining <= 7)) return 'urgent'
+
+    const activeDeadlines = dateDeadlines.filter(d => d.daysRemaining >= 0)
+    if (activeDeadlines.length === 0) return 'closed'
+    if (activeDeadlines.some(d => d.daysRemaining <= 7)) return 'urgent'
     return 'upcoming'
   }
 
@@ -530,11 +580,16 @@ function DeadlinePage() {
 
   // Convert shared admissions to deadline format with calculated days remaining
   const deadlines = useMemo(() => {
-    return admissions.map(admission => ({
+    return admissions.map(admission => {
+      const daysRemaining = calculateDaysFromDeadline(admission.deadline)
+      return {
       ...admission,
-      daysRemaining: calculateDaysRemaining(admission.deadline),
+      // Always recompute from deadline on this page to avoid stale/misaligned payload values.
+      daysRemaining,
+      programStatus: deriveProgramStatusFromDays(daysRemaining),
       alertEnabled: Boolean(admission.alertEnabled),
-    }))
+      }
+    })
   }, [admissions])
 
   // Debug: Log deadline dates format
@@ -559,8 +614,7 @@ function DeadlinePage() {
       if (degreeFilter && deadline.degreeType !== degreeFilter) return false
       if (searchQuery && !deadline.university.toLowerCase().includes(searchQuery.toLowerCase()) && !deadline.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
       if (selectedDate) {
-        // Normalize both dates for comparison (handle ISO format)
-        const normalizedDeadline = deadline.deadline ? deadline.deadline.substring(0, 10) : ''
+        const normalizedDeadline = normalizeDeadlineDate(deadline.deadline)
         if (normalizedDeadline !== selectedDate) return false
       }
       if (dateRangeFilter === 'week') {

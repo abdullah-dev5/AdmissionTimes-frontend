@@ -56,25 +56,39 @@ function ManageAdmissions() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const hydratedAdmissionIdRef = useRef<string | null>(null)
+
+  const buildFormFromAdmission = (admission: Admission) => {
+    const sanitized = sanitizeAdmission(admission)
+    return {
+      programTitle: sanitized.title,
+      degreeType: sanitized.degreeType || 'BS',
+      department: sanitized.department || '',
+      academicYear: sanitized.academicYear || '',
+      applicationDeadline: formatDateForInput(sanitized.deadline) || '',
+      fee: sanitized.fee || '',
+      overview: sanitized.overview || '',
+      eligibility: sanitized.eligibility || '',
+      websiteUrl: sanitized.websiteUrl || '',
+      admissionPortalLink: sanitized.admissionPortalLink || '',
+    }
+  }
 
   useEffect(() => {
-    if (existingAdmission) {
-      // Ensure admission has all required fields with defaults
-      const sanitized = sanitizeAdmission(existingAdmission)
-      setFormData({
-        programTitle: sanitized.title,
-        degreeType: sanitized.degreeType || 'BS',
-        department: sanitized.department || '',  // Empty if not provided
-        academicYear: sanitized.academicYear || '', // Empty if not provided
-        applicationDeadline: formatDateForInput(sanitized.deadline) || '', // Empty if no deadline
-        fee: sanitized.fee || '', // Empty if no fee
-        overview: sanitized.overview || '',
-        eligibility: sanitized.eligibility || '',
-        websiteUrl: sanitized.websiteUrl || '',
-        admissionPortalLink: sanitized.admissionPortalLink || '',
-      })
+    // Reset hydration tracker when switching to create mode.
+    if (!isEditMode || !editId) {
+      hydratedAdmissionIdRef.current = null
+      return
     }
-  }, [existingAdmission])
+
+    if (!existingAdmission?.id) return
+
+    // Hydrate once per edited admission id to avoid wiping user input on background refreshes.
+    if (hydratedAdmissionIdRef.current === existingAdmission.id) return
+
+    setFormData(buildFormFromAdmission(existingAdmission))
+    hydratedAdmissionIdRef.current = existingAdmission.id
+  }, [isEditMode, editId, existingAdmission])
 
   const extractDataFromPDF = async (file: File): Promise<Partial<typeof formData>> => {
     if (!universityId) {

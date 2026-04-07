@@ -9,12 +9,37 @@ import {
 } from "../../data/adminData"
 import { useWatcherNotifications } from "../../hooks/useWatcherNotifications"
 import { UpdateNotificationToast } from "../../components/admin/UpdatedBadge"
+import { formatDisplayDate, formatDisplayDateTime } from "../../utils/dateUtils"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 
 const formatLabel = (value: string) =>
 	value
 		.replace(/_/g, " ")
 		.replace(/([a-z])([A-Z])/g, "$1 $2")
 		.replace(/\b\w/g, (char) => char.toUpperCase())
+
+const isDateLikeField = (field?: string) => {
+	if (!field) return false
+	return /(date|deadline|time|updated|created|verified|submitted)/i.test(field)
+}
+
+const formatDateValue = (value?: string) => {
+	if (!value) return "—"
+	const parsed = new Date(value)
+	if (Number.isNaN(parsed.getTime())) return value
+	return formatDisplayDateTime(parsed.toISOString(), value)
+}
+
+const normalizeForCompare = (value: unknown): string => {
+	if (value === null || value === undefined) return ""
+	if (typeof value === "string") return value.trim()
+	if (typeof value === "number" || typeof value === "boolean") return String(value)
+	try {
+		return JSON.stringify(value)
+	} catch {
+		return String(value)
+	}
+}
 
 const normalizeValue = (value: unknown) => {
 	if (typeof value === "string") {
@@ -77,6 +102,26 @@ const renderValue = (value: unknown) => {
 	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
 }
 
+const renderDiffValue = (value: unknown, fieldName?: string) => {
+	const normalized = normalizeValue(value)
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return <span className="text-gray-400 italic">(empty)</span>
+	}
+
+	if (typeof normalized === "string") {
+		const cleaned = normalized.trim()
+		if (!cleaned || cleaned.toLowerCase() === "null" || cleaned.toLowerCase() === "undefined") {
+			return <span className="text-gray-400 italic">(empty)</span>
+		}
+		if (isDateLikeField(fieldName)) {
+			return <span className="text-sm text-gray-800 break-words">{formatDateValue(cleaned)}</span>
+		}
+		return <span className="text-sm text-gray-800 break-words">{cleaned}</span>
+	}
+
+	return renderValue(normalized)
+}
+
 const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
 
 const safeLabel = (value: string | null | undefined, fallback: string) => {
@@ -96,6 +141,20 @@ const buildRemarksList = (item: VerificationItem | null) => {
 	return entries.filter((entry) => entry.value && String(entry.value).trim())
 }
 
+const getFriendlyErrorMessage = (raw?: string | null) => {
+	const message = (raw || "").toLowerCase()
+	if (!message) return "Something went wrong while loading verification data."
+	if (message.includes("already verified")) return "This admission is already verified."
+	if (message.includes("already rejected")) return "This admission is already rejected."
+	if (message.includes("already pending")) return "This admission is already pending review."
+	if (message.includes("401") || message.includes("unauthorized")) return "Your session has expired. Please sign in again."
+	if (message.includes("403") || message.includes("forbidden")) return "You do not have permission to perform this action."
+	if (message.includes("timeout") || message.includes("network") || message.includes("fetch")) {
+		return "Connection issue detected. Please check your internet and try again."
+	}
+	return "We could not complete this request right now. Please try again."
+}
+
 function AdminVerificationCenter() {
 	const navigate = useNavigate()
 	const location = useLocation() as { state?: { selectedId?: string } }
@@ -110,7 +169,6 @@ function AdminVerificationCenter() {
 
 	// API state
 	const [apiVerifications, setApiVerifications] = useState<any[]>([])
-	const [universities, setUniversities] = useState<Map<string, any>>(new Map())
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [submitting, setSubmitting] = useState(false)
@@ -156,20 +214,13 @@ function AdminVerificationCenter() {
 			setError(null)
 			const status = statusFilter === "All" ? undefined : statusFilter?.toLowerCase()
 			const response = await adminService.getAllAdmissions(1, 100, status) // Get larger batch
-			console.log('🔵 [AdminVerificationCenter] Fetched admissions:', response)
-			
-			// No need for direct Supabase university fetch - backend should return enriched data
-			// If universities relationship is populated, use it; otherwise fall back to fields in admission
-			const emptyMap = new Map<string, any>()
-			setUniversities(emptyMap)
 			
 			// Transform API data to VerificationItem format
-			const transformed = transformApiAdmissions(response, emptyMap)
+			const transformed = transformApiAdmissions(response)
 			setApiVerifications(transformed)
 		} catch (err: any) {
 			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
-			setError(err.message || 'Failed to fetch admissions')
-			// Will fallback to mock data
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to fetch admissions'))
 		} finally {
 			setLoading(false)
 		}
@@ -178,7 +229,7 @@ function AdminVerificationCenter() {
 	/**
 	 * Transform API admissions to VerificationItem format with university data enrichment
 	 */
-	const transformApiAdmissions = (data: any, universityMap?: Map<string, any>): VerificationItem[] => {
+	const transformApiAdmissions = (data: any): VerificationItem[] => {
 		// Handle both paginated and non-paginated responses
 		const admissions = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
 		const statusMap: Record<string, VerificationStatus> = {
@@ -188,21 +239,10 @@ function AdminVerificationCenter() {
 		}
 		
 		return admissions.map((admission: any) => {
-			// Get university name from the map, or fall back to other sources
-			let universityName = 'Unknown University'
-			if (universityMap && admission.university_id) {
-				const univData = universityMap.get(admission.university_id)
-				if (univData && univData.name) {
-					universityName = univData.name
-				}
-			}
-			// Fall back to other fields if not in map
-			if (universityName === 'Unknown University') {
-				universityName = safeLabel(
-					admission.university_name || admission.location,
-					'Unknown University'
-				)
-			}
+			const universityName = safeLabel(
+				admission.university_name || admission.universities?.name || admission.location,
+				'Unknown University'
+			)
 			
 			return {
 				rejectionReason: admission.rejection_reason ?? null,
@@ -216,21 +256,17 @@ function AdminVerificationCenter() {
 					null,
 				verificationStatusRaw: admission.verification_status,
 				id: admission.id || admission.admission_id,
-				admissionTitle: admission.title || admission.program_title || 'Unknown',
+				admissionTitle: admission.admission_title || admission.title || admission.program_title || 'Unknown',
 				university: universityName,
-				submittedBy: safeLabel(admission.submitted_by || admission.created_by, 'University'),
-				submittedOn: admission.created_at 
-					? new Date(admission.created_at).toISOString().split('T')[0]
-					: 'N/A',
-				status: statusMap[admission.verification_status] || ('Pending' as VerificationStatus),
+				submittedBy: safeLabel(admission.submitted_by_label || admission.submitted_by || admission.created_by, 'University'),
+				submittedOn: formatDisplayDate(admission.submitted_on || admission.created_at, 'N/A'),
+				status: statusMap[admission.verification_status] || (admission.status_label === 'Pending' ? 'Pending' : 'Pending' as VerificationStatus),
 				metadata: {
-					title: admission.title || 'Unknown',
+					title: admission.admission_title || admission.title || 'Unknown',
 					degree: admission.degree_level || 'N/A',
 					program: admission.program_type || 'N/A',
-					fee: admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A',
-					deadline: admission.deadline 
-						? new Date(admission.deadline).toISOString().split('T')[0]
-						: 'N/A',
+					fee: admission.fee_display || (admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A'),
+					deadline: formatDisplayDate(admission.deadline, 'N/A'),
 					academicYear: 'N/A',
 					university: universityName,
 				},
@@ -292,30 +328,57 @@ function AdminVerificationCenter() {
 			})
 			
 			// Handle both paginated and non-paginated responses
-			let changelogs = []
+			let changelogs: any[] = []
 			if (Array.isArray(changelogResponse)) {
 				changelogs = changelogResponse
-			} else if (changelogResponse?.data) {
-				changelogs = Array.isArray(changelogResponse.data) ? changelogResponse.data : []
+			} else if (Array.isArray(changelogResponse?.data)) {
+				changelogs = changelogResponse.data
+			} else if (Array.isArray(changelogResponse?.data?.data)) {
+				changelogs = changelogResponse.data.data
+			} else if (Array.isArray(changelogResponse?.data?.changelogs)) {
+				changelogs = changelogResponse.data.changelogs
 			}
 			
-			// Filter for 'updated' action type only (field-level changes)
-			const updatedChanges = changelogs.filter((log: any) => log.action_type === 'updated')
+			// Keep field-level change actions relevant for review
+			const updatedChanges = changelogs
+				.filter((log: any) => ['updated', 'status_changed', 'verified', 'rejected'].includes(String(log.action_type || '').toLowerCase()))
+				.filter((log: any) => Boolean(log.field_name))
+				.sort((a: any, b: any) => {
+					const aTime = new Date(a.created_at || a.changed_at || a.changed_at_iso || 0).getTime()
+					const bTime = new Date(b.created_at || b.changed_at || b.changed_at_iso || 0).getTime()
+					return aTime - bTime
+				})
 			
-			// Transform to diffData format
-			const diffData = updatedChanges.map((log: any) => {
-				// Format old_value and new_value
-				const formatValue = (val: any): string => {
-					if (val === null || val === undefined) return ''
-					if (typeof val === 'object') return JSON.stringify(val)
-					return String(val)
+			// Merge repeated field updates into one clear net change per field.
+			const fieldMap = new Map<string, { field: string; oldValue: string; newValue: string; changeCount: number; latestAt?: string }>()
+			for (const log of updatedChanges) {
+				const field = String(log.field_name || 'Unknown')
+				const oldRaw = normalizeForCompare(log.old_value)
+				const newRaw = normalizeForCompare(log.new_value)
+
+				// Ignore noisy no-op entries (old == new)
+				if (oldRaw === newRaw) continue
+
+				if (!fieldMap.has(field)) {
+					fieldMap.set(field, {
+						field,
+						oldValue: oldRaw,
+						newValue: newRaw,
+						changeCount: 1,
+						latestAt: log.created_at || log.changed_at || log.changed_at_iso,
+					})
+				} else {
+					const existing = fieldMap.get(field)!
+					existing.newValue = newRaw
+					existing.changeCount += 1
+					existing.latestAt = log.created_at || log.changed_at || log.changed_at_iso || existing.latestAt
 				}
-				
-				return {
-					field: log.field_name || 'Unknown',
-					oldValue: formatValue(log.old_value),
-					newValue: formatValue(log.new_value),
-				}
+			}
+
+			const diffData = Array.from(fieldMap.values()).sort((a, b) => {
+				const aTime = new Date(a.latestAt || 0).getTime()
+				const bTime = new Date(b.latestAt || 0).getTime()
+				return bTime - aTime
 			})
 			
 			// Update selected item with diff data
@@ -398,7 +461,7 @@ function AdminVerificationCenter() {
 			setRemarks("")
 		} catch (err: any) {
 			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
-			setError(err.message || 'Failed to submit action')
+			setError(getFriendlyErrorMessage(err?.message || 'Failed to submit action'))
 		} finally {
 			setSubmitting(false)
 		}
@@ -409,6 +472,16 @@ function AdminVerificationCenter() {
 		setUniversityFilter("All")
 		setSearchQuery("")
 		setCurrentPage(1)
+	}
+
+	const showInitialLoading = loading && apiVerifications.length === 0
+
+	if (showInitialLoading) {
+		return (
+			<AdminLayout>
+				<LoadingSpinner fullScreen message="Loading pending admissions..." />
+			</AdminLayout>
+		)
 	}
 
 	return (
@@ -424,11 +497,21 @@ function AdminVerificationCenter() {
 
 				{/* Error Banner */}
 				{error && (
-					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-						<p className="text-sm text-red-800">{error}</p>
+					<div className="mb-6 rounded-2xl border border-red-200 bg-white shadow-sm p-5">
+						<div className="flex items-start gap-3">
+							<div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+								<svg className="w-4.5 h-4.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+								</svg>
+							</div>
+							<div>
+								<p className="text-sm font-semibold text-red-900">Unable to continue this action</p>
+								<p className="text-sm text-red-700 mt-1">{error}</p>
+							</div>
+						</div>
 						<button
 							onClick={() => setError(null)}
-							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+							className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium"
 						>
 							Dismiss
 						</button>
@@ -436,11 +519,7 @@ function AdminVerificationCenter() {
 				)}
 
 				{/* Loading Indicator */}
-				{loading && (
-					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-						<p className="text-sm text-blue-800">Loading pending admissions...</p>
-					</div>
-				)}
+				{loading && <LoadingSpinner size="sm" message="Refreshing admissions..." />}
 
 				{/* Filters Panel */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -674,7 +753,7 @@ function AdminVerificationCenter() {
 											color: getVerificationStatusColor(selectedItem.status).text,
 											}}
 										>
-											Current: {selectedItem.status}
+											{selectedItem.status}
 										</span>
 									</div>
 									<p className="text-sm text-gray-600 mt-1">{selectedItem.admissionTitle}</p>
@@ -701,60 +780,34 @@ function AdminVerificationCenter() {
 										Admission Metadata
 									</h3>
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Title</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.title || selectedItem.admissionTitle}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Degree</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatInline(selectedItem.metadata?.degree)}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Program</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatInline(selectedItem.metadata?.program)}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Fee</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.fee ? `PKR ${selectedItem.metadata.fee}` : "—"}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Deadline</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatInline(selectedItem.metadata?.deadline)}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Academic Year</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{formatInline(selectedItem.metadata?.academicYear)}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">University</p>
-											<p className="text-sm font-medium" style={{ color: "#111827" }}>
-												{selectedItem.metadata?.university || selectedItem.university}
-											</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500 mb-1">Current Status</p>
-											<span
-												className="px-2 py-1 rounded-full text-xs font-medium inline-block"
-												style={{
-													backgroundColor: getVerificationStatusColor(selectedItem.status).bg,
-													color: getVerificationStatusColor(selectedItem.status).text,
-												}}
-											>
-												{selectedItem.status}
-											</span>
-										</div>
+										{[
+											{ label: "Title", value: selectedItem.metadata?.title || selectedItem.admissionTitle },
+											{ label: "University", value: selectedItem.metadata?.university || selectedItem.university },
+											{ label: "Submitted By", value: selectedItem.submittedBy },
+											{ label: "Submitted On", value: formatDisplayDate(selectedItem.submittedOn, selectedItem.submittedOn || "—") },
+											{ label: "Degree", value: formatInline(selectedItem.metadata?.degree) },
+											{ label: "Program", value: formatInline(selectedItem.metadata?.program) },
+											{ label: "Fee", value: selectedItem.metadata?.fee || "—" },
+											{ label: "Deadline", value: formatDisplayDate(selectedItem.metadata?.deadline, selectedItem.metadata?.deadline || "—") },
+											{ label: "Academic Year", value: formatInline(selectedItem.metadata?.academicYear) },
+										].map((entry) => (
+											<div key={entry.label} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+												<p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{entry.label}</p>
+												<p className="text-sm font-medium text-gray-900 break-words">{entry.value}</p>
+											</div>
+										))}
+									</div>
+									<div className="mt-4">
+										<p className="text-sm text-gray-500 mb-1">Current Status</p>
+										<span
+											className="px-2 py-1 rounded-full text-xs font-medium inline-block"
+											style={{
+												backgroundColor: getVerificationStatusColor(selectedItem.status).bg,
+												color: getVerificationStatusColor(selectedItem.status).text,
+											}}
+										>
+											{selectedItem.status}
+										</span>
 									</div>
 									{selectedItem.metadata?.department && (
 										<div className="mt-4">
@@ -816,22 +869,27 @@ function AdminVerificationCenter() {
 										<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
 											Field-Level Differences
 										</h3>
-										<div className="border border-gray-200 rounded-lg overflow-hidden">
-											<div className="grid grid-cols-3 bg-gray-50 border-b border-gray-200">
-												<div className="p-3 text-sm font-semibold text-gray-700">Field</div>
-												<div className="p-3 text-sm font-semibold text-gray-700 border-l border-gray-200">Old Value</div>
-												<div className="p-3 text-sm font-semibold text-gray-700 border-l border-gray-200">New Value</div>
-											</div>
+										<div className="space-y-3">
 											{selectedItem.diffData.map((diff, idx) => (
-												<div key={idx} className="grid grid-cols-3 border-b border-gray-200 last:border-b-0">
-													<div className="p-3 text-sm font-medium" style={{ color: "#111827" }}>
-														{diff.field}
+												<div key={idx} className="border border-gray-200 rounded-lg p-4">
+													<div className="flex items-center justify-between gap-3 mb-3">
+														<p className="text-sm font-semibold text-gray-900">{formatLabel(diff.field)}</p>
+														<div className="text-xs text-gray-500 text-right">
+															{(diff.changeCount || 1) > 1 ? `Updated ${diff.changeCount} times` : 'Updated once'}
+															{diff.latestAt && (
+																<p className="mt-0.5">Last: {formatDateValue(diff.latestAt)}</p>
+															)}
+														</div>
 													</div>
-													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#B91C1C" }}>
-														{renderValue(diff.oldValue)}
-													</div>
-													<div className="p-3 text-sm border-l border-gray-200" style={{ color: "#15803D" }}>
-														{renderValue(diff.newValue)}
+													<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+														<div className="rounded-lg border border-red-100 bg-red-50/50 p-3">
+															<p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Old Value</p>
+															<div className="text-sm text-gray-900">{renderDiffValue(diff.oldValue, diff.field)}</div>
+														</div>
+														<div className="rounded-lg border border-green-100 bg-green-50/50 p-3">
+															<p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">New Value</p>
+															<div className="text-sm text-gray-900">{renderDiffValue(diff.newValue, diff.field)}</div>
+														</div>
 													</div>
 												</div>
 											))}

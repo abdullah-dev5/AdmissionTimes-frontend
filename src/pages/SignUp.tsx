@@ -3,6 +3,24 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 
+const getFriendlyAuthError = (raw?: string) => {
+  const message = (raw || '').toLowerCase()
+  if (!message) return 'Unable to create your account right now. Please try again.'
+  if (message.includes('already exists') || message.includes('duplicate') || message.includes('already registered')) {
+    return 'An account with this email already exists. Please sign in instead.'
+  }
+  if (message.includes('invalid email')) {
+    return 'Please enter a valid email address.'
+  }
+  if (message.includes('weak password') || message.includes('password')) {
+    return 'Please use a stronger password and try again.'
+  }
+  if (message.includes('timeout') || message.includes('network') || message.includes('fetch')) {
+    return 'Connection issue detected. Please check your internet and try again.'
+  }
+  return 'Unable to create your account right now. Please try again.'
+}
+
 function SignUp() {
   const navigate = useNavigate()
   const { signUp, isLoading } = useAuth()
@@ -93,7 +111,7 @@ function SignUp() {
         'Failed to create account. Please try again.'
       
       console.error('[SignUp] Error message:', errorMessage)
-      setApiError(errorMessage)
+      setApiError(getFriendlyAuthError(errorMessage))
     }
   }
 
@@ -117,7 +135,7 @@ function SignUp() {
             {/* API Error Display */}
             {apiError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 font-medium text-sm">Error: {apiError}</p>
+                <p className="text-red-700 font-medium text-sm">{apiError}</p>
               </div>
             )}
 

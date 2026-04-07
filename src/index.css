@@ -15,3 +15,28 @@
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
 }
+
+/* Custom scrollbar for modal content areas */
+.modal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.modal-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-left: 1px solid #e2e8f0;
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #64748b 0%, #334155 100%);
+  border-radius: 9999px;
+  border: 2px solid #f1f5f9;
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #475569 0%, #1e293b 100%);
+}
