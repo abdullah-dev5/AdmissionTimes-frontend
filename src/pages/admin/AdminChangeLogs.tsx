@@ -8,6 +8,7 @@ import ChangeLogFilters from "../../components/admin/ChangeLogFilters"
 import ChangeLogTable from "../../components/admin/ChangeLogTable"
 import DiffViewerModal from "../../components/admin/DiffViewerModal"
 import Pagination from "../../components/admin/Pagination"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 
 interface ChangeLogStats {
 	total: number
@@ -16,6 +17,17 @@ interface ChangeLogStats {
 	scraperUpdates: number
 	today: number
 	thisWeek: number
+}
+
+const getFriendlyErrorMessage = (raw?: string | null) => {
+	const message = (raw || "").toLowerCase()
+	if (!message) return "Something went wrong while loading change logs."
+	if (message.includes("401") || message.includes("unauthorized")) return "Your session has expired. Please sign in again."
+	if (message.includes("403") || message.includes("forbidden")) return "You do not have access to these change logs."
+	if (message.includes("timeout") || message.includes("network") || message.includes("fetch")) {
+		return "Connection issue detected. Please check your internet and retry."
+	}
+	return "We could not load change logs right now. Please try again shortly."
 }
 
 /**
@@ -55,6 +67,16 @@ function AdminChangeLogs() {
 
 	// Calculate statistics
 	const allStats = calculateStats(allLogs)
+	const friendlyError = getFriendlyErrorMessage(error)
+	const showInitialLoading = loading && allLogs.length === 0
+
+	if (showInitialLoading) {
+		return (
+			<AdminLayout>
+				<LoadingSpinner fullScreen message="Loading change logs..." />
+			</AdminLayout>
+		)
+	}
 
 	const handleFilterChange = <K extends keyof typeof filters>(key: K, value: typeof filters[K]) => {
 		updateFilter(key, value)
@@ -144,18 +166,13 @@ function AdminChangeLogs() {
 
 						<div>
 							<p className="font-semibold text-red-900">Error Loading Logs</p>
-							<p className="text-sm text-red-800 mt-1">{error}</p>
+							<p className="text-sm text-red-800 mt-1">{friendlyError}</p>
 						</div>
 					</div>
 				)}
 
 				{/* Loading Indicator */}
-				{loading && (
-					<div className="mb-6 p-4 bg-blue-50 border border-blue-300 rounded-lg flex items-center gap-3">
-
-						<p className="text-sm text-blue-800 font-medium">Loading change logs...</p>
-					</div>
-				)}
+				{loading && <LoadingSpinner size="sm" message="Refreshing change logs..." />}
 
 				{/* Filters Section */}
 				<div className="mb-6">

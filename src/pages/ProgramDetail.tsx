@@ -2,14 +2,13 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
-import { calculateDaysRemaining } from '../data/studentData'
-import { getRelativeTime } from '../utils/dateUtils'
 import { useToast } from '../contexts/ToastContext'
 import { activityService } from '../services/activityService'
 import { admissionsService } from '../services/admissionsService'
 import type { Admission } from '../types/api'
 import type { StudentAdmission } from '../data/studentData'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { transformAdmission } from '../utils/transformers'
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -48,6 +47,9 @@ interface ResolvedOfficialLinks {
 }
 
 const getOfficialLinks = (admission: Admission, requirements: Record<string, unknown>): ResolvedOfficialLinks => {
+  const backendPrimaryUrl = readString((admission as Admission).primary_apply_url)
+  const backendPortalUrl = readString((admission as Admission).admission_portal_url)
+  const backendWebsiteUrl = readString((admission as Admission).university_website_url)
   const links = toRequirementsObject(requirements.links)
   const officialLinks = [
     ...readStringArray(requirements.officialLinks),
@@ -73,53 +75,10 @@ const getOfficialLinks = (admission: Admission, requirements: Record<string, unk
     readString(admission.website_url)
 
   return {
-    admissionPortalLink,
-    universityWebsiteUrl,
-    primaryUrl: admissionPortalLink || universityWebsiteUrl || officialLinks[0],
+    admissionPortalLink: backendPortalUrl || admissionPortalLink,
+    universityWebsiteUrl: backendWebsiteUrl || universityWebsiteUrl,
+    primaryUrl: backendPrimaryUrl || backendPortalUrl || backendWebsiteUrl || admissionPortalLink || universityWebsiteUrl || officialLinks[0],
   }
-}
-
-const getEligibilityText = (requirements: Record<string, unknown>): string | undefined => {
-  const eligibilityObj = toRequirementsObject(requirements.eligibility)
-  const criteriaObj = toRequirementsObject(requirements.criteria)
-
-  return (
-    readString(requirements.eligibility) ||
-    readString(eligibilityObj.text) ||
-    readString(eligibilityObj.description) ||
-    readString(eligibilityObj.value) ||
-    readString(requirements.eligibilityCriteria) ||
-    readString(requirements.eligibility_criteria) ||
-    readString(requirements.generalRequirements) ||
-    readString(requirements.criteria) ||
-    readString(criteriaObj.text) ||
-    readString(criteriaObj.description) ||
-    readString(criteriaObj.value) ||
-    readString(requirements.requirements)
-  )
-}
-
-const mapDegreeType = (degree: string | undefined): StudentAdmission['degreeType'] => {
-  const value = (degree || '').toUpperCase()
-  if (value.includes('PHD')) return 'PhD'
-  if (value.includes('MBA')) return 'MBA'
-  if (value.includes('BBA')) return 'BBA'
-  if (value.includes('MD')) return 'MD'
-  if (value.includes('MPHIL')) return 'MPhil'
-  if (value.includes('MS') || value.includes('MASTER')) return 'MS'
-  return 'BS'
-}
-
-const getProgramStatus = (deadline: string | null | undefined): StudentAdmission['programStatus'] => {
-  const days = calculateDaysRemaining(deadline || '')
-  if (days < 0) return 'Closed'
-  if (days <= 7) return 'Closing Soon'
-  return 'Open'
-}
-
-const formatFee = (value: number | null | undefined): string => {
-  if (value === null || value === undefined || Number.isNaN(value)) return 'Fee not specified'
-  return `PKR ${Number(value).toLocaleString()}`
 }
 
 const formatBackendRequirements = (requirements: Record<string, unknown>): string[] => {
@@ -201,7 +160,7 @@ function ProgramDetail() {
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             response = await admissionsService.getById(id)
-            admission = response.data?.data ?? response.data
+            admission = response.data
             break
           } catch (requestError) {
             const status = (requestError as { response?: { status?: number } })?.response?.status
@@ -225,62 +184,22 @@ function ProgramDetail() {
 
         const requirements = toRequirementsObject(admission.requirements)
         const resolvedOfficialLinks = getOfficialLinks(admission, requirements)
-        const degree = admission.degree_level || 'Degree Not Specified'
-        const university =
-          admission.universities?.name ||
-          (admission as Admission & { university_name?: string }).university_name ||
-          storeProgramRef.current?.university ||
-          'University'
-
         const mappedProgram: StudentAdmission = {
-          id: admission.id,
-          university,
-          universityLogo:
-            admission.universities?.logo_url ||
-            (admission as Admission & { university_logo_url?: string }).university_logo_url ||
-            storeProgramRef.current?.universityLogo ||
-            undefined,
-          universityCity:
-            admission.universities?.city ||
-            (admission as Admission & { university_city?: string }).university_city ||
-            storeProgramRef.current?.universityCity ||
-            undefined,
-          universityCountry:
-            admission.universities?.country ||
-            (admission as Admission & { university_country?: string }).university_country ||
-            storeProgramRef.current?.universityCountry ||
-            undefined,
-          program: admission.title || storeProgramRef.current?.program || 'Untitled Program',
-          degree,
-          degreeType: mapDegreeType(degree),
-          deadline: admission.deadline || storeProgramRef.current?.deadline || '',
-          deadlineDisplay:
-            admission.deadline
-              ? new Date(admission.deadline).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })
-              : 'No deadline',
-          fee: formatFee(admission.application_fee),
-          feeNumeric: Number(admission.application_fee || 0),
-          location: admission.location || storeProgramRef.current?.location || 'Location not specified',
-          city: admission.location?.split(',')[0]?.trim() || storeProgramRef.current?.city || 'Unknown',
-          status: admission.verification_status === 'verified' ? 'Verified' : admission.verification_status === 'rejected' ? 'Closed' : 'Pending',
-          verificationStatus:
-            admission.verification_status === 'verified'
-              ? 'verified'
-              : admission.verification_status === 'rejected'
-              ? 'rejected'
-              : 'pending',
-          programStatus: getProgramStatus(admission.deadline),
-          updated: admission.updated_at ? getRelativeTime(admission.updated_at) : 'Recently updated',
-          daysRemaining: calculateDaysRemaining(admission.deadline || ''),
-          match: storeProgramRef.current?.match,
-          matchNumeric: storeProgramRef.current?.matchNumeric,
-          logoBg: storeProgramRef.current?.logoBg || '#1F2937',
-          aiSummary: admission.description || storeProgramRef.current?.aiSummary,
-          eligibility: getEligibilityText(requirements),
+          ...transformAdmission(
+            admission as any,
+            storeProgramRef.current?.saved
+              ? {
+                  id: storeProgramRef.current.watchlistId || '',
+                  user_id: '',
+                  admission_id: admission.id,
+                  created_at: '',
+                  updated_at: '',
+                  alert_opt_in: Boolean(storeProgramRef.current.alertEnabled),
+                  notes: null,
+                }
+              : undefined,
+            (admission as Admission & { university_name?: string }).university_name || storeProgramRef.current?.university
+          ),
           officialUrl: resolvedOfficialLinks.primaryUrl,
           alertEnabled: storeProgramRef.current?.alertEnabled || false,
           saved: storeProgramRef.current?.saved || false,
@@ -414,7 +333,7 @@ function ProgramDetail() {
   }
 
   const statusColors = getStatusColor(program.programStatus)
-  const daysRemaining = calculateDaysRemaining(program.deadline)
+  const daysRemaining = program.daysRemaining
 
   const handleCompare = () => {
     activityService.trackCappedStudentEvent({

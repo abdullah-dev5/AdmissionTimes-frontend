@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
+import { getStatusColor } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,16 +12,6 @@ import { recommendationsService } from '../../services/recommendationsService'
 import { transformAdmission } from '../../utils/transformers'
 
 const RECOMMENDATION_MIN_SCORE = 50
-
-// Helper function to convert match percentage to text label
-function getMatchLabel(matchNumeric?: number): string {
-  if (!matchNumeric) return 'Match'
-  if (matchNumeric >= 90) return 'Excellent Match'
-  if (matchNumeric >= 85) return 'High Match'
-  if (matchNumeric >= 80) return 'Good Match'
-  if (matchNumeric >= 75) return 'Fair Match'
-  return 'Match'
-}
 
 function StudentDashboard() {
   const navigate = useNavigate()
@@ -52,26 +42,14 @@ function StudentDashboard() {
   // NOTE: All hooks must be called before any conditional returns
   const stats = useMemo(() => {
     // Calculate stats from actual data (source of truth)
-    const upcoming = admissions.filter(a => {
-      const daysRemaining = calculateDaysRemaining(a.deadline)
-      return (a.programStatus === 'Open' || a.programStatus === 'Closing Soon') && daysRemaining >= 0 && daysRemaining <= 7
-    }).length
+    const upcoming = admissions.filter(a => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
     
-    const active = admissions.filter(a => {
-      const daysRemaining = calculateDaysRemaining(a.deadline)
-      return (a.programStatus === 'Open' || a.programStatus === 'Closing Soon') && daysRemaining >= 0
-    }).length
+    const active = admissions.filter(a => a.daysRemaining >= 0).length
     
     const recommendationSource = apiRecommendedPrograms.length > 0 ? apiRecommendedPrograms : admissions
-    const recommendations = recommendationSource.filter(a => {
-      const daysRemaining = calculateDaysRemaining(a.deadline)
-      return a.matchNumeric && a.matchNumeric >= RECOMMENDATION_MIN_SCORE && daysRemaining >= 0 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
-    }).length
+    const recommendations = recommendationSource.filter(a => a.matchNumeric && a.matchNumeric >= RECOMMENDATION_MIN_SCORE && a.daysRemaining >= 0).length
     
-    const urgent = admissions.filter(a => {
-      const daysRemaining = calculateDaysRemaining(a.deadline)
-      return daysRemaining >= 0 && daysRemaining <= 7 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
-    }).length
+    const urgent = admissions.filter(a => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
 
     const calculatedStats = {
       active,
@@ -89,10 +67,7 @@ function StudentDashboard() {
       const openPrograms = admissions.filter(a => a.programStatus === 'Open' || a.programStatus === 'Closing Soon');
       console.log(`📊 [Dashboard] Open/ClosingSoon programs: ${openPrograms.length}/${admissions.length}`);
       
-      const withValidDeadline = admissions.filter(a => {
-        const daysRemaining = calculateDaysRemaining(a.deadline);
-        return daysRemaining >= 0;
-      });
+      const withValidDeadline = admissions.filter(a => a.daysRemaining >= 0);
       console.log(`📊 [Dashboard] With valid deadline (not closed): ${withValidDeadline.length}/${admissions.length}`);
     }
 
@@ -186,14 +161,7 @@ function StudentDashboard() {
   // Get upcoming deadlines for sidebar (with dynamic calculation)
   const upcomingDeadlines = useMemo(() => {
     return admissions
-      .filter(a => {
-        const daysRemaining = calculateDaysRemaining(a.deadline)
-        return daysRemaining >= 0 && daysRemaining <= 30 && (a.programStatus === 'Open' || a.programStatus === 'Closing Soon')
-      })
-      .map(a => ({
-        ...a,
-        daysRemaining: calculateDaysRemaining(a.deadline)
-      }))
+      .filter(a => a.daysRemaining >= 0 && a.daysRemaining <= 30)
       .sort((a, b) => a.daysRemaining - b.daysRemaining)
       .slice(0, 3)
   }, [admissions])
@@ -235,13 +203,26 @@ function StudentDashboard() {
     return activities.slice(0, 3)
   }, [notifications, savedAdmissions, admissions])
 
+  const getFriendlyErrorMessage = (raw?: string | null) => {
+    const message = (raw || '').toLowerCase()
+    if (!message) return 'We could not load your dashboard right now. Please try again.'
+    if (message.includes('401') || message.includes('unauthorized')) {
+      return 'Your session has expired. Please sign in again to continue.'
+    }
+    if (message.includes('403') || message.includes('forbidden')) {
+      return 'You do not have permission to access this dashboard view.'
+    }
+    if (message.includes('timeout') || message.includes('network') || message.includes('fetch')) {
+      return 'Connection issue detected. Please check your internet and try again.'
+    }
+    return 'We could not load your dashboard data at the moment. Please try again shortly.'
+  }
+
   // Show loading state (AFTER all hooks are called)
   if (loading) {
     return (
       <StudentLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" message="Loading dashboard..." />
-        </div>
+        <LoadingSpinner fullScreen message="Loading dashboard..." />
       </StudentLayout>
     )
   }
@@ -251,12 +232,21 @@ function StudentDashboard() {
     return (
       <StudentLayout>
         <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h3 className="text-red-800 font-semibold mb-2">Error Loading Dashboard</h3>
-            <p className="text-red-600">{error}</p>
+          <div className="max-w-2xl mx-auto rounded-2xl border border-red-200 bg-white shadow-sm p-6">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-red-900 font-semibold mb-1">Unable to load dashboard</h3>
+                <p className="text-red-700 text-sm">{getFriendlyErrorMessage(error)}</p>
+              </div>
+            </div>
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              className="mt-5 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
               Retry
             </button>

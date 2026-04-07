@@ -86,6 +86,18 @@ export const formatDateTime = (dateString: string): string => {
 }
 
 /**
+ * Safely formats date-time. Returns fallback when value is invalid.
+ */
+export const formatDateTimeSafe = (
+	value?: string | null,
+	fallback: string = "-"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return value || fallback
+	return formatDateTime(parsed.toISOString())
+}
+
+/**
  * Formats a date to YYYY-MM-DD format for date inputs
  * @param dateString - ISO date string
  * @returns Date string in YYYY-MM-DD format
@@ -135,6 +147,18 @@ export const getRelativeTime = (dateString: string): string => {
 		month: "short",
 		day: "numeric",
 	})
+}
+
+/**
+ * Safely gets relative time. Returns fallback when value is invalid.
+ */
+export const getRelativeTimeSafe = (
+	value?: string | null,
+	fallback: string = "-"
+): string => {
+	const parsed = parseDateSafe(value)
+	if (!parsed) return fallback
+	return getRelativeTime(parsed.toISOString())
 }
 
 /**

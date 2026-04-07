@@ -10,6 +10,8 @@ import { useStudentStore } from '../store/studentStore'
 import { useAuthStore } from '../store/authStore'
 import { isRealtimeEnabled, supabase } from '../services/supabase'
 
+const NOTIFICATIONS_POLL_MS = Math.max(15000, Number(import.meta.env.VITE_NOTIFICATIONS_POLL_MS || 60000))
+
 interface StudentLayoutProps {
   children: ReactNode
 }
@@ -46,9 +48,28 @@ function StudentLayout({ children }: StudentLayoutProps) {
       return
     }
 
+    let pollId: number | null = null
+
     const refresh = () => {
       fetchNotifications().catch(() => {})
       fetchStats().catch(() => {})
+    }
+
+    const startPolling = () => {
+      if (pollId !== null) {
+        return
+      }
+
+      pollId = window.setInterval(() => {
+        refresh()
+      }, NOTIFICATIONS_POLL_MS)
+    }
+
+    const stopPolling = () => {
+      if (pollId !== null) {
+        window.clearInterval(pollId)
+        pollId = null
+      }
     }
 
     const channel = isRealtimeEnabled
@@ -66,15 +87,24 @@ function StudentLayout({ children }: StudentLayoutProps) {
               refresh()
             }
           )
-          .subscribe()
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              stopPolling()
+              return
+            }
+
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              startPolling()
+            }
+          })
       : null
 
-    const pollId = window.setInterval(() => {
-      refresh()
-    }, 30000)
+    if (!isRealtimeEnabled) {
+      startPolling()
+    }
 
     return () => {
-      window.clearInterval(pollId)
+      stopPolling()
       if (channel) {
         supabase.removeChannel(channel).catch(() => {})
       }

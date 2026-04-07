@@ -1,5 +1,5 @@
 import { getChangeTypeColor, type AdminChangeLog } from "../../data/adminData"
-import { formatDateTime, getRelativeTime } from "../../utils/dateUtils"
+import { formatDateTimeSafe, getRelativeTimeSafe } from "../../utils/dateUtils"
 import { formatInlineValue, sanitizeActorName } from "../../utils/changelogFormatting"
 
 interface ChangeLogTableProps {
@@ -56,8 +56,8 @@ export default function ChangeLogTable({ logs, onViewDiff }: ChangeLogTableProps
 				<tbody className="divide-y divide-gray-100">
 					{logs.map((log) => {
 						const typeColors = getChangeTypeColor(log.changeType)
-						const relativeTime = getRelativeTime(log.timestamp)
-						const absoluteTime = formatDateTime(log.timestamp)
+						const relativeTime = getRelativeTimeSafe(log.timestamp)
+						const absoluteTime = formatDateTimeSafe(log.timestamp)
 
 						return (
 							<tr key={log.id} className="hover:bg-gray-50 transition-colors duration-150">

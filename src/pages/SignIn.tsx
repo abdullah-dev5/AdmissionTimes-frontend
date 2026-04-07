@@ -3,6 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 
+const getFriendlyAuthError = (raw?: string) => {
+  const message = (raw || '').toLowerCase()
+  if (!message) return 'Unable to sign in right now. Please try again.'
+  if (message.includes('invalid') || message.includes('wrong password') || message.includes('not found') || message.includes('credentials')) {
+    return 'Email or password is incorrect.'
+  }
+  if (message.includes('401') || message.includes('unauthorized')) {
+    return 'Email or password is incorrect.'
+  }
+  if (message.includes('timeout') || message.includes('network') || message.includes('fetch')) {
+    return 'Connection issue detected. Please check your internet and try again.'
+  }
+  return 'Unable to sign in right now. Please try again.'
+}
+
 function SignIn() {
   const navigate = useNavigate()
   const { signIn, isLoading } = useAuth()
@@ -73,7 +88,7 @@ function SignIn() {
         'Failed to sign in. Please check your credentials.'
       
       console.error('[SignIn] Error message:', errorMessage)
-      setApiError(errorMessage)
+      setApiError(getFriendlyAuthError(errorMessage))
     }
   }
 
@@ -97,7 +112,7 @@ function SignIn() {
             {/* API Error Display */}
             {apiError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 font-medium text-sm">Error: {apiError}</p>
+                <p className="text-red-700 font-medium text-sm">{apiError}</p>
               </div>
             )}
 

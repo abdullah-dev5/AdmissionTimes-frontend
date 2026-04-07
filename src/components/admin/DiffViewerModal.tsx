@@ -1,18 +1,62 @@
 import { useNavigate } from "react-router-dom"
 import { getChangeTypeColor, type AdminChangeLog } from "../../data/adminData"
 import { formatDateTime, getRelativeTime } from "../../utils/dateUtils"
-import { formatFieldLabel, sanitizeActorName, safeJsonParse, formatInlineValue } from "../../utils/changelogFormatting"
+import { formatFieldLabel, sanitizeActorName, safeJsonParse, formatInlineValue, isUuid } from "../../utils/changelogFormatting"
 
 interface DiffViewerModalProps {
 	log: AdminChangeLog
 	onClose: () => void
 }
 
+const isDateLikeField = (fieldName?: string) => {
+	if (!fieldName) return false
+	return /(date|deadline|time|updated|created|verified|submitted|timestamp)/i.test(fieldName)
+}
+
+const unwrapQuotedString = (value: string) => {
+	const trimmed = value.trim()
+	if (!trimmed) return trimmed
+
+	// Handle JSON-stringified primitive values, e.g. "2026-04-12T23:59:59.000Z".
+	if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+		try {
+			const parsed = JSON.parse(trimmed)
+			if (typeof parsed === "string") return parsed
+		} catch {
+			return trimmed.slice(1, -1)
+		}
+	}
+
+	return trimmed
+}
+
+const formatDateLikeValue = (raw: string) => {
+	const trimmed = unwrapQuotedString(raw)
+	if (!trimmed) return "(empty)"
+
+	// Keep date-only values as date-only for clarity.
+	const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+	if (dateOnlyMatch) {
+		const year = Number(dateOnlyMatch[1])
+		const month = Number(dateOnlyMatch[2])
+		const day = Number(dateOnlyMatch[3])
+		return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+			year: "numeric",
+			month: "short",
+			day: "numeric",
+		})
+	}
+
+	const parsed = new Date(trimmed)
+	if (Number.isNaN(parsed.getTime())) return raw
+	return formatDateTime(parsed.toISOString())
+}
+
 /**
  * Renders a value for display in the diff viewer modal
  * Handles arrays, objects, and primitives with nice formatting
  */
-const renderValue = (value: unknown, isOldValue?: boolean) => {
+const renderValue = (value: unknown, isOldValue?: boolean, fieldName?: string) => {
 	const normalized = safeJsonParse(value)
 
 	if (normalized === null || normalized === undefined || normalized === "") {
@@ -87,6 +131,23 @@ const renderValue = (value: unknown, isOldValue?: boolean) => {
 		)
 	}
 
+	if (typeof normalized === "string") {
+		const cleaned = unwrapQuotedString(normalized)
+		const display = isDateLikeField(fieldName) ? formatDateLikeValue(cleaned) : cleaned || "(empty)"
+
+		return (
+			<span
+				className="inline-block px-2 py-1 text-sm font-medium rounded break-words"
+				style={{
+					backgroundColor: isOldValue ? "#fee2e2" : "#dcfce7",
+					color: valueColor,
+				}}
+			>
+				{display}
+			</span>
+		)
+	}
+
 	// Default text with color-coding
 	return (
 		<span
@@ -152,7 +213,7 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 						<div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
 							<p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Modified By</p>
 							<p className="text-sm font-medium text-gray-900">{sanitizeActorName(log.modifiedBy)}</p>
-							{log.modifiedByUserId && (
+							{log.modifiedByUserId && !isUuid(log.modifiedByUserId) && (
 								<p className="text-xs text-gray-500 mt-1">ID: {log.modifiedByUserId}</p>
 							)}
 						</div>
@@ -233,7 +294,7 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 													Previous Value
 												</p>
 												<div className="max-h-48 overflow-y-auto">
-													{renderValue(change.oldValue, true)}
+													{renderValue(change.oldValue, true, change.field)}
 												</div>
 											</div>
 
@@ -243,7 +304,7 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 													Current Value
 												</p>
 												<div className="max-h-48 overflow-y-auto">
-													{renderValue(change.newValue, false)}
+													{renderValue(change.newValue, false, change.field)}
 												</div>
 											</div>
 										</div>

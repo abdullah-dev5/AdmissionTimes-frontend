@@ -5,6 +5,7 @@ import { analyticsEvents } from "../../data/adminData"
 import { formatDateTime } from "../../utils/dateUtils"
 import { DEFAULT_ITEMS_PER_PAGE } from "../../constants/pagination"
 import Pagination from "../../components/admin/Pagination"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 
 type AnalyticsRow = {
 	id: string | number
@@ -20,6 +21,18 @@ type AnalyticsRow = {
 	sessionId: string
 	metadata?: Record<string, any>
 	timestamp: string
+}
+
+const getFriendlyErrorMessage = (raw?: string) => {
+	const message = (raw || "").toLowerCase()
+	if (!message) return "Something went wrong while loading analytics. Please try again."
+	if (message.includes("401") || message.includes("unauthorized")) return "Your session has expired. Please sign in again."
+	if (message.includes("403") || message.includes("forbidden")) return "You do not have permission to view analytics."
+	if (message.includes("404")) return "Analytics data is currently unavailable."
+	if (message.includes("timeout") || message.includes("network") || message.includes("fetch")) {
+		return "We could not connect right now. Check your internet and try again."
+	}
+	return "We could not load analytics at the moment. Please try again shortly."
 }
 
 function AdminAnalytics() {
@@ -80,7 +93,7 @@ function AdminAnalytics() {
 			setApiAnalytics(transformed)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : "Failed to fetch analytics data"
-			setError(message)
+			setError(getFriendlyErrorMessage(message))
 			// Will fallback to mock data
 		} finally {
 			setLoading(false)
@@ -232,6 +245,16 @@ function AdminAnalytics() {
 		}
 	}
 
+	const showInitialLoading = loading && apiAnalytics.length === 0
+
+	if (showInitialLoading) {
+		return (
+			<AdminLayout>
+				<LoadingSpinner fullScreen message="Loading analytics..." />
+			</AdminLayout>
+		)
+	}
+
 	return (
 		<AdminLayout>
 			<div className="p-6">
@@ -245,11 +268,21 @@ function AdminAnalytics() {
 
 				{/* Error Banner */}
 				{error && (
-					<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-						<p className="text-sm text-red-800">{error}</p>
+					<div className="mb-6 rounded-2xl border border-red-200 bg-white shadow-sm p-5">
+						<div className="flex items-start gap-3">
+							<div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+								<svg className="w-4.5 h-4.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+								</svg>
+							</div>
+							<div>
+								<p className="text-sm font-semibold text-red-900">Unable to load analytics</p>
+								<p className="text-sm text-red-700 mt-1">{error}</p>
+							</div>
+						</div>
 						<button
 							onClick={() => setError(null)}
-							className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
+							className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium"
 						>
 							Dismiss
 						</button>
@@ -257,11 +290,7 @@ function AdminAnalytics() {
 				)}
 
 				{/* Loading Indicator */}
-				{loading && (
-					<div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-						<p className="text-sm text-blue-800">Loading analytics data...</p>
-					</div>
-				)}
+				{loading && <LoadingSpinner size="sm" message="Refreshing analytics..." />}
 
 				{/* Filters Section */}
 				<div className="bg-white rounded-lg shadow-sm p-6 mb-6">

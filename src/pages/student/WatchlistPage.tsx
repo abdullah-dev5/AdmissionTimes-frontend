@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining, type StudentAdmission } from '../../data/studentData'
+import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -401,12 +401,7 @@ function WatchlistPage() {
 
   // Get saved programs from shared data
   const savedPrograms = useMemo(() => {
-    const saved = admissions
-      .filter(a => a.saved)
-      .map(a => ({
-        ...a,
-        daysRemaining: calculateDaysRemaining(a.deadline),
-      }))
+    const saved = admissions.filter(a => a.saved)
     console.log('📚 [WatchlistPage] Filtered saved programs:', saved.length);
     return saved;
   }, [admissions])

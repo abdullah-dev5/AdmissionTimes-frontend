@@ -8,7 +8,7 @@ import { useUniversityStore } from "../store/universityStore"
 import { useAuthStore } from "../store/authStore"
 import { isRealtimeEnabled, supabase } from "../services/supabase"
 
-const DASHBOARD_POLL_MS = Math.max(5000, Number(import.meta.env.VITE_DASHBOARD_POLL_MS || 5000))
+const DASHBOARD_POLL_MS = Math.max(15000, Number(import.meta.env.VITE_DASHBOARD_POLL_MS || 60000))
 
 interface UniversityLayoutProps {
 	children: ReactNode
@@ -38,9 +38,47 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 		}
 
 		let refreshTimeout: number | null = null
+		let pollId: number | null = null
+		const channelStatus: Record<string, boolean> = {
+			notifications: false,
+			admissions: false,
+			activity: false,
+			watchlists: false,
+		}
+
+		const updatePollingState = () => {
+			const allSubscribed = Object.values(channelStatus).every(Boolean)
+
+			if (allSubscribed) {
+				if (pollId !== null) {
+					window.clearInterval(pollId)
+					pollId = null
+				}
+				return
+			}
+
+			if (pollId === null) {
+				pollId = window.setInterval(() => {
+					refresh()
+				}, DASHBOARD_POLL_MS)
+			}
+		}
+
+		const onChannelStatus = (key: keyof typeof channelStatus, status: string) => {
+			channelStatus[key] = status === "SUBSCRIBED"
+			updatePollingState()
+		}
 
 		const refresh = () => {
 			fetchNotifications().catch(() => {})
+			fetchDashboardData({ userId: user.id }).catch(() => {})
+		}
+
+		const refreshNotificationsOnly = () => {
+			fetchNotifications().catch(() => {})
+		}
+
+		const refreshDashboardOnly = () => {
 			fetchDashboardData({ userId: user.id }).catch(() => {})
 		}
 
@@ -68,9 +106,9 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 								table: "notifications",
 								filter: `recipient_id=eq.${user.id}`,
 							},
-							() => refreshDebounced()
+							() => refreshNotificationsOnly()
 						)
-						.subscribe(),
+						.subscribe((status) => onChannelStatus("notifications", status)),
 					supabase
 						.channel(`${channelNamePrefix}-admissions`)
 						.on(
@@ -82,7 +120,7 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 							},
 							() => refreshDebounced()
 						)
-						.subscribe(),
+						.subscribe((status) => onChannelStatus("admissions", status)),
 					supabase
 						.channel(`${channelNamePrefix}-activity`)
 						.on(
@@ -95,7 +133,7 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 							},
 							() => refreshDebounced()
 						)
-						.subscribe(),
+						.subscribe((status) => onChannelStatus("activity", status)),
 					supabase
 						.channel(`${channelNamePrefix}-watchlists`)
 						.on(
@@ -105,18 +143,26 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 								schema: "public",
 								table: "watchlists",
 							},
-							() => refreshDebounced()
+							() => refreshDashboardOnly()
 						)
-						.subscribe(),
+						.subscribe((status) => onChannelStatus("watchlists", status)),
 			  ]
 			: []
 
-		const pollId = window.setInterval(() => {
-			refresh()
-		}, DASHBOARD_POLL_MS)
+		if (!isRealtimeEnabled) {
+			if (pollId === null) {
+				pollId = window.setInterval(() => {
+					refresh()
+				}, DASHBOARD_POLL_MS)
+			}
+		} else {
+			updatePollingState()
+		}
 
 		return () => {
-			window.clearInterval(pollId)
+			if (pollId !== null) {
+				window.clearInterval(pollId)
+			}
 			if (refreshTimeout !== null) {
 				window.clearTimeout(refreshTimeout)
 			}

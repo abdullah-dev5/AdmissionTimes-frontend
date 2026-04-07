@@ -6,13 +6,204 @@ import LoadingDots from './LoadingDots'
 import ContextBadge from './ContextBadge'
 import QuickActionChips from './QuickActionChips'
 import aiService, { type ChatHistoryEntry } from '../../services/aiService'
-import { formatDisplayTime } from '../../utils/dateUtils'
+import { formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from '../../utils/dateUtils'
 
 interface Message {
   id: string
   text: string
   isUser: boolean
   timestamp: string
+}
+
+interface AiReplyPayload {
+  result_count?: number
+  results?: Array<{
+    id: string
+    title: string
+    degree_level: string | null
+    location: string | null
+    deadline: string | null
+    verification_status: string
+    university_id: string | null
+  }>
+  clarification_needed?: boolean
+  clarification_question?: string
+}
+
+const redactSensitiveData = (text: string): string => {
+  if (!text) return text
+
+  let safe = text
+
+  // Emails
+  safe = safe.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+
+  // Common API key formats and bearer tokens
+  safe = safe.replace(/\b(sk-[A-Za-z0-9]{20,})\b/g, '[redacted-key]')
+  safe = safe.replace(/\b(AIza[0-9A-Za-z\-_]{20,})\b/g, '[redacted-key]')
+  safe = safe.replace(/\b(BEARER\s+[A-Za-z0-9\-._~+/]+=*)\b/gi, 'Bearer [redacted-token]')
+
+  // JWT-like tokens
+  safe = safe.replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[redacted-jwt]')
+
+  // password/secret assignments in plain text
+  safe = safe.replace(/\b(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, '$1: [redacted]')
+
+  return safe
+}
+
+const formatIsoDateTimeInText = (text: string): string => {
+  return text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?\b/g, (match) => {
+    return formatDisplayDateTime(match, match)
+  })
+}
+
+const formatIsoDateOnlyInText = (text: string): string => {
+  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (match) => {
+    return formatDisplayDate(match, match)
+  })
+}
+
+const formatVerboseJsDateInText = (text: string): string => {
+  return text.replace(
+    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT[+-]\d{4}\s+\([^)]*\)\b/g,
+    (match) => {
+      return formatDisplayDateTime(match, match)
+    }
+  )
+}
+
+const toConversationalText = (text: string): string => {
+  const withDateTime = formatIsoDateTimeInText(text)
+  const withDateOnly = formatIsoDateOnlyInText(withDateTime)
+  return formatVerboseJsDateInText(withDateOnly)
+}
+
+const buildAdmissionResultsSummary = (results: Array<{
+  id: string
+  title: string
+  degree_level: string | null
+  location: string | null
+  deadline: string | null
+  verification_status: string
+}>): string => {
+  if (!results.length) return ''
+
+  const top = results.slice(0, 5)
+  const lines = top.map((item, index) => {
+    const deadlineText = item.deadline ? formatDisplayDate(item.deadline, item.deadline) : 'Not specified'
+    const degreeText = item.degree_level || 'Degree not specified'
+    const locationText = item.location || 'Location not specified'
+    const statusText = item.verification_status
+      ? item.verification_status.charAt(0).toUpperCase() + item.verification_status.slice(1)
+      : 'Unknown'
+
+    return [
+      `${index + 1}. ${redactSensitiveData(item.title)}`,
+      `- Degree: ${redactSensitiveData(degreeText)}`,
+      `- Location: ${redactSensitiveData(locationText)}`,
+      `- Deadline: ${deadlineText}`,
+      `- Status: ${redactSensitiveData(statusText)}`,
+    ].join('\n')
+  })
+
+  return ['Here are the most relevant admissions:', ...lines].join('\n\n')
+}
+
+const STOP_WORDS = new Set([
+  'any', 'new', 'latest', 'show', 'find', 'give', 'me', 'please', 'program', 'programs',
+  'admission', 'admissions', 'in', 'of', 'the', 'a', 'an', 'for', 'with', 'to', 'from', 'on', 'at',
+])
+
+const extractQueryKeywords = (query?: string): string[] => {
+  if (!query) return []
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token))
+}
+
+const filterResultsByQuery = (
+  results: Array<{
+    id: string
+    title: string
+    degree_level: string | null
+    location: string | null
+    deadline: string | null
+    verification_status: string
+    university_id: string | null
+  }>,
+  query?: string
+) => {
+  const keywords = extractQueryKeywords(query)
+  if (!keywords.length) return results
+
+  const requiredMatches = keywords.length >= 2 ? 2 : 1
+
+  return results.filter((item) => {
+    const haystack = [
+      item.title,
+      item.degree_level || '',
+      item.location || '',
+      item.verification_status || '',
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    const matches = keywords.filter((keyword) => haystack.includes(keyword)).length
+    return matches >= requiredMatches
+  })
+}
+
+const buildConversationalReply = (
+  answer: string,
+  payload?: AiReplyPayload,
+  query?: string
+): string => {
+  const cleanAnswer = redactSensitiveData(toConversationalText(answer))
+  const originalResults = payload?.results || []
+  const results = filterResultsByQuery(originalResults, query)
+  const hasResultListInAnswer = /(?:^|\n)\s*\d+[\).]|here are the most relevant admissions|i found \d+ match/i.test(cleanAnswer)
+
+  if (!results.length) {
+    if (payload?.clarification_needed && payload.clarification_question) {
+      return [cleanAnswer, redactSensitiveData(payload.clarification_question)].join('\n\n')
+    }
+    return cleanAnswer
+  }
+
+  if (hasResultListInAnswer) {
+    return cleanAnswer
+  }
+
+  const resultsSummary = buildAdmissionResultsSummary(results)
+  return [cleanAnswer, resultsSummary].filter(Boolean).join('\n\n')
+}
+
+const buildDynamicFallbackFromPayload = (query: string, payload?: AiReplyPayload): string => {
+  const results = filterResultsByQuery(payload?.results || [], query)
+  if (results.length > 0) {
+    return [
+      'I could not generate a full explanation, but I found these relevant programs:',
+      buildAdmissionResultsSummary(results),
+    ].join('\n\n')
+  }
+
+  if (payload?.clarification_needed && payload.clarification_question) {
+    return payload.clarification_question
+  }
+
+  const keywords = extractQueryKeywords(query)
+  if (keywords.length > 0) {
+    return `I could not find a reliable answer for "${query}" right now. Try narrowing it with ${keywords.slice(0, 2).join(' + ')} and a city or degree level.`
+  }
+
+  return 'I could not generate a response right now. Please try again with a slightly more specific query.'
+}
+
+const isTransientStatus = (status?: number): boolean => {
+  return status === 429 || status === 502 || status === 503 || status === 504
 }
 
 function ChatPanel() {
@@ -86,17 +277,45 @@ function ChatPanel() {
     const historySnapshot: ChatHistoryEntry[] = messages
       .filter(m => m.id !== '1') // skip welcome message
       .slice(-4)
-      .map(m => ({ role: m.isUser ? 'user' : 'ai', text: m.text }))
+        .map(m => ({ role: m.isUser ? 'user' : 'ai', text: redactSensitiveData(m.text) }))
 
     try {
-      const response = await aiService.chat(messageText, context, historySnapshot)
+      const requestWithRetry = async () => {
+        try {
+          return await aiService.chat(messageText, context, historySnapshot)
+        } catch (firstError) {
+          const axiosError = firstError as AxiosError<{ message?: string }>
+          const status = axiosError.response?.status
+          if (!isTransientStatus(status)) {
+            throw firstError
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          return await aiService.chat(messageText, context, historySnapshot)
+        }
+      }
+
+      const response = await requestWithRetry()
+
       const data = response.data
       const answer = data.answer?.trim()
-      const finalAnswer = resolveAssistantReply(messageText, answer, context)
+      const payload: AiReplyPayload = {
+        result_count: data.result_count,
+        results: data.results,
+        clarification_needed: data.clarification_needed,
+        clarification_question: data.clarification_question,
+      }
+      const finalAnswer = resolveAssistantReply(messageText, answer, payload)
+      const conversationalAnswer = buildConversationalReply(finalAnswer, {
+        result_count: data.result_count,
+        results: data.results,
+        clarification_needed: data.clarification_needed,
+        clarification_question: data.clarification_question,
+      }, messageText)
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: finalAnswer,
+        text: redactSensitiveData(conversationalAnswer),
         isUser: false,
         timestamp: formatDisplayTime(new Date().toISOString())
       }
@@ -115,61 +334,12 @@ function ChatPanel() {
     }
   }
 
-  const isRefusalReply = (text: string): boolean => {
-    const lower = text.toLowerCase()
-    return (
-      lower.includes('i can only help with') ||
-      lower.includes('i cannot assist') ||
-      lower.includes('i cannot access or explain') ||
-      lower.includes('cannot manage')
-    )
-  }
-
-  const getGuidanceResponse = (query: string, activeContext: string): string => {
-    const lowerQuery = query.toLowerCase()
-
-    if (lowerQuery.includes('compare')) {
-      return [
-        'You can compare programs using this flow:',
-        '- Open Compare and select at least two saved programs.',
-        '- Review fee, deadline, location, and eligibility side by side.',
-        '- Save the better option to your watchlist for reminders.',
-      ].join('\n')
-    }
-
-    if (lowerQuery.includes('alert') || lowerQuery.includes('reminder') || lowerQuery.includes('watchlist')) {
-      return [
-        'Here is how to manage alerts and watchlist:',
-        '- Open Watchlist and enable alerts for selected programs.',
-        '- Check Deadlines for urgent items this week.',
-        '- Remove expired programs to keep your list clean.',
-      ].join('\n')
-    }
-
-    if (lowerQuery.includes('status') || lowerQuery.includes('application')) {
-      return [
-        'Application status guide:',
-        '- Pending: update is still being processed.',
-        '- Verified: listing is approved by admins.',
-        '- Rejected: check remarks in notifications or dashboard.',
-      ].join('\n')
-    }
-
-    return [
-      `I can help with ${activeContext} tasks in a practical way:`,
-      '- Find programs by field, city, degree, and deadline.',
-      '- Compare saved programs by fee, deadline, and eligibility.',
-      '- Explain statuses and suggest next actions.',
-    ].join('\n')
-  }
-
-  const resolveAssistantReply = (query: string, answer: string | undefined, activeContext: string): string => {
-    if (!answer) return getFallbackResponse(query, activeContext)
-    if (isRefusalReply(answer)) return getGuidanceResponse(query, activeContext)
+  const resolveAssistantReply = (query: string, answer: string | undefined, payload?: AiReplyPayload): string => {
+    if (!answer) return buildDynamicFallbackFromPayload(query, payload)
     return answer
   }
 
-  const resolveRequestFailureReply = (query: string, activeContext: string, error: unknown): string => {
+  const resolveRequestFailureReply = (_query: string, _activeContext: string, error: unknown): string => {
     const axiosError = error as AxiosError<{ message?: string }>
     const status = axiosError.response?.status
     const apiMessage = axiosError.response?.data?.message?.toLowerCase() || ''
@@ -179,43 +349,14 @@ function ChatPanel() {
     }
 
     if (status === 503 || apiMessage.includes('gemini') || apiMessage.includes('not configured')) {
-      return [
-        'AI service is temporarily unavailable right now.',
-        getGuidanceResponse(query, activeContext),
-      ].join('\n')
+      return 'AI service is temporarily unavailable right now. Please try again in a moment.'
     }
 
-    return getGuidanceResponse(query, activeContext)
-  }
-
-  const getFallbackResponse = (query: string, activeContext: string): string => {
-    const lowerQuery = query.toLowerCase()
-    const suggestions: string[] = []
-
-    if (lowerQuery.includes('deadline') || lowerQuery.includes('alert') || lowerQuery.includes('reminder')) {
-      suggestions.push('Open Deadlines to see upcoming dates and urgent items.')
-      suggestions.push('Use Watchlist alerts so you receive reminders before due dates.')
+    if (isTransientStatus(status)) {
+      return 'The assistant is temporarily busy. Please retry your question in a few seconds.'
     }
 
-    if (lowerQuery.includes('compare') || lowerQuery.includes('fee') || lowerQuery.includes('cheap')) {
-      suggestions.push('Open Compare and pick at least two programs from your saved list.')
-      suggestions.push('Use Search filters for location, degree level, and fee range first.')
-    }
-
-    if (lowerQuery.includes('status') || lowerQuery.includes('application')) {
-      suggestions.push('Check Dashboard stats for active applications and urgent tasks.')
-      suggestions.push('Open Notifications for recent status updates from universities.')
-    }
-
-    if (suggestions.length === 0) {
-      suggestions.push(`Try asking a shorter query in ${activeContext}.`)
-      suggestions.push('You can ask for deadlines, comparison, eligibility, or fee insights.')
-    }
-
-    return [
-      'AI response is temporarily unavailable. You can still continue with these steps:',
-      ...suggestions.map((s) => `- ${s}`),
-    ].join('\n')
+    return 'I could not process that request right now. Please try again.'
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {

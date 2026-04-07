@@ -5,8 +5,20 @@ import {
   type ReminderDeliveryLog,
   type SchedulerHealthResult,
 } from "../../services/adminService"
+import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { showConfirm, showError, showSuccess } from "../../utils/swal"
+
+const getFriendlyErrorMessage = (raw?: string | null) => {
+  const message = (raw || "").toLowerCase()
+  if (!message) return "Something went wrong while loading deadline system data."
+  if (message.includes("401") || message.includes("unauthorized")) return "Your session has expired. Please sign in again."
+  if (message.includes("403") || message.includes("forbidden")) return "You do not have permission to access this page."
+  if (message.includes("timeout") || message.includes("network") || message.includes("fetch")) {
+    return "Connection issue detected. Please check your internet and try again."
+  }
+  return "We could not complete this request right now. Please try again shortly."
+}
 
 function AdminDeadlineSystem() {
   const [statusFilter, setStatusFilter] = useState<"sent" | "failed" | "deduped" | "all">("failed")
@@ -186,8 +198,18 @@ function AdminDeadlineSystem() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-            {error}
+          <div className="mb-6 rounded-2xl border border-red-200 bg-white shadow-sm p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4.5 h-4.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-red-900">Unable to load deadline system</p>
+                <p className="text-sm text-red-700 mt-1">{getFriendlyErrorMessage(error)}</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -246,7 +268,7 @@ function AdminDeadlineSystem() {
           </div>
 
           {loadingLogs ? (
-            <p className="text-sm text-gray-600">Loading reminder logs...</p>
+            <LoadingSpinner size="sm" message="Loading reminder logs..." />
           ) : logs.length === 0 ? (
             <p className="text-sm text-gray-500">No reminder logs found for this filter.</p>
           ) : (

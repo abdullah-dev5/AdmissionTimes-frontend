@@ -19,6 +19,144 @@ const toObject = (value: unknown): Record<string, any> => {
   return {}
 }
 
+const isUuidLike = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
+const mapActorTypeToLabel = (actorType: string): string | undefined => {
+  const normalized = actorType.trim().toLowerCase()
+  if (!normalized) return undefined
+
+  if (normalized.includes('admin')) return 'Admin'
+  if (normalized.includes('university') || normalized.includes('rep')) return 'University Rep'
+  if (normalized.includes('system')) return undefined
+
+  return undefined
+}
+
+const inferActorLabelFromAction = (change: any): string | undefined => {
+  const actionType = String(change?.action_type || '').trim().toLowerCase()
+  const fieldName = String(change?.field_name || change?.field || '').trim().toLowerCase()
+
+  const adminOwnedFields = new Set([
+    'verification_status',
+    'verified_by',
+    'verified_at',
+    'rejection_reason',
+    'admin_notes',
+    'verification_comments',
+    'status',
+    'status_label',
+  ])
+
+  // Verification lifecycle is admin-owned.
+  if (actionType === 'verified' || actionType === 'rejected') {
+    return 'Admin'
+  }
+
+  if (adminOwnedFields.has(fieldName)) {
+    return 'Admin'
+  }
+
+  // Some backends send status_changed for many edits; only treat as admin when status fields changed.
+  if (actionType === 'status_changed') {
+    return adminOwnedFields.has(fieldName) ? 'Admin' : 'University Rep'
+  }
+
+  // In university dashboard, create/update content edits come from university portal.
+  if (actionType === 'created' || actionType === 'updated') {
+    return 'University Rep'
+  }
+
+  // Fallback by field ownership when action_type is missing or noisy.
+  if (fieldName) {
+    return adminOwnedFields.has(fieldName) ? 'Admin' : 'University Rep'
+  }
+
+  return undefined
+}
+
+const normalizeActorLabel = (change: any): string => {
+  const modifiedBy = typeof change?.modified_by === 'string' ? change.modified_by.trim() : ''
+  const changedBy = typeof change?.changed_by === 'string' ? change.changed_by.trim() : ''
+  const actorType = typeof change?.actor_type === 'string' ? change.actor_type : ''
+
+  const actorTypeLabel = mapActorTypeToLabel(actorType)
+  const inferredLabel = inferActorLabelFromAction(change)
+
+  // Human-readable modified_by is preferred when provided.
+  if (modifiedBy && modifiedBy.toLowerCase() !== 'system' && !isUuidLike(modifiedBy) && Number.isNaN(Date.parse(modifiedBy))) {
+    return modifiedBy
+  }
+
+  // If backend explicitly provides actor type, trust it for role label.
+  if (actorTypeLabel) {
+    return actorTypeLabel
+  }
+
+  // If actor type is missing/ambiguous (often system), infer from action semantics.
+  if (inferredLabel) {
+    return inferredLabel
+  }
+
+  // Keep non-UUID changed_by values (e.g., username/email) when available.
+  if (changedBy && changedBy.toLowerCase() !== 'system' && !isUuidLike(changedBy) && Number.isNaN(Date.parse(changedBy))) {
+    return changedBy
+  }
+
+  // Default to Admin only when actor cannot be determined.
+  return 'Admin'
+}
+
+const normalizeDiffValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '—'
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return '—'
+
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (typeof parsed === 'string' || typeof parsed === 'number' || typeof parsed === 'boolean') {
+        return String(parsed)
+      }
+      return JSON.stringify(parsed)
+    } catch {
+      return trimmed
+    }
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const toIsoOrNow = (...candidates: unknown[]): string => {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue
+    const parsed = new Date(candidate)
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
+  }
+  return new Date().toISOString()
+}
+
+const deriveChangeStatus = (change: any): ChangeLogItem['status'] | undefined => {
+  const fieldName = String(change.field_name || change.field || '').toLowerCase()
+  if (!fieldName) return undefined
+
+  if (fieldName === 'verification_status' || fieldName === 'status' || fieldName === 'status_label') {
+    const newValue = normalizeDiffValue(change.new_value)
+    return mapVerificationStatusToAdmissionStatus(newValue)
+  }
+
+  return undefined
+}
+
 /**
  * Transform backend UniversityDashboard to frontend data structures
  * 
@@ -54,6 +192,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
       (typeof links.portalUrl === 'string' ? links.portalUrl : '') ||
       ''
     const eligibility =
+      admission.eligibility_text ||
       admission.eligibility ||
       (typeof requirements.eligibility === 'string' ? requirements.eligibility : '') ||
       (typeof requirements.criteria === 'string' ? requirements.criteria : '') ||
@@ -69,7 +208,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     overview: admission.description || admission.overview,
     
     // Program classification
-    degreeType: admission.degree_level,
+    degreeType: admission.degree_type || admission.degree_level,
     program_type: admission.program_type,
     field_of_study: admission.field_of_study,
     
@@ -81,22 +220,26 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
     requirements,
     
     // Financial information
-    fee: admission.application_fee?.toString() || admission.fee?.toString() || '0',
+    fee: (typeof admission.fee_amount === 'number' ? admission.fee_amount : admission.application_fee)?.toString() || admission.fee?.toString() || '0',
     tuition_fee: admission.tuition_fee?.toString(),
     currency: admission.currency,
     
     // Important dates
-    deadline: admission.deadline || new Date().toISOString(),
+    deadline: admission.deadline_iso || admission.deadline || new Date().toISOString(),
     start_date: admission.start_date,
     
     // Web presence
-    website_url: admission.website_url,
-    websiteUrl,
-    admission_portal_link: admission.admission_portal_link,
-    admissionPortalLink,
+    website_url: admission.university_website_url || admission.website_url,
+    websiteUrl: admission.university_website_url || websiteUrl,
+    admission_portal_link: admission.admission_portal_url || admission.admission_portal_link,
+    admissionPortalLink: admission.admission_portal_url || admissionPortalLink,
     
     // Status & verification
-    status: mapVerificationStatusToAdmissionStatus(admission.verification_status || admission.status || 'pending'),
+    status: admission.status_label === 'Verified'
+      ? 'Verified'
+      : admission.status_label === 'Closed'
+      ? 'Rejected'
+      : mapVerificationStatusToAdmissionStatus(admission.verification_status || admission.status || 'pending'),
     verification_status: admission.verification_status,
     verified_at: admission.verified_at,
     verifiedBy: admission.verified_by,
@@ -121,7 +264,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
       admission.remarks ||
       '',
     eligibility,
-    academicYear: admission.academic_year || extractYear(admission.deadline || admission.created_at || ''),
+    academicYear: admission.academic_year || extractYear((admission.deadline_iso || admission.deadline || admission.created_at || '')),
   })});
 
   if (isDashboardDebugEnabled) {
@@ -131,9 +274,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
   // Transform recent_changes to ChangeLogItem objects
   const changeLogs: ChangeLogItem[] = (data.recent_changes || []).map((change: any, index: number) => {
     const fieldName = change.field_name || change.field || 'status'
-    const status = fieldName === 'verification_status'
-      ? mapVerificationStatusToAdmissionStatus(change.new_value || '')
-      : undefined
+    const status = deriveChangeStatus(change)
     const remarks =
       change.reason ||
       change.notes ||
@@ -144,14 +285,15 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
 
     return {
       id: index + 1,
+      admissionId: change.admission_id || undefined,
       admission: change.program_title || change.admission_title || 'Admission',
-      modifiedBy: change.changed_by || change.actor_type || 'Admin',
-      date: new Date(change.changed_at || change.created_at || '').toISOString(),
+      modifiedBy: normalizeActorLabel(change),
+      date: toIsoOrNow(change.changed_at_iso, change.changed_at, change.created_at),
       diff: [
         {
           field: fieldName,
-          old: change.old_value || '—',
-          new: change.new_value || '—',
+          old: normalizeDiffValue(change.old_value),
+          new: normalizeDiffValue(change.new_value),
         },
       ],
       status,

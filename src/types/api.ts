@@ -96,6 +96,22 @@ export interface Admission {
   
   // RELATIONSHIPS: Populated when joining with other tables
   universities?: University | null;  // Populated from university_id join
+
+  // Phase 0 additive normalized contract fields (backend single source of truth)
+  contract_version?: number;
+  degree_label?: string;
+  degree_type?: string;
+  deadline_iso?: string | null;
+  days_remaining?: number;
+  program_status?: 'Open' | 'Closing Soon' | 'Closed';
+  fee_amount?: number;
+  fee_display?: string;
+  eligibility_text?: string | null;
+  university_website_url?: string | null;
+  admission_portal_url?: string | null;
+  primary_apply_url?: string | null;
+  status_label?: 'Verified' | 'Pending' | 'Closed' | 'Draft';
+  match_label?: string;
 }
 
 /**
@@ -159,6 +175,7 @@ export interface AiSummarizeResponse {
 export interface ParsedPdfData {
   title: string;
   degree_level: string;
+  field_of_study?: string;
   deadline: string;
   application_fee: number;
   location: string;

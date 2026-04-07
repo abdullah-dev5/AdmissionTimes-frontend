@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, calculateDaysRemaining } from '../../data/studentData'
+import { getStatusColor } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,6 +9,11 @@ import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 import { showInfo, showWarning } from '../../utils/swal'
+
+const normalizeDeadlineDate = (deadline?: string | null) => {
+  if (!deadline) return ''
+  return String(deadline).substring(0, 10)
+}
 
 function SearchAdmissions() {
   const navigate = useNavigate()
@@ -151,7 +156,10 @@ function SearchAdmissions() {
 
     // Deadline filter
     if (deadlineFilter) {
-      filtered = filtered.filter(a => a.deadline <= deadlineFilter)
+      filtered = filtered.filter(a => {
+        const normalized = normalizeDeadlineDate(a.deadline)
+        return normalized !== '' && normalized <= deadlineFilter
+      })
       console.log('🔍 [Filter] After deadline filter:', filtered.length);
     }
 
@@ -545,7 +553,7 @@ function SearchAdmissions() {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <span className={calculateDaysRemaining(admission.deadline) <= 7 ? 'text-red-600 font-medium' : 'text-gray-600'}>{admission.deadlineDisplay}</span>
+                          <span className={admission.daysRemaining <= 7 ? 'text-red-600 font-medium' : 'text-gray-600'}>{admission.deadlineDisplay}</span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
