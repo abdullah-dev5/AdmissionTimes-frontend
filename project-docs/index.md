@@ -13,6 +13,7 @@
 ## Modules
 
 - [student-module.md](student-module.md)
+- [recommendations-flow.md](recommendations-flow.md)
 - [university-module.md](university-module.md)
 - [user-structure.md](user-structure.md)
 

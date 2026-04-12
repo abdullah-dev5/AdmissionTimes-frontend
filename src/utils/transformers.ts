@@ -164,6 +164,12 @@ export function transformAdmission(
  * @returns Transformed StudentNotification object
  */
 export function transformNotification(backend: Notification): StudentNotification {
+  const parsedActionPath = parseInternalActionPath(backend.action_url)
+  const relatedEntityType = (backend.related_entity_type || '').toLowerCase()
+  const admissionIdFromAction = extractProgramIdFromPath(parsedActionPath)
+  const shouldUseRelatedEntityAsAdmission =
+    !relatedEntityType || relatedEntityType.includes('admission') || relatedEntityType.includes('program')
+
   return {
     id: backend.id,
     type: mapNotificationType(backend.notification_type),
@@ -174,8 +180,43 @@ export function transformNotification(backend: Notification): StudentNotificatio
     read: backend.is_read,
     icon: getNotificationIcon(backend.notification_type),
     iconColor: getNotificationColor(backend.priority),
-    admissionId: backend.related_entity_id || undefined,
+    admissionId:
+      admissionIdFromAction ||
+      (shouldUseRelatedEntityAsAdmission ? backend.related_entity_id || undefined : undefined),
+    actionUrl: parsedActionPath || undefined,
   };
+}
+
+function parseInternalActionPath(actionUrl: string | null | undefined): string | null {
+  if (!actionUrl) {
+    return null
+  }
+
+  const raw = actionUrl.trim()
+  if (!raw) {
+    return null
+  }
+
+  if (raw.startsWith('/')) {
+    return raw
+  }
+
+  try {
+    const parsed = new URL(raw)
+    const joinedPath = `${parsed.pathname}${parsed.search}${parsed.hash}`
+    return joinedPath.startsWith('/') ? joinedPath : null
+  } catch {
+    return null
+  }
+}
+
+function extractProgramIdFromPath(path: string | null): string | undefined {
+  if (!path) {
+    return undefined
+  }
+
+  const match = path.match(/\/program\/([^/?#]+)/i)
+  return match?.[1]
 }
 
 function calculateProgramStatusFromDays(daysRemaining: number): 'Open' | 'Closing Soon' | 'Closed' {

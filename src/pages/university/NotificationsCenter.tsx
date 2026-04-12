@@ -105,14 +105,19 @@ function NotificationCard({
 	onOpen: (id?: string) => void
 }) {
 	const badge = TYPE_STYLES[item.type]
+	const isRejectedNotification = /\breject(ed|ion)?\b|declin(ed|e)|not approved/i.test(
+		`${item.title} ${item.message}`
+	)
+	const unreadBorderClass = isRejectedNotification ? "border-red-500" : "border-blue-500"
+	const unreadDotClass = isRejectedNotification ? "bg-red-500" : "bg-blue-500"
 	return (
 		<div
 			className={`bg-white shadow-sm rounded-xl p-4 mb-3 flex items-start justify-between transition-colors ${
-				item.read ? "" : "border-l-4 border-blue-500"
+				item.read ? "" : `border-l-4 ${unreadBorderClass}`
 			}`}
 		>
 			<div className="flex items-start gap-3">
-				<div className={`w-2 h-2 rounded-full mt-2 ${item.read ? "bg-gray-300" : "bg-blue-500"}`} />
+				<div className={`w-2 h-2 rounded-full mt-2 ${item.read ? "bg-gray-300" : unreadDotClass}`} />
 				<div>
 					<div className="flex items-center gap-2">
 						<span className="font-medium text-gray-900">{item.title}</span>

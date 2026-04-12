@@ -101,6 +101,27 @@ function Notifications() {
 
   const handleNotificationClick = (notification: StudentNotification) => {
     handleMarkRead(notification.id)
+    const actionUrl = notification.actionUrl?.trim()
+    if (actionUrl) {
+      const programPathMatch = actionUrl.match(/^\/program\/([^/?#]+)/i)
+      if (programPathMatch) {
+        navigate(`/program/${programPathMatch[1]}`)
+        return
+      }
+
+      const apiAdmissionMatch = actionUrl.match(/^\/(?:api\/v\d+\/)?admissions\/([^/?#]+)/i)
+      if (apiAdmissionMatch) {
+        navigate(`/program/${apiAdmissionMatch[1]}`)
+        return
+      }
+
+      // Keep existing behavior for valid in-app paths, but avoid navigating to raw API URLs.
+      if (actionUrl.startsWith('/') && !actionUrl.startsWith('/api/')) {
+        navigate(actionUrl)
+        return
+      }
+    }
+
     if (notification.admissionId) {
       navigate(`/program/${notification.admissionId}`)
     }

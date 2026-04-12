@@ -496,10 +496,6 @@ function ViewAllAdmissions() {
                           <span className="text-sm text-slate-500">Location</span>
                           <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.location || '—'}</span>
                         </div>
-                        <div className="flex justify-between gap-3">
-                          <span className="text-sm text-slate-500">Duration</span>
-                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.duration || '—'}</span>
-                        </div>
                       </div>
                     </div>
 
@@ -517,10 +513,6 @@ function ViewAllAdmissions() {
                         <div className="flex justify-between gap-3">
                           <span className="text-sm text-slate-500">Application Fee</span>
                           <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.fee || selectedAdmission.tuition_fee || '—'}</span>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                          <span className="text-sm text-slate-500">Currency</span>
-                          <span className="text-sm font-medium text-slate-900 text-right">{selectedAdmission.currency || '—'}</span>
                         </div>
                       </div>
                     </div>
