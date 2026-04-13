@@ -12,6 +12,8 @@ import { recommendationsService } from '../../services/recommendationsService'
 import { transformAdmission } from '../../utils/transformers'
 
 const RECOMMENDATION_MIN_SCORE = 50
+const RECOMMENDATION_RENDER_MIN_SCORE = 70
+const RECOMMENDATION_RENDER_LIMIT = 4
 
 function StudentDashboard() {
   const navigate = useNavigate()
@@ -78,13 +80,16 @@ function StudentDashboard() {
   const recommendedPrograms = useMemo(() => {
     if (apiRecommendedPrograms.length > 0) {
       return apiRecommendedPrograms
+        .filter(a => (a.matchNumeric || 0) > RECOMMENDATION_RENDER_MIN_SCORE)
+        .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
+        .slice(0, RECOMMENDATION_RENDER_LIMIT)
     }
 
     // Fallback: local heuristic when API recommendations are temporarily unavailable.
     return admissions
-      .filter(a => a.matchNumeric && a.matchNumeric >= RECOMMENDATION_MIN_SCORE)
+      .filter(a => (a.matchNumeric || 0) > RECOMMENDATION_RENDER_MIN_SCORE)
       .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
-      .slice(0, 10)
+      .slice(0, RECOMMENDATION_RENDER_LIMIT)
   }, [admissions, apiRecommendedPrograms])
 
   useEffect(() => {
@@ -335,8 +340,8 @@ function StudentDashboard() {
                 </div>
                 <p className="text-sm text-gray-600 mb-1">Recommendations</p>
                 <p className="text-3xl font-bold mb-1" style={{ color: '#111827' }}>{stats.recommendations}</p>
-                <p className="text-xs" style={{ color: '#10B981' }}>AI-powered</p>
-              </div>
+      {/*           <p className="text-xs" style={{ color: '#10B981' }}>AI-powered</p>
+          */}    </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

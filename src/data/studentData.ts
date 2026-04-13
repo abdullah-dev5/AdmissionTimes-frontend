@@ -46,6 +46,7 @@ export interface StudentNotification {
   icon: string
   iconColor: string
   admissionId?: string
+  actionUrl?: string
 }
 
 // Comprehensive admissions data covering all cases

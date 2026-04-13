@@ -32,11 +32,11 @@ function AdminSidebar() {
 			icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
 			link: "/admin/notifications",
 		},
-		{
+	{/* 	{
 			name: "Email Logs",
 			icon: "M16 12H8m8 4H8m8-8H8m-2 12h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
 			link: "/admin/email-logs",
-		},
+		},*/},
 		{
 			name: "Create Uni Rep",
 			icon: "M12 4a4 4 0 110 8 4 4 0 010-8zm0 10c4.418 0 8 1.79 8 4v2H4v-2c0-2.21 3.582-4 8-4z",

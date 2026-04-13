@@ -77,6 +77,8 @@ function AdminDashboard() {
 	const [totalUsers, setTotalUsers] = useState(0)
 	const [totalAdmissions, setTotalAdmissions] = useState(0)
 	const [emailMetrics, setEmailMetrics] = useState<EmailMetricsResult | null>(null)
+	const [pendingAdmissions, setPendingAdmissions] = useState<any[]>([])
+	const [pendingAdmissionsLoaded, setPendingAdmissionsLoaded] = useState(false)
 	const [_loading, _setLoading] = useState(false)
 	const [_error, _setError] = useState<string | null>(null)
 
@@ -169,7 +171,14 @@ function AdminDashboard() {
 	 * Transform pending verifications from API format to UI format
 	 */
 	const transformPendingVerifications = (apiData: any[]) => {
-		return (apiData || []).map((item: any) => {
+		return (apiData || [])
+			.filter((item: any) => {
+				const status = String(item?.verification_status || item?.status || '').toLowerCase()
+				const isPending = status === 'pending' || status === ''
+				const isActive = item?.is_active !== false && !item?.deleted_at
+				return isPending && isActive
+			})
+			.map((item: any) => {
 			const submittedSource = item.submitted_on || item.submitted_at || item.created_at
 			return {
 				id: item.admission_id || item.id,
@@ -179,7 +188,7 @@ function AdminDashboard() {
 				submittedOn: submittedSource ? new Date(submittedSource).toISOString().split('T')[0] : 'N/A',
 				status: item.status_label || 'Pending Audit',
 			}
-		})
+			})
 	}
 
 	/**
@@ -256,6 +265,14 @@ function AdminDashboard() {
 			setTotalAdmissions(totalAdmissionsCount)
 			setAnalyticsData(buildRealtimeAnalytics(admissionsData))
 
+			// Fetch fresh pending admissions for "Awaiting Verification" table.
+			const pendingResponse = await admissionsService.listAdmin({
+				verification_status: 'pending',
+				limit: 100,
+			})
+			setPendingAdmissions((pendingResponse.data || []).filter((item: any) => item?.is_active !== false && !item?.deleted_at))
+			setPendingAdmissionsLoaded(true)
+
 			// Fetch users count
 			const usersResponse = await usersService.list({ limit: 1, page: 1 })
 			const userCount = usersResponse.pagination?.total || 0
@@ -275,11 +292,13 @@ function AdminDashboard() {
 			_setError(err.message || 'Failed to load dashboard data')
 		} finally {
 			_setLoading(false)
+			setPendingAdmissionsLoaded(true)
 		}
 	}
 
 	// Transform API data to UI format with enriched admission titles
-	const transformedPendingVerifications = transformPendingVerifications(apiDashboard?.pending_verifications)
+	const pendingSource = pendingAdmissionsLoaded ? pendingAdmissions : (apiDashboard?.pending_verifications || [])
+	const transformedPendingVerifications = transformPendingVerifications(pendingSource)
 	const transformedRecentActions = transformRecentActions(apiDashboard?.recent_actions)
 
 	// Use only real API data - no mock fallbacks

@@ -7,10 +7,9 @@ import {
 	type VerificationItem,
 	type VerificationStatus,
 } from "../../data/adminData"
-import { useWatcherNotifications } from "../../hooks/useWatcherNotifications"
-import { UpdateNotificationToast } from "../../components/admin/UpdatedBadge"
 import { formatDisplayDate, formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
+import { showSuccessToast } from "../../utils/swal"
 
 const formatLabel = (value: string) =>
 	value
@@ -172,10 +171,6 @@ function AdminVerificationCenter() {
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [submitting, setSubmitting] = useState(false)
-
-	// ✅ Initialize watcher notifications hook
-	const { notifyWatchers, notifications, dismissNotification } =
-		useWatcherNotifications()
 
 	// Fetch pending admissions on component mount
 	useEffect(() => {
@@ -389,6 +384,15 @@ function AdminVerificationCenter() {
 		}
 	}
 
+	const closeReviewModal = () => {
+		setSelectedItem(null)
+		setActionType(null)
+		setRemarks("")
+		if (location.state?.selectedId) {
+			navigate(`${location.pathname}${location.search}`, { replace: true, state: {} })
+		}
+	}
+
 	const handleActionSelect = (action: "Verify" | "Reject" | "Revision") => {
 		setActionType(action)
 		setRemarks("")
@@ -432,33 +436,22 @@ function AdminVerificationCenter() {
 				await adminService.requestRevision(selectedItem.id, remarks)
 			}
 
-			// ✅ Notify watchers about the change (after successful action)
-			const resolvedChangeType = actionType === 'Verify' || actionType === 'Reject' || actionType === 'Revision'
-				? 'Admin Edit'
-				: 'Manual Edit'
+			await showSuccessToast(
+				actionType === 'Verify'
+					? 'Admission marked as verified.'
+					: actionType === 'Reject'
+						? 'Admission rejected successfully.'
+						: 'Revision request submitted successfully.',
+				'Verification Updated',
+				'top-end'
+			)
 
-			const mockChangelog: any = {
-				id: `changelog-${Date.now()}`,
-				admissionId: selectedItem.id,
-				admissionTitle: selectedItem.admissionTitle,
-				changeType: resolvedChangeType,
-				modifiedBy: 'Admin', // TODO: Get actual user name from auth context
-				modifiedByUserId: 'admin-user-id',
-				summary: `${actionType} admission`,
-				timestamp: new Date().toISOString(),
-				diff: [],
-				actor_type: 'admin' as const,
-				action_type: resolvedChangeType,
-			}
-			notifyWatchers(mockChangelog)
+			// Close immediately after successful action.
+			// This avoids route-state driven modal reopen while list refreshes.
+			closeReviewModal()
 
 			// Refresh the list after successful action
 			await fetchAllAdmissions()
-
-			// Close modal and reset
-			setSelectedItem(null)
-			setActionType(null)
-			setRemarks("")
 		} catch (err: any) {
 			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
 			setError(getFriendlyErrorMessage(err?.message || 'Failed to submit action'))
@@ -731,9 +724,7 @@ function AdminVerificationCenter() {
 					onClick={(e) => {
 						// Close modal only if clicking on the background, not the modal itself
 						if (e.target === e.currentTarget) {
-							setSelectedItem(null)
-							setActionType(null)
-							setRemarks("")
+							closeReviewModal()
 						}
 					}}
 				>
@@ -760,9 +751,7 @@ function AdminVerificationCenter() {
 								</div>
 								<button
 									onClick={() => {
-										setSelectedItem(null)
-										setActionType(null)
-										setRemarks("")
+										closeReviewModal()
 									}}
 									className="p-2 rounded hover:bg-gray-100 cursor-pointer transition-colors"
 								>
@@ -952,7 +941,7 @@ function AdminVerificationCenter() {
 											Reject Admission
 											{selectedItem.verificationStatusRaw === 'rejected' && ' ✓'}
 										</button>
-										<button
+									{/*	<button
 											onClick={() => handleActionSelect("Revision")}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Revision"
@@ -963,7 +952,7 @@ function AdminVerificationCenter() {
 											title="Request revision from university"
 										>
 											Request Revision
-										</button>
+										</button> */}
 									</div>
 
 									{actionType && (
@@ -990,9 +979,7 @@ function AdminVerificationCenter() {
 							<div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
 								<button
 									onClick={() => {
-										setSelectedItem(null)
-										setActionType(null)
-										setRemarks("")
+										closeReviewModal()
 									}}
 									className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
 								>
@@ -1013,20 +1000,6 @@ function AdminVerificationCenter() {
 					</div>
 				)}
 
-				{/* ✅ Notification Toasts Container */}
-				<div className="fixed bottom-4 right-4 space-y-2 max-w-sm z-50 pointer-events-none">
-					{notifications.slice(0, 3).map((notif) => (
-						<div key={notif.id} className="pointer-events-auto">
-							<UpdateNotificationToast
-								admission_title={notif.admission_title}
-							message={`Admission ${notif.change_type === 'Admin Edit' ? 'verified' : 'updated'}`}
-							change_type={notif.change_type}
-								onDismiss={() => dismissNotification(notif.id)}
-								onNavigate={() => navigate(`/admin/admissions/${notif.admission_id}`)}
-							/>
-						</div>
-					))}
-				</div>
 			</div>
 		</AdminLayout>
 	)

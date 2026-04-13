@@ -19,6 +19,42 @@ export const showAlert = async (title: string, text: string, icon: AlertKind = '
   })
 }
 
+export const showToast = async (
+  text: string,
+  icon: AlertKind = 'info',
+  title?: string,
+  position: 'top' | 'top-start' | 'top-end' | 'center' | 'center-start' | 'center-end' | 'bottom' | 'bottom-start' | 'bottom-end' = 'bottom-end'
+) => {
+  await Swal.fire({
+    toast: true,
+    position,
+    icon,
+    title: title || text,
+    text: title ? text : undefined,
+    showConfirmButton: false,
+    timer: 2800,
+    timerProgressBar: true,
+    allowOutsideClick: true,
+    allowEscapeKey: true,
+  })
+}
+
+export const showSuccessToast = async (
+  text: string,
+  title = 'Success',
+  position: 'top' | 'top-start' | 'top-end' | 'center' | 'center-start' | 'center-end' | 'bottom' | 'bottom-start' | 'bottom-end' = 'bottom-end'
+) => {
+  await showToast(text, 'success', title, position)
+}
+
+export const showErrorToast = async (
+  text: string,
+  title = 'Error',
+  position: 'top' | 'top-start' | 'top-end' | 'center' | 'center-start' | 'center-end' | 'bottom' | 'bottom-start' | 'bottom-end' = 'bottom-end'
+) => {
+  await showToast(text, 'error', title, position)
+}
+
 export const showSuccess = async (text: string, title = 'Success') => {
   await showAlert(title, text, 'success')
 }
