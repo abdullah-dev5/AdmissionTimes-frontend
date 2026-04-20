@@ -6,6 +6,7 @@ export type NotificationType = 'alert' | 'system' | 'admission'
 
 export interface StudentAdmission {
   id: string
+  sourceAdmissionId?: string
   university: string
   universityLogo?: string | null  // University logo URL
   universityCity?: string  // University city
@@ -21,6 +22,7 @@ export interface StudentAdmission {
   city: string
   status: AdmissionStatus
   verificationStatus?: 'verified' | 'pending' | 'rejected' | 'under_review'  // Raw verification status for badges
+  dataOrigin?: string
   programStatus: ProgramStatus
   updated: string
   daysRemaining: number

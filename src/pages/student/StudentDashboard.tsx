@@ -405,9 +405,11 @@ function StudentDashboard() {
                               <div className="flex-1">
                                 <h3 className="font-semibold mb-1 text-lg" style={{ color: '#111827' }}>{admission.program}</h3>
                                 <p className="text-sm text-gray-600">{admission.university}</p>
-                                {admission.universityCity && (
+                                {admission.dataOrigin === 'scraper' ? (
+                                  <p className="text-xs text-gray-500">{admission.location}</p>
+                                ) : admission.universityCity ? (
                                   <p className="text-xs text-gray-500">{admission.universityCity}, {admission.universityCountry}</p>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                             <div className="flex flex-col items-end gap-1">

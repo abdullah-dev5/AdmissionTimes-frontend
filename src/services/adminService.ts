@@ -146,6 +146,88 @@ export interface EmailMetricsResult {
   retry_attempts_24h: number;
 }
 
+export type ScraperRunStatus = 'running' | 'completed' | 'failed' | 'partial';
+export type ScraperRunStatusLabel = 'Success' | 'Failed' | 'No Changes' | 'Changes Detected' | 'Running';
+
+export interface ScraperRunSummary {
+  total_jobs: number;
+  successful_jobs: number;
+  failed_jobs: number;
+  running_jobs: number;
+  last_execution: string | null;
+}
+
+export interface ScraperRunListItem {
+  id: string;
+  job_id: string;
+  university: string;
+  started_at: string;
+  finished_at: string | null;
+  status: ScraperRunStatus;
+  status_label: ScraperRunStatusLabel;
+  source_url: string | null;
+  duration_seconds: number;
+  scheduler_triggered: boolean;
+  changes_detected: number;
+  fetched_count: number;
+  mirrored_count: number;
+  published_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+}
+
+export interface ScraperRunEventItem {
+  id: string;
+  event_status: 'inserted' | 'updated' | 'unchanged' | 'failed' | 'skipped';
+  source_university_name: string | null;
+  source_program_title: string | null;
+  source_last_date: string | null;
+  source_details_link: string | null;
+  reason: string | null;
+  error_detail: string | null;
+  created_at: string;
+}
+
+export interface ScraperRunDetail {
+  run: ScraperRunListItem;
+  events: ScraperRunEventItem[];
+  university_breakdown?: Array<{
+    source_university_name: string;
+    total: number;
+    inserted: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  }>;
+  skip_reasons?: Array<{
+    source_university_name: string;
+    reason: string;
+    count: number;
+  }>;
+}
+
+export interface ScraperManualRunResult {
+  source_run_id: string;
+  replayed_records: number;
+  ingestion: {
+    run_id: string;
+    mode: 'mirror' | 'publish';
+    fetched_count: number;
+    mirrored_count: number;
+    published_count: number;
+    updated_count: number;
+    skipped_count: number;
+    failed_count: number;
+    status: 'completed' | 'failed' | 'partial';
+  };
+}
+
+const toCanonicalAdmissionId = (admissionId: string): string => {
+  if (!admissionId) return admissionId;
+  return admissionId.includes('::program::') ? admissionId.split('::program::')[0] : admissionId;
+};
+
 export const adminService = {
   /**
    * Get admin dashboard with statistics and recent activity
@@ -192,11 +274,12 @@ export const adminService = {
   getAllAdmissions: async (
     page: number = 1,
     limit: number = 20,
-    status?: string
+    status?: string,
+    dataOrigin?: 'scraper' | 'manual' | 'university'
   ): Promise<PaginatedResponse<AdminAdmission>> => {
-    console.log('🔵 [adminService] Fetching all admissions...', { page, limit, status });
+    console.log('🔵 [adminService] Fetching all admissions...', { page, limit, status, dataOrigin });
     const response = await apiClient.get('/admin/admissions', {
-      params: { page, limit, status },
+      params: { page, limit, status, data_origin: dataOrigin },
     });
     console.log('🔵 [adminService] All admissions response:', response.data);
     return response.data;
@@ -227,8 +310,9 @@ export const adminService = {
     admissionId: string,
     data: AdminVerifyAdmissionDTO
   ): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('✅ [adminService] Verifying admission:', admissionId, data);
-    const response = await apiClient.post(`/admin/admissions/${admissionId}/verify`, data);
+    const canonicalId = toCanonicalAdmissionId(admissionId);
+    console.log('✅ [adminService] Verifying admission:', canonicalId, data);
+    const response = await apiClient.post(`/admin/admissions/${canonicalId}/verify`, data);
     console.log('✅ [adminService] Verification response:', response.data);
     return response.data;
   },
@@ -268,8 +352,9 @@ export const adminService = {
     admissionId: string,
     reason: string
   ): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('🟠 [adminService] Requesting revision:', admissionId);
-    const response = await apiClient.post(`/admin/admissions/${admissionId}/revision-required`, {
+    const canonicalId = toCanonicalAdmissionId(admissionId);
+    console.log('🟠 [adminService] Requesting revision:', canonicalId);
+    const response = await apiClient.post(`/admin/admissions/${canonicalId}/revision-required`, {
       reason,
     });
     return response.data;
@@ -604,6 +689,69 @@ export const adminService = {
    */
   getEmailMetrics: async (): Promise<ApiResponse<EmailMetricsResult>> => {
     const response = await apiClient.get('/notifications/admin/email-metrics');
+    return response.data;
+  },
+
+  /**
+   * Get scraper run summary cards (admin only)
+   * GET /api/v1/admin/scraper/summary
+   */
+  getScraperRunSummary: async (): Promise<ApiResponse<ScraperRunSummary>> => {
+    const response = await apiClient.get('/admin/scraper/summary');
+    return response.data;
+  },
+
+  /**
+   * Get paginated scraper runs (admin only)
+   * GET /api/v1/admin/scraper/runs
+   */
+  getScraperRuns: async (
+    page: number = 1,
+    limit: number = 20,
+    filters?: { status?: ScraperRunStatus; mode?: 'mirror' | 'publish' }
+  ): Promise<PaginatedResponse<ScraperRunListItem>> => {
+    const response = await apiClient.get('/admin/scraper/runs', {
+      params: {
+        page,
+        limit,
+        ...(filters?.status ? { status: filters.status } : {}),
+        ...(filters?.mode ? { mode: filters.mode } : {}),
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get scraper run detail and event log (admin only)
+   * GET /api/v1/admin/scraper/runs/:id
+   */
+  getScraperRunDetail: async (runId: string): Promise<ApiResponse<ScraperRunDetail>> => {
+    const response = await apiClient.get(`/admin/scraper/runs/${runId}`);
+    return response.data;
+  },
+
+  /**
+   * Trigger a manual scraper run replay from the latest ingestion snapshot (admin only)
+   * POST /api/v1/admin/scraper/run-all
+   */
+  triggerScraperRunAll: async (forcePublish: boolean = false): Promise<ApiResponse<ScraperManualRunResult>> => {
+    const response = await apiClient.post('/admin/scraper/run-all', {
+      force_publish: forcePublish,
+    });
+    return response.data;
+  },
+
+  /**
+   * Trigger rerun from a specific scraper run snapshot (admin only)
+   * POST /api/v1/admin/scraper/runs/:id/rerun
+   */
+  rerunScraperRun: async (
+    runId: string,
+    forcePublish: boolean = false
+  ): Promise<ApiResponse<ScraperManualRunResult>> => {
+    const response = await apiClient.post(`/admin/scraper/runs/${runId}/rerun`, {
+      force_publish: forcePublish,
+    });
     return response.data;
   },
 };

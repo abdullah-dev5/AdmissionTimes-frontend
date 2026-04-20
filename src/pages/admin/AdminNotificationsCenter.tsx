@@ -126,6 +126,14 @@ function AdminNotificationsCenter() {
 			return notifType !== "deadline_near"
 		})
 
+		// Keep system errors visible only in their dedicated tab.
+		if (activeTab === "All") {
+			filtered = filtered.filter((notif) => {
+				const notifType = notif.notification_type || notif.type
+				return notifType !== "system_error"
+			})
+		}
+
 		// Filter by type (if type field exists)
 		if (activeTab !== "All") {
 			filtered = filtered.filter((notif) => {

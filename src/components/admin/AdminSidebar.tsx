@@ -23,6 +23,11 @@ function AdminSidebar() {
 			link: "/admin/verification",
 		},
 		{
+			name: "Scraped Verification",
+			icon: "M9 12l2 2 4-4m0 0l3-3m-3 3l-3 3M3 12a9 9 0 1118 0 9 9 0 01-18 0z",
+			link: "/admin/verification/scraped",
+		},
+		{
 			name: "Change Logs",
 			icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
 			link: "/admin/change-logs",

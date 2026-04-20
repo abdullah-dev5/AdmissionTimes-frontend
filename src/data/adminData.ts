@@ -49,7 +49,7 @@ export interface ScraperActivity {
 	changesDetected: number
 }
 
-export type ScraperJobStatus = "Success" | "Failed" | "No Changes" | "Changes Detected"
+export type ScraperJobStatus = "Success" | "Failed" | "No Changes" | "Changes Detected" | "Running"
 
 export interface ScraperJob {
 	id: string
@@ -93,11 +93,14 @@ export type VerificationStatus = "Pending" | "Verified" | "Rejected"
 
 export interface VerificationItem {
 	id: string
+	sourceAdmissionId?: string
 	admissionTitle: string
 	university: string
 	submittedBy: string
 	submittedOn: string
 	status: VerificationStatus
+	dataOrigin?: "scraper" | "manual" | "university"
+	sourceSystem?: string | null
 	verificationStatusRaw?: string
 	rejectionReason?: string | null
 	reviewReason?: string | null
@@ -800,6 +803,8 @@ export const getScraperJobStatusColor = (status: ScraperJobStatus) => {
 	switch (status) {
 		case "Success":
 			return { bg: "#D1FAE5", text: "#10B981" }
+		case "Running":
+			return { bg: "#E0E7FF", text: "#4338CA" }
 		case "No Changes":
 			return { bg: "#FEF3C7", text: "#F59E0B" }
 		case "Changes Detected":

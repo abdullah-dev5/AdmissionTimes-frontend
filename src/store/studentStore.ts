@@ -5,6 +5,7 @@ import { watchlistsService } from '../services/watchlistsService'
 import { notificationsService } from '../services/notificationsService'
 import { admissionsService } from '../services/admissionsService'
 import { transformAdmission, transformNotification } from '../utils/transformers'
+import { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from '../utils/scraperAdmissionAdapter'
 import { buildSearchParams } from '../utils/studentUtils'
 
 interface StudentStats {
@@ -110,7 +111,9 @@ export const useStudentStore = create<StudentStore>()(
           const response = await dashboardService.getStudentDashboard()
           
           // Transform recommended programs to StudentAdmission format
-          const transformedAdmissions = response.data.recommended_programs.map((prog) =>
+          const transformedAdmissions = flattenProgramAdmissions(response.data.recommended_programs)
+            .filter((prog) => !shouldHideGenericScraperAnnouncement(prog as any))
+            .map((prog) =>
             transformAdmission(
               prog as any,
               prog.saved
@@ -162,6 +165,8 @@ export const useStudentStore = create<StudentStore>()(
         const { admissions } = get()
         const admission = admissions.find((a) => a.id === id)
         if (!admission) return
+
+        const backendId = admission.sourceAdmissionId || id.split('::program::')[0]
         
         const wasSaved = admission.saved
         
@@ -172,7 +177,8 @@ export const useStudentStore = create<StudentStore>()(
               ? {
                   ...a,
                   saved: !wasSaved,
-                  alertEnabled: !wasSaved ? a.alertEnabled : false,
+                  // Saving should opt into deadline reminders by default.
+                  alertEnabled: !wasSaved ? true : false,
                   watchlistId: !wasSaved ? a.watchlistId : undefined,
                 }
               : a
@@ -186,13 +192,13 @@ export const useStudentStore = create<StudentStore>()(
               await watchlistsService.remove(admission.watchlistId)
               console.log('✅ Removed from watchlist (also disabled alerts):', admission.watchlistId)
             } else {
-              await watchlistsService.removeByAdmissionId(id)
-              console.log('✅ Removed from watchlist (also disabled alerts) by admission ID:', id)
+              await watchlistsService.removeByAdmissionId(backendId)
+              console.log('✅ Removed from watchlist (also disabled alerts) by admission ID:', backendId)
             }
           } else {
             // Add to watchlist
-            const response = await watchlistsService.add(id, admission.alertEnabled || false)
-            console.log('✅ Added to watchlist:', id, 'with alert:', admission.alertEnabled || false, 'Response:', response)
+            const response = await watchlistsService.add(backendId, true)
+            console.log('✅ Added to watchlist:', backendId, 'with alert:', true, 'Response:', response)
             
             // Update watchlist ID
             if (response.data?.id) {
@@ -245,6 +251,8 @@ export const useStudentStore = create<StudentStore>()(
         const { admissions } = get()
         const admission = admissions.find((a) => a.id === id)
         if (!admission) return
+
+        const backendId = admission.sourceAdmissionId || id.split('::program::')[0]
         
         const wasAlertEnabled = admission.alertEnabled
         const wasSaved = admission.saved
@@ -267,8 +275,8 @@ export const useStudentStore = create<StudentStore>()(
           })
           
           try {
-            const response = await watchlistsService.add(id, true)
-            console.log('✅ Added to watchlist with alert enabled:', id, 'Response:', response)
+            const response = await watchlistsService.add(backendId, true)
+            console.log('✅ Added to watchlist with alert enabled:', backendId, 'Response:', response)
             
             if (response.data?.id) {
               set({
@@ -338,7 +346,10 @@ export const useStudentStore = create<StudentStore>()(
                 ? watchlistsResponse.data 
                 : []
               
-              const watchlist = userWatchlists.find((w: any) => w.admission_id === id)
+              const admissionIds = [id, backendId]
+                .filter(Boolean)
+                .map((value) => String(value))
+              const watchlist = userWatchlists.find((w: any) => admissionIds.includes(String(w.admission_id)))
               
               if (watchlist?.id) {
                 console.log('✅ Found watchlist ID:', watchlist.id)
@@ -545,7 +556,8 @@ export const useStudentStore = create<StudentStore>()(
             throw new Error('Failed to fetch admissions from backend')
           }
 
-          const admissionsData: any[] = Array.from(admissionsById.values())
+          const admissionsData: any[] = flattenProgramAdmissions(Array.from(admissionsById.values()))
+            .filter((admission) => !shouldHideGenericScraperAnnouncement(admission))
           console.log(`✅ Fetched ${admissionsData.length} admissions out of ${total} total`)
 
           if (admissionsData.length === 0) {
@@ -566,7 +578,15 @@ export const useStudentStore = create<StudentStore>()(
           
           // Transform with watchlist data
           const transformed = admissionsData.map(admission => {
-            const watchlist = userWatchlists.find(w => w.admission_id === admission.id)
+            const admissionIds = [
+              admission.id,
+              admission.source_admission_id,
+              admission.parent_admission_id,
+            ]
+              .filter(Boolean)
+              .map((value) => String(value))
+
+            const watchlist = userWatchlists.find((w) => admissionIds.includes(String(w.admission_id)))
             if (watchlist) {
               console.log(`✅ [searchAdmissions] Matched watchlist for admission: ${admission.id} (${admission.title})`)
             }
