@@ -21,7 +21,7 @@ function SearchAdmissions() {
   const { showError } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
   const searchAdmissions = useStudentStore((state) => state.searchAdmissions)
-  const { admissions: rawAdmissions, loading } = useStudentDashboardData()
+  const { admissions: rawAdmissions } = useStudentDashboardData()
   
   // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
@@ -35,13 +35,20 @@ function SearchAdmissions() {
   const [universityFilter, setUniversityFilter] = useState('')
   const [cityFilter, setCityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
-  const [feeRange, setFeeRange] = useState([0, 500000])
-  const [feeFilterActive, setFeeFilterActive] = useState(false)  // Track if user has set fee filter
   const [deadlineFilter, setDeadlineFilter] = useState('')
   const [programTitleFilter, setProgramTitleFilter] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
   const [sortBy, setSortBy] = useState('Relevance')
   const [compareIds, setCompareIds] = useState<string[]>([])
+  const getDisplayLocation = (admission: { dataOrigin?: string; location?: string; universityCity?: string; universityCountry?: string }) => {
+    const isScraperRecord = (admission.dataOrigin || '').toLowerCase() === 'scraper'
+    if (isScraperRecord) {
+      const location = (admission.location || '').trim()
+      return location && location !== 'Location not specified' ? location : ''
+    }
+
+    return [admission.universityCity, admission.universityCountry].filter(Boolean).join(', ')
+  }
 
   // Debounced server-side search: fires when the text query or degree filter changes.
   // Fields the backend can filter (search, degree_level) are delegated to the server;
@@ -98,8 +105,6 @@ function SearchAdmissions() {
     setUniversityFilter('')
     setCityFilter('')
     setDegreeFilter('')
-    setFeeRange([0, 500000])
-    setFeeFilterActive(false)  // Reset fee filter status
     setDeadlineFilter('')
     setProgramTitleFilter('')
     setSelectedStatus([])
@@ -139,21 +144,6 @@ function SearchAdmissions() {
       console.log('🔍 [Filter] After degree filter:', filtered.length);
     }
 
-    // Fee range filter - only apply if user explicitly set it
-    if (feeFilterActive) {
-      const beforeFeeFilter = filtered.length
-      filtered = filtered.filter(a => {
-        const passesFilter = a.feeNumeric >= feeRange[0] && a.feeNumeric <= feeRange[1]
-        if (!passesFilter) {
-          console.log(`🚫 [Fee Filter] Removing "${a.program}" - fee: ${a.feeNumeric}, range: [${feeRange[0]}, ${feeRange[1]}]`)
-        }
-        return passesFilter
-      })
-      console.log('🔍 [Filter] After fee range filter:', filtered.length, `(removed: ${beforeFeeFilter - filtered.length})`)
-    } else {
-      console.log('🔍 [Filter] Fee range filter skipped (not active)')
-    }
-
     // Deadline filter
     if (deadlineFilter) {
       filtered = filtered.filter(a => {
@@ -189,8 +179,14 @@ function SearchAdmissions() {
       filtered.sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
     }
 
-    return filtered
-  }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, feeRange, feeFilterActive, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
+    // Always keep deadline-passed/closed cards below active admissions.
+    const isDeadlinePassed = (item: typeof filtered[number]) =>
+      item.daysRemaining < 0 || item.programStatus === 'Closed'
+    const activeAdmissions = filtered.filter((item) => !isDeadlinePassed(item))
+    const passedAdmissions = filtered.filter((item) => isDeadlinePassed(item))
+
+    return [...activeAdmissions, ...passedAdmissions]
+  }, [admissions, searchQuery, universityFilter, cityFilter, degreeFilter, deadlineFilter, programTitleFilter, selectedStatus, sortBy])
 
   const toggleCompare = async (id: string) => {
     setCompareIds(prev => {
@@ -340,35 +336,6 @@ function SearchAdmissions() {
                   <div>
                     <label className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Fee Range (PKR)
-                    </label>
-                    <div className="px-2">
-                      <input
-                        type="range"
-                        min="10000"
-                        max="200000"
-                        step="10000"
-                        value={feeRange[1]}
-                        onChange={(e) => {
-                          setFeeRange([feeRange[0], parseInt(e.target.value)])
-                          setFeeFilterActive(true)  // Mark filter as active when user changes it
-                        }}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                        style={{ accentColor: '#2563EB' }}
-                      />
-                      <div className="flex justify-between mt-2 text-xs text-gray-600">
-                        <span>10k</span>
-                      <span>PKR {feeRange[1].toLocaleString()}</span>
-                        <span>200k+</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     Deadline Before
@@ -501,7 +468,6 @@ function SearchAdmissions() {
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 {filteredAdmissions.map((admission) => {
-                  const statusColors = getStatusColor(admission.status)
                   const isSaved = savedIds.includes(admission.id)
                   const isPending = admission.verificationStatus === 'pending' || admission.status === 'Pending'
                   return (
@@ -517,27 +483,29 @@ function SearchAdmissions() {
                           </div>
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <p className="font-semibold text-sm truncate" style={{ color: '#111827' }} title={admission.university}>{admission.university}</p>
-                            {admission.universityCity && (
-                              <p className="text-xs text-gray-500 truncate">{admission.universityCity}, {admission.universityCountry}</p>
+                            {getDisplayLocation(admission) && (
+                              <p className="text-xs text-gray-500 truncate">{getDisplayLocation(admission)}</p>
                             )}
                           </div>
                         </div>
                         {/* Only show verification badge - removed duplicate status badge */}
-                        {admission.verificationStatus === 'verified' ? (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Verified
-                          </span>
-                        ) : isPending ? (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                            </svg>
-                            Pending
-                          </span>
-                        ) : null}
+                        <div className="flex items-center gap-1.5">
+                          {admission.verificationStatus === 'verified' ? (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Verified
+                            </span>
+                          ) : isPending ? (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                              </svg>
+                              Pending
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <h3 className="font-semibold text-lg mb-2 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
                       
@@ -583,6 +551,7 @@ function SearchAdmissions() {
                           </button>
                           <Link
                             to={`/program/${admission.id}`}
+                            state={{ selectedAdmission: admission }}
                             className="p-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -599,7 +568,6 @@ function SearchAdmissions() {
             ) : (
               <div className="space-y-4 mb-8">
                 {filteredAdmissions.map((admission) => {
-                  const statusColors = getStatusColor(admission.status)
                   const isSaved = savedIds.includes(admission.id)
                   const isPending = admission.verificationStatus === 'pending' || admission.status === 'Pending'
                   return (
@@ -616,6 +584,9 @@ function SearchAdmissions() {
                           <div className="flex-1 min-w-0 overflow-hidden">
                             <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={admission.program}>{admission.program}</h3>
                             <p className="text-sm text-gray-600 mb-2 truncate" title={`${admission.university} • ${admission.degree}`}>{admission.university} • {admission.degree}</p>
+                            {getDisplayLocation(admission) && (
+                              <p className="text-xs text-gray-500 truncate mb-2">{getDisplayLocation(admission)}</p>
+                            )}
                             <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
                               <span className={admission.daysRemaining <= 7 ? 'text-red-600 font-medium' : ''}>{admission.deadlineDisplay}</span>
                               {/* Only show verification badge - removed duplicate status badge */}
@@ -661,6 +632,7 @@ function SearchAdmissions() {
                           </button>
                           <Link
                             to={`/program/${admission.id}`}
+                            state={{ selectedAdmission: admission }}
                             className="p-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

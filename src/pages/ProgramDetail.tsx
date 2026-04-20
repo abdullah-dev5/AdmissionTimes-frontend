@@ -1,4 +1,4 @@
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
@@ -47,9 +47,12 @@ interface ResolvedOfficialLinks {
 }
 
 const getOfficialLinks = (admission: Admission, requirements: Record<string, unknown>): ResolvedOfficialLinks => {
+  const backendAny = admission as Admission & { source_url?: string; source_details_link?: string }
   const backendPrimaryUrl = readString((admission as Admission).primary_apply_url)
   const backendPortalUrl = readString((admission as Admission).admission_portal_url)
   const backendWebsiteUrl = readString((admission as Admission).university_website_url)
+  const backendSourceUrl = readString(backendAny.source_url)
+  const backendSourceDetailsUrl = readString(backendAny.source_details_link)
   const links = toRequirementsObject(requirements.links)
   const officialLinks = [
     ...readStringArray(requirements.officialLinks),
@@ -74,11 +77,116 @@ const getOfficialLinks = (admission: Admission, requirements: Record<string, unk
     readString(links.officialWebsite) ||
     readString(admission.website_url)
 
+  const sourceDetailsLink =
+    backendSourceDetailsUrl ||
+    readString(requirements.source_details_link) ||
+    readString(requirements.source_url) ||
+    readString(links.source_details_link)
+
   return {
-    admissionPortalLink: backendPortalUrl || admissionPortalLink,
+    admissionPortalLink: backendPortalUrl || admissionPortalLink || backendSourceUrl || sourceDetailsLink,
     universityWebsiteUrl: backendWebsiteUrl || universityWebsiteUrl,
-    primaryUrl: backendPrimaryUrl || backendPortalUrl || backendWebsiteUrl || admissionPortalLink || universityWebsiteUrl || officialLinks[0],
+    primaryUrl: backendPrimaryUrl || backendPortalUrl || backendSourceUrl || sourceDetailsLink || backendWebsiteUrl || admissionPortalLink || universityWebsiteUrl || officialLinks[0],
   }
+}
+
+const deriveEligibilityText = (requirements: Record<string, unknown>, existing?: string) => {
+  const requirementLinks = toRequirementsObject(requirements.links)
+  return (
+    readString(requirements.eligibility) ||
+    readString(requirements.generalRequirements) ||
+    readString(requirements.criteria) ||
+    readString(requirements.requirements) ||
+    readString(requirementLinks.eligibility) ||
+    readString(existing) ||
+    undefined
+  )
+}
+
+const inferDegreeFromProgramTitle = (title?: string) => {
+  const text = String(title || '').toLowerCase()
+  if (!text) return 'Degree Not Specified'
+  if (/\bbba\b|bachelor of business administration/.test(text)) return 'BBA'
+  if (/\bmba\b|master of business administration/.test(text)) return 'MBA'
+  if (/\bphd\b|doctor of philosophy|doctorate/.test(text)) return 'PhD'
+  if (/\bmd\b|doctor of medicine/.test(text)) return 'MD'
+  if (/\bmphil\b|master of philosophy/.test(text)) return 'MPhil'
+  if (/\bms\b|master of science|\bmaster\b|postgraduate|post-graduate|\bgraduate\b/.test(text)) return 'MS'
+  if (/\bbs\b|bachelor of science|\bbe\b|bachelor|undergraduate|under-graduate|engineering/.test(text)) return 'BS'
+  return 'Degree Not Specified'
+}
+
+const resolveDegreeText = (current: string | undefined, title: string | undefined, isScraper: boolean) => {
+  if (current && current !== 'Degree Not Specified') {
+    return current
+  }
+
+  const inferred = inferDegreeFromProgramTitle(title)
+  if (inferred !== 'Degree Not Specified') {
+    return inferred
+  }
+
+  return isScraper ? 'BS' : 'Degree Not Specified'
+}
+
+const resolveLocationText = (
+  current: string | undefined,
+  admission: Record<string, unknown>,
+  requirements: Record<string, unknown>,
+) => {
+  const existing = readString(current)
+  if (existing && existing.toLowerCase() !== 'location not specified') {
+    return existing
+  }
+
+  const links = toRequirementsObject(requirements.links)
+  const direct =
+    readString(admission.location) ||
+    readString(admission.campus) ||
+    readString(admission.source_location) ||
+    readString(admission.city) ||
+    readString(requirements.location) ||
+    readString(requirements.campus) ||
+    readString(requirements.source_location) ||
+    readString(requirements.city) ||
+    readString(links.location)
+
+  if (direct && !/(admission|program|apply|deadline)/i.test(direct)) {
+    return direct
+  }
+
+  const city = readString(admission.university_city)
+  const country = readString(admission.university_country)
+  const fallback = [city, country].filter(Boolean).join(', ')
+  return fallback || 'Location not specified'
+}
+
+const resolveFeeText = (
+  current: string | undefined,
+  admission: Record<string, unknown>,
+  requirements: Record<string, unknown>,
+) => {
+  const existing = readString(current)
+  if (existing && !/^not specified$/i.test(existing)) {
+    return existing
+  }
+
+  const fromApi =
+    readString(admission.fee_display) ||
+    readString(admission.fee) ||
+    readString(requirements.fee_display) ||
+    readString(requirements.fee) ||
+    readString(requirements.application_fee)
+
+  if (fromApi) return fromApi
+
+  const amount = Number((admission as Record<string, unknown>).application_fee)
+  if (Number.isFinite(amount) && amount > 0) {
+    const currency = readString(admission.currency) || 'PKR'
+    return `${currency} ${amount}`
+  }
+
+  return 'Not specified'
 }
 
 const formatBackendRequirements = (requirements: Record<string, unknown>): string[] => {
@@ -127,14 +235,17 @@ const formatBackendRequirements = (requirements: Record<string, unknown>): strin
 
 function ProgramDetail() {
   const { id } = useParams()
+  const location = useLocation() as { state?: { selectedAdmission?: StudentAdmission } }
   const navigate = useNavigate()
   const { showSuccess, showInfo, showWarning, showError } = useToast()
   const [activeTab, setActiveTab] = useState('Overview')
   const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
   const admissions = useStudentStore((state) => state.admissions)
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
+  const resolvedAdmissionId = id?.split('::program::')[0]
+  const routeSelectedAdmission = location.state?.selectedAdmission
   
-  const storeProgram = id ? getAdmissionById(id) : undefined
+  const storeProgram = routeSelectedAdmission || (id ? getAdmissionById(id) : undefined)
   const storeProgramRef = useRef(storeProgram)
   const [program, setProgram] = useState<StudentAdmission | undefined>(storeProgram)
   const [requirementsLines, setRequirementsLines] = useState<string[]>([])
@@ -148,7 +259,7 @@ function ProgramDetail() {
   }, [storeProgram])
 
   useEffect(() => {
-    if (!id) return
+    if (!id || !resolvedAdmissionId) return
 
     let cancelled = false
 
@@ -159,7 +270,7 @@ function ProgramDetail() {
 
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
-            response = await admissionsService.getById(id)
+            response = await admissionsService.getById(resolvedAdmissionId)
             admission = response.data
             break
           } catch (requestError) {
@@ -184,7 +295,7 @@ function ProgramDetail() {
 
         const requirements = toRequirementsObject(admission.requirements)
         const resolvedOfficialLinks = getOfficialLinks(admission, requirements)
-        const mappedProgram: StudentAdmission = {
+        const mappedProgramBase: StudentAdmission = {
           ...transformAdmission(
             admission as any,
             storeProgramRef.current?.saved
@@ -204,9 +315,32 @@ function ProgramDetail() {
           alertEnabled: storeProgramRef.current?.alertEnabled || false,
           saved: storeProgramRef.current?.saved || false,
           watchlistId: storeProgramRef.current?.watchlistId,
+          eligibility: deriveEligibilityText(requirements, storeProgramRef.current?.eligibility),
         }
 
-        setProgram(storeProgramRef.current ? { ...storeProgramRef.current, ...mappedProgram } : mappedProgram)
+        const mappedProgram: StudentAdmission = {
+          ...mappedProgramBase,
+          degree: resolveDegreeText(
+            mappedProgramBase.degree,
+            mappedProgramBase.program,
+            mappedProgramBase.dataOrigin === 'scraper',
+          ),
+          location: resolveLocationText(mappedProgramBase.location, admission as Record<string, unknown>, requirements),
+          fee: resolveFeeText(mappedProgramBase.fee, admission as Record<string, unknown>, requirements),
+          officialUrl: mappedProgramBase.officialUrl || resolvedOfficialLinks.primaryUrl,
+        }
+
+        // Keep freshly hydrated backend details authoritative; only carry over user-specific local flags.
+        if (storeProgramRef.current) {
+          setProgram({
+            ...mappedProgram,
+            saved: Boolean(storeProgramRef.current.saved),
+            alertEnabled: Boolean(storeProgramRef.current.alertEnabled),
+            watchlistId: storeProgramRef.current.watchlistId,
+          })
+        } else {
+          setProgram(mappedProgram)
+        }
         setOfficialLinks(resolvedOfficialLinks)
         setRequirementsLines(formatBackendRequirements(requirements))
         setLoadState('ready')
@@ -234,7 +368,7 @@ function ProgramDetail() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, resolvedAdmissionId])
 
   useEffect(() => {
     if (!program?.id) return
@@ -242,7 +376,7 @@ function ProgramDetail() {
     activityService.trackCappedStudentEvent({
       activity_type: 'viewed',
       entity_type: 'admission',
-      entity_id: program.id,
+      entity_id: resolvedAdmissionId || program.id,
       metadata: { source: 'program_detail', action: 'page_view' },
     }).catch(() => {})
   }, [program?.id])
@@ -334,12 +468,25 @@ function ProgramDetail() {
 
   const statusColors = getStatusColor(program.programStatus)
   const daysRemaining = program.daysRemaining
+  const displayDegree = resolveDegreeText(
+    program.degree,
+    program.program,
+    program.dataOrigin === 'scraper',
+  )
+  const displayFee = (program.fee && program.fee !== 'Not specified') ? program.fee : 'Not specified'
+  const displayLocation = (program.location && program.location.trim().length > 0)
+    ? program.location
+    : [program.universityCity, program.universityCountry].filter(Boolean).join(', ') || 'Location not specified'
+  const sourceLabel = program.dataOrigin === 'scraper' ? 'Public listing' : 'University source'
+  const sourceHint = program.dataOrigin === 'scraper'
+    ? 'Shown from a public admissions listing, not an official university submission.'
+    : 'Shown from the university record.'
 
   const handleCompare = () => {
     activityService.trackCappedStudentEvent({
       activity_type: 'compared',
       entity_type: 'admission',
-      entity_id: program.id,
+      entity_id: resolvedAdmissionId || program.id,
       metadata: { source: 'program_detail', action: 'compare_click' },
     }).catch(() => {})
 
@@ -398,9 +545,9 @@ function ProgramDetail() {
     const content = [
       `Program: ${program.program}`,
       `University: ${program.university}`,
-      `Degree: ${program.degree}`,
-      `Location: ${program.location}`,
-      `Application Fee: ${program.fee}`,
+      `Degree: ${displayDegree}`,
+      `Location: ${displayLocation}`,
+      `Application Fee: ${displayFee}`,
       `Deadline: ${program.deadlineDisplay}`,
       `Status: ${program.programStatus}`,
       `Last Updated: ${program.updated}`,
@@ -440,7 +587,7 @@ function ProgramDetail() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="text-base">{program.location}</span>
+                <span className="text-base">{displayLocation}</span>
               </div>
               <span className="px-3 py-1 rounded-full text-sm font-medium" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
                 {program.programStatus}
@@ -562,7 +709,7 @@ function ProgramDetail() {
                     <div>
                       <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Program Information</h3>
                       <p className="text-gray-700 leading-relaxed">
-                        {program.program} at {program.university} is a {program.degree} program located in {program.location}.
+                        {program.program} at {program.university} is a {displayDegree} program located in {displayLocation}.
                         {program.aiSummary && (
                           <span className="block mt-2">{program.aiSummary}</span>
                         )}
@@ -571,19 +718,27 @@ function ProgramDetail() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Degree Type</p>
-                        <p className="font-semibold text-gray-800">{program.degree}</p>
+                        <p className="font-semibold text-gray-800">{displayDegree}</p>
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Location</p>
-                        <p className="font-semibold text-gray-800">{program.location}</p>
+                        <p className="font-semibold text-gray-800">{displayLocation}</p>
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Application Fee</p>
-                        <p className="font-semibold text-gray-800">{program.fee}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-semibold">PKR</span>
+                          <p className="font-semibold text-gray-800">{displayFee}</p>
+                        </div>
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Deadline</p>
                         <p className="font-semibold text-gray-800">{program.deadlineDisplay}</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg col-span-2">
+                        <p className="text-sm text-gray-600 mb-1">Source</p>
+                        <p className="font-semibold text-gray-800">{sourceLabel}</p>
+                        <p className="text-xs text-gray-500 mt-1">{sourceHint}</p>
                       </div>
                     </div>
                   </div>
@@ -596,7 +751,12 @@ function ProgramDetail() {
                   <div className="space-y-4">
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Degree Type</h3>
-                      <p className="text-gray-700">{program.degree}</p>
+                      <p className="text-gray-700">{displayDegree}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Source</h3>
+                      <p className="text-gray-700">{sourceLabel}</p>
+                      <p className="text-xs text-gray-500 mt-1">{sourceHint}</p>
                     </div>
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>General Requirements</h3>
@@ -733,7 +893,22 @@ function ProgramDetail() {
                   </a>
                 )}
 
-                {!officialLinks.universityWebsiteUrl && !officialLinks.admissionPortalLink && (
+                {!officialLinks.universityWebsiteUrl && !officialLinks.admissionPortalLink && officialLinks.primaryUrl && (
+                  <a
+                    href={officialLinks.primaryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+                    style={{ backgroundColor: '#2563EB' }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h6m0 0v6m0-6L10 16m-4-5v6h6" />
+                    </svg>
+                    Official Source Link
+                  </a>
+                )}
+
+                {!officialLinks.universityWebsiteUrl && !officialLinks.admissionPortalLink && !officialLinks.primaryUrl && (
                   <div className="p-4 bg-gray-50 rounded-lg text-center">
                     <p className="text-sm text-gray-600">Official links are not available. Please contact the university directly for more information.</p>
                   </div>

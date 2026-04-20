@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
     "check:consistency": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/consistency-guard.ps1",
@@ -34,6 +35,7 @@
     "globals": "^16.4.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
+    "vitest": "^3.2.4",
     "vite": "^7.1.7"
   }
 }

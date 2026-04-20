@@ -79,6 +79,8 @@ function AdminDashboard() {
 	const [emailMetrics, setEmailMetrics] = useState<EmailMetricsResult | null>(null)
 	const [pendingAdmissions, setPendingAdmissions] = useState<any[]>([])
 	const [pendingAdmissionsLoaded, setPendingAdmissionsLoaded] = useState(false)
+	const [dashboardNotifications, setDashboardNotifications] = useState<any[]>([])
+	const [dashboardScraperActivities, setDashboardScraperActivities] = useState<any[]>([])
 	const [_loading, _setLoading] = useState(false)
 	const [_error, _setError] = useState<string | null>(null)
 
@@ -87,6 +89,13 @@ function AdminDashboard() {
 		if (!value) return fallback
 		if (isUuid(value)) return fallback
 		return value
+	}
+
+	const normalizeUniversityLabel = (value: string | null | undefined) => {
+		const normalized = String(value || "").trim().toLowerCase()
+		if (!normalized) return "Unknown University"
+		if (normalized === "all") return "All Universities"
+		return String(value).trim()
 	}
 
 	const buildRealtimeAnalytics = (admissions: any[]) => {
@@ -230,6 +239,40 @@ function AdminDashboard() {
 	}
 
 	/**
+	 * Normalize scraper activity rows from mixed backend payload shapes.
+	 */
+	const transformScraperActivities = (apiData: any[]) => {
+		return (apiData || []).map((item: any, index: number) => {
+			const rawLastRun =
+				item.lastRun ||
+				item.last_run ||
+				item.started_at ||
+				item.created_at ||
+				item.updated_at ||
+				""
+
+			const rawStatus = String(item.status_label || item.status || "").toLowerCase()
+			let status = "No Changes"
+			if (rawStatus.includes("success") || rawStatus.includes("completed")) status = "Success"
+			if (rawStatus.includes("change")) status = "Changes Detected"
+			if (rawStatus.includes("fail")) status = "Failed"
+			if (rawStatus.includes("running")) status = "Running"
+
+			return {
+				id: item.id || item.job_id || `scraper-${index}`,
+				university: normalizeUniversityLabel(item.university || item.source_university_name),
+				lastRun: rawLastRun ? formatDisplayDateTime(rawLastRun, "N/A") : "N/A",
+				status,
+				changesDetected:
+					item.changesDetected ??
+					item.changes_detected ??
+					item.updated_count ??
+					0,
+			}
+		})
+	}
+
+	/**
 	 * Fetch admin dashboard from API if authenticated
 	 * Uses backend response as source of truth
 	 */
@@ -278,6 +321,29 @@ function AdminDashboard() {
 			const userCount = usersResponse.pagination?.total || 0
 			setTotalUsers(userCount)
 
+			// Fetch latest notifications for dashboard card fallback.
+			try {
+				const notificationsResponse = await adminService.getNotifications(1, 4)
+				const notificationsData = Array.isArray(notificationsResponse?.data)
+					? notificationsResponse.data
+					: Array.isArray((notificationsResponse as any)?.data?.data)
+						? (notificationsResponse as any).data.data
+						: []
+				setDashboardNotifications(notificationsData)
+			} catch (notificationError) {
+				console.warn('[AdminDashboard] Latest notifications unavailable:', notificationError)
+				setDashboardNotifications([])
+			}
+
+			// Fetch latest scraper runs for scraper activity card fallback.
+			try {
+				const scraperRunsResponse = await adminService.getScraperRuns(1, 4)
+				setDashboardScraperActivities(scraperRunsResponse?.data || [])
+			} catch (scraperActivityError) {
+				console.warn('[AdminDashboard] Scraper activity fallback unavailable:', scraperActivityError)
+				setDashboardScraperActivities([])
+			}
+
 			// Fetch email metrics summary for admin observability
 			try {
 				const emailMetricsResponse = await adminService.getEmailMetrics()
@@ -307,12 +373,17 @@ function AdminDashboard() {
 	const displayRecentActions = transformedRecentActions.slice(0, 5)
 	
 	const notificationSource =
+		dashboardNotifications ||
 		apiDashboard?.notifications ||
 		apiDashboard?.recent_notifications ||
 		apiDashboard?.stats?.recent_notifications ||
 		[]
 	const displayNotifications = transformDashboardNotifications(notificationSource).slice(0, 4)
-	const displayScraperActivities = (apiDashboard?.scraper_activity || []).slice(0, 4)
+	const scraperActivitySource =
+		dashboardScraperActivities.length > 0
+			? dashboardScraperActivities
+			: (apiDashboard?.scraper_activity || [])
+	const displayScraperActivities = transformScraperActivities(scraperActivitySource).slice(0, 4)
 	
 	const metrics = {
 		totalUsers: totalUsers || apiDashboard?.stats?.total_users || 0,

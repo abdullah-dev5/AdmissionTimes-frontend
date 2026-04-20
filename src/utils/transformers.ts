@@ -10,6 +10,16 @@
 
 import type { Admission, Watchlist, Notification, Deadline, DeadlineType } from '../types/api';
 import type { StudentAdmission, StudentNotification } from '../data/studentData';
+import {
+  extractScraperFee,
+  extractScraperOfficialUrl,
+  inferScraperDegreeLabelFromTitle,
+  flattenProgramAdmissions,
+  resolveScraperAdmissionLocation,
+  shouldHideGenericScraperAnnouncement,
+} from './scraperAdmissionAdapter';
+
+export { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from './scraperAdmissionAdapter';
 
 /**
  * Transform backend admission to frontend StudentAdmission format
@@ -48,6 +58,10 @@ export function transformAdmission(
     ...(Array.isArray(requirements.officialLinks) ? requirements.officialLinks : []),
     ...(Array.isArray(requirementLinks.officialLinks) ? requirementLinks.officialLinks : []),
   ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+
+  const isScraperOrigin =
+    String(backendAny.data_origin || backendAny.dataOrigin || '').toLowerCase() === 'scraper' ||
+    String(backendAny.source_system || '').toLowerCase().includes('scraper')
 
   const officialUrl =
     (typeof backendAny.primary_apply_url === 'string' && backendAny.primary_apply_url) ||
@@ -90,6 +104,8 @@ export function transformAdmission(
     backend.title ||
     backendAny.program_title ||
     'Untitled Program';
+
+  const inferredDegreeLabel = isScraperOrigin ? inferScraperDegreeLabelFromTitle(finalProgramTitle) : null
   
   // Debug logging for watchlist data
   if (watchlist) {
@@ -105,14 +121,26 @@ export function transformAdmission(
     (typeof backendAny.match_label === 'string' && backendAny.match_label) ||
     getMatchLabel(matchScore);
 
-  const degreeLabel = backendAny.degree_label || backend.degree_level || backendAny.degree || 'Degree Not Specified';
+  const degreeLabel =
+    backendAny.degree_label ||
+    backend.degree_level ||
+    backendAny.degree ||
+    inferredDegreeLabel ||
+    (isScraperOrigin ? 'BS' : 'Degree Not Specified');
   const degreeType = backendAny.degree_type || mapDegreeType(degreeLabel);
+  const scraperFee = isScraperOrigin ? extractScraperFee({ ...backendAny, requirements }) : { feeNumeric: null as number | null }
   const feeNumeric =
     Number.isFinite(parsedFeeAmount)
       ? parsedFeeAmount
-      : backend.application_fee;
+      : (typeof scraperFee.feeNumeric === 'number' ? scraperFee.feeNumeric : backend.application_fee);
+  const normalizedBackendFeeDisplay =
+    typeof backendAny.fee_display === 'string' && backendAny.fee_display.trim().length > 0
+      ? backendAny.fee_display.trim()
+      : undefined
+  const backendFeeDisplayIsZero = !!normalizedBackendFeeDisplay && /(?:^|\s)(?:pkr|rs\.?)[\s:]*0+(?:\.0+)?(?:\s|$)/i.test(normalizedBackendFeeDisplay)
   const feeDisplay =
-    (typeof backendAny.fee_display === 'string' && backendAny.fee_display) ||
+    (isScraperOrigin && backendFeeDisplayIsZero ? undefined : normalizedBackendFeeDisplay) ||
+    (typeof scraperFee.feeDisplay === 'string' ? scraperFee.feeDisplay : undefined) ||
     formatCurrency(feeNumeric);
   // Always derive timeline from deadline for UI consistency.
   // Backend-provided days can become stale and conflict with deadline display.
@@ -125,8 +153,30 @@ export function transformAdmission(
     ? calculateProgramStatusFromDays(daysRemaining)
     : calculateProgramStatus(normalizedDeadline);
   
+  const fallbackLocation = isScraperOrigin
+    ? ''
+    : ''
+
+  const scraperResolvedLocation = isScraperOrigin
+    ? resolveScraperAdmissionLocation({
+      ...backendAny,
+      requirements,
+      university_city: backendAny.university_city || backend.universities?.city,
+      university_country: backendAny.university_country || backend.universities?.country,
+    })
+    : null
+
+  const finalLocation = isScraperOrigin
+    ? (scraperResolvedLocation || fallbackLocation || 'Location not specified')
+    : (backend.location || 'Location not specified')
+
+  const scraperOfficialUrl = isScraperOrigin
+    ? extractScraperOfficialUrl({ ...backendAny, requirements })
+    : undefined
+
   return {
     id: backend.id,
+    sourceAdmissionId: backendAny.source_admission_id || backendAny.parent_admission_id || backendAny.original_admission_id || undefined,
     university: finalUniversityName,
     universityLogo: backend.universities?.logo_url || backendAny.university_logo_url || undefined,  // University logo URL
     universityCity: backend.universities?.city || backendAny.university_city || undefined,      // University city
@@ -138,10 +188,11 @@ export function transformAdmission(
     deadlineDisplay: formatDate(normalizedDeadline),
     fee: feeDisplay,
     feeNumeric,
-    location: backend.location,
-    city: extractCity(backend.location),
+    location: finalLocation,
+    city: extractCity(finalLocation),
     status: mapVerificationStatus(rawVerificationStatus),
     verificationStatus: mapRawVerificationStatus(rawVerificationStatus),
+    dataOrigin: isScraperOrigin ? 'scraper' : (backendAny.data_origin || backendAny.dataOrigin || undefined),
     programStatus,
     updated: formatRelativeTime(backend.updated_at),
     daysRemaining,
@@ -152,7 +203,7 @@ export function transformAdmission(
     alertEnabled: watchlist?.alert_opt_in || false,
     aiSummary: backend.match_reason || backend.description || undefined,
     eligibility,
-    officialUrl,
+    officialUrl: scraperOfficialUrl || officialUrl,
     logoBg: '#1F2937', // Default logo background color
   };
 }
@@ -388,6 +439,14 @@ function mapDegreeType(degreeLevel: string | null | undefined): 'BS' | 'MS' | 'P
     return 'BS'; // Default to Bachelor of Science if not provided
   }
   const lower = degreeLevel.toLowerCase();
+  if (lower.includes('bba')) return 'BBA'
+  if (lower.includes('mba')) return 'MBA'
+  if (lower.includes('phd') || lower.includes('doctor')) return 'PhD'
+  if (lower.includes('md')) return 'MD'
+  if (lower.includes('mphil')) return 'MPhil'
+  if (lower.includes('ms') || lower.includes('master')) return 'MS'
+  if (lower.includes('bs') || lower.includes('be') || lower.includes('bachelor') || lower.includes('undergraduate')) return 'BS'
+
   const map: Record<string, 'BS' | 'MS' | 'PhD' | 'MBA' | 'BBA' | 'MD' | 'MPhil'> = {
     bachelor: 'BS',
     'bachelor of science': 'BS',

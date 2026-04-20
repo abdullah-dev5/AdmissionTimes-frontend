@@ -1,48 +1,209 @@
-import { useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import AdminLayout from "../../layouts/AdminLayout"
 import { showInfo, showSuccess } from "../../utils/swal"
 import {
-	scraperJobs,
-	scraperSummary,
 	getScraperJobStatusColor,
 	type ScraperJob,
 } from "../../data/adminData"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
+import {
+	adminService,
+	type ScraperRunDetail,
+	type ScraperRunListItem,
+	type ScraperRunStatus,
+	type ScraperRunStatusLabel,
+	type ScraperRunSummary,
+} from "../../services/adminService"
+
+const itemsPerPage = 20
+const autoRefreshMs = 30_000
+
+const formatDuration = (seconds: number): string => {
+	if (!seconds || seconds <= 0) return "0s"
+	const mins = Math.floor(seconds / 60)
+	const secs = seconds % 60
+	if (mins === 0) return `${secs}s`
+	return `${mins}m ${secs}s`
+}
+
+const toJobStatus = (status: ScraperRunStatusLabel): ScraperJob["status"] => {
+	if (status === "Running") return "Running"
+	if (status === "Success") return "Success"
+	if (status === "Failed") return "Failed"
+	if (status === "Changes Detected") return "Changes Detected"
+	return "No Changes"
+}
+
+const toUniversityLabel = (value: string | null | undefined): string => {
+	const normalized = String(value || "").trim().toLowerCase()
+	if (!normalized) return "Unknown University"
+	if (normalized === "all") return "All Universities"
+	return String(value).trim()
+}
+
+const mapRunToJob = (
+	run: ScraperRunListItem,
+	detail?: Pick<ScraperRunDetail, "events">,
+): ScraperJob => {
+	const logs = detail
+		? detail.events
+				.map((event) => {
+					const status = event.event_status.toUpperCase()
+					const title = event.source_program_title || event.source_university_name || "Unknown source"
+					const reason = event.reason ? ` (${event.reason})` : ""
+					return `[${formatDisplayDateTime(event.created_at)}] ${status}: ${title}${reason}`
+				})
+				.join("\n")
+		: undefined
+
+	const errorLog = detail
+		? detail.events
+				.filter((event) => event.error_detail)
+				.map((event) => `[${formatDisplayDateTime(event.created_at)}] ${event.error_detail}`)
+				.join("\n")
+		: undefined
+
+	return {
+		id: run.id,
+		jobId: run.job_id,
+		university: toUniversityLabel(run.university),
+		universityId: run.id,
+		startedAt: run.started_at,
+		finishedAt: run.finished_at || run.started_at,
+		status: toJobStatus(run.status_label),
+		sourceUrl: run.source_url || "#",
+		duration: formatDuration(run.duration_seconds),
+		schedulerTriggered: run.scheduler_triggered,
+		logs,
+		errorLog: errorLog || undefined,
+	}
+}
 
 function AdminScraperJobsMonitor() {
 	const navigate = useNavigate()
 	const [selectedJob, setSelectedJob] = useState<ScraperJob | null>(null)
 	const [currentPage, setCurrentPage] = useState(1)
-	const itemsPerPage = 20
+	const [isLoading, setIsLoading] = useState(false)
+	const [isDetailLoading, setIsDetailLoading] = useState(false)
+	const [isActionLoading, setIsActionLoading] = useState(false)
+	const [jobs, setJobs] = useState<ScraperJob[]>([])
+	const [selectedRunDetail, setSelectedRunDetail] = useState<ScraperRunDetail | null>(null)
+	const [totalJobs, setTotalJobs] = useState(0)
+	const [statusFilter, setStatusFilter] = useState<"all" | ScraperRunStatus>("all")
+	const [modeFilter, setModeFilter] = useState<"all" | "mirror" | "publish">("all")
+	const [summary, setSummary] = useState<ScraperRunSummary>({
+		total_jobs: 0,
+		successful_jobs: 0,
+		failed_jobs: 0,
+		running_jobs: 0,
+		last_execution: null,
+	})
 
-	// Pagination
-	const totalPages = Math.ceil(scraperJobs.length / itemsPerPage)
-	const paginatedJobs = useMemo(() => {
-		const startIndex = (currentPage - 1) * itemsPerPage
-		return scraperJobs.slice(startIndex, startIndex + itemsPerPage)
-	}, [currentPage])
+	const totalPages = Math.max(1, Math.ceil(totalJobs / itemsPerPage))
 
-	const handleRunAll = async () => {
-		// Mock API call - in production, this would be:
-		// POST /api/admin/scraper/run-all
-		console.log("Running scraper for all universities")
-		// Show toast: "Scraper started successfully."
-		await showSuccess("Scraper started successfully.")
+	const fetchSummary = async () => {
+		try {
+			const response = await adminService.getScraperRunSummary()
+			setSummary(response.data)
+		} catch (error) {
+			console.error("Failed to load scraper summary", error)
+		}
 	}
 
-	const handleRerun = async (universityId: string) => {
-		// Mock API call - in production, this would be:
-		// POST /api/admin/scraper/rerun/:universityId
-		console.log("Rerunning scraper for university:", universityId)
-		await showInfo("Scraper rerun initiated.")
+	const fetchRuns = async (page: number, options?: { silent?: boolean }) => {
+		if (!options?.silent) {
+			setIsLoading(true)
+		}
+		try {
+			const response = await adminService.getScraperRuns(page, itemsPerPage, {
+				status: statusFilter === "all" ? undefined : statusFilter,
+				mode: modeFilter === "all" ? undefined : modeFilter,
+			})
+			setJobs(response.data.map((run) => mapRunToJob(run)))
+			setTotalJobs(response.pagination.total)
+		} catch (error) {
+			console.error("Failed to load scraper runs", error)
+			setJobs([])
+			setTotalJobs(0)
+		} finally {
+			if (!options?.silent) {
+				setIsLoading(false)
+			}
+		}
+	}
+
+	useEffect(() => {
+		void fetchSummary()
+	}, [])
+
+	useEffect(() => {
+		void fetchRuns(currentPage)
+	}, [currentPage, statusFilter, modeFilter])
+
+	useEffect(() => {
+		const intervalId = window.setInterval(() => {
+			void fetchSummary()
+			void fetchRuns(currentPage, { silent: true })
+		}, autoRefreshMs)
+
+		return () => {
+			window.clearInterval(intervalId)
+		}
+	}, [currentPage, statusFilter, modeFilter])
+
+	const openJobDetail = async (job: ScraperJob) => {
+		setIsDetailLoading(true)
+		try {
+			const response = await adminService.getScraperRunDetail(job.id)
+			setSelectedRunDetail(response.data)
+			setSelectedJob(mapRunToJob(response.data.run, { events: response.data.events }))
+		} catch (error) {
+			console.error("Failed to load scraper run details", error)
+			setSelectedRunDetail(null)
+			setSelectedJob(job)
+		} finally {
+			setIsDetailLoading(false)
+		}
+	}
+
+	const handleRunAll = async () => {
+		setIsActionLoading(true)
+		try {
+			const response = await adminService.triggerScraperRunAll(true)
+			await showSuccess(
+				`Manual publish replay started. Replay records: ${response.data.replayed_records}. Mode: ${response.data.ingestion.mode}.`,
+			)
+			await fetchSummary()
+			await fetchRuns(1)
+			setCurrentPage(1)
+		} catch (error) {
+			console.error("Failed to trigger manual scraper run", error)
+			await showInfo("Failed to start manual scraper run.")
+		} finally {
+			setIsActionLoading(false)
+		}
+	}
+
+	const handleRerun = async (runId: string) => {
+		setIsActionLoading(true)
+		try {
+			const response = await adminService.rerunScraperRun(runId, true)
+			await showSuccess(
+				`Publish rerun started. Replay records: ${response.data.replayed_records}. Mode: ${response.data.ingestion.mode}.`,
+			)
+			await fetchSummary()
+			await fetchRuns(currentPage)
+		} catch (error) {
+			console.error("Failed to trigger scraper rerun", error)
+			await showInfo("Failed to rerun scraper job.")
+		} finally {
+			setIsActionLoading(false)
+		}
 	}
 
 	const handleRetry = async (job: ScraperJob) => {
-		// Mock API call - in production, this would be:
-		// POST /api/admin/scraper/rerun/:universityId
-		console.log("Retrying scraper job:", job.jobId)
-		await handleRerun(job.universityId)
+		await handleRerun(job.id)
 	}
 
 	return (
@@ -58,11 +219,50 @@ function AdminScraperJobsMonitor() {
 					</div>
 					<button
 						onClick={handleRunAll}
-						className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
+						disabled={isActionLoading}
+						className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
 						style={{ backgroundColor: "#004AAD" }}
 					>
-						Run Scraper Manually
+						{isActionLoading ? "Running..." : "Run Publish Replay"}
 					</button>
+				</div>
+
+				<div className="mb-6 bg-white rounded-lg shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-end">
+					<div>
+						<label className="block text-sm text-gray-600 mb-1">Status</label>
+						<select
+							value={statusFilter}
+							onChange={(e) => {
+								setStatusFilter(e.target.value as "all" | ScraperRunStatus)
+								setCurrentPage(1)
+							}}
+							className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+						>
+							<option value="all">All Statuses</option>
+							<option value="running">Running</option>
+							<option value="completed">Completed</option>
+							<option value="partial">Partial</option>
+							<option value="failed">Failed</option>
+						</select>
+					</div>
+					<div>
+						<label className="block text-sm text-gray-600 mb-1">Mode</label>
+						<select
+							value={modeFilter}
+							onChange={(e) => {
+								setModeFilter(e.target.value as "all" | "mirror" | "publish")
+								setCurrentPage(1)
+							}}
+							className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+						>
+							<option value="all">All Modes</option>
+							<option value="mirror">Mirror</option>
+							<option value="publish">Publish</option>
+						</select>
+					</div>
+					<p className="text-xs text-gray-500 md:ml-auto md:mb-2">
+						Auto-refreshing every 30s. Manual action replays latest snapshot with publish enabled for FAST and other universities.
+					</p>
 				</div>
 
 				{/* Summary Cards */}
@@ -72,7 +272,7 @@ function AdminScraperJobsMonitor() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Total Jobs Run</p>
 								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
-									{scraperSummary.totalJobs}
+									{summary.total_jobs}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#E0E7FF" }}>
@@ -93,7 +293,7 @@ function AdminScraperJobsMonitor() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Successful Jobs</p>
 								<p className="text-3xl font-bold" style={{ color: "#10B981" }}>
-									{scraperSummary.successfulJobs}
+									{summary.successful_jobs}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#D1FAE5" }}>
@@ -114,7 +314,7 @@ function AdminScraperJobsMonitor() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Failed Jobs</p>
 								<p className="text-3xl font-bold" style={{ color: "#EF4444" }}>
-									{scraperSummary.failedJobs}
+									{summary.failed_jobs}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEE2E2" }}>
@@ -135,7 +335,7 @@ function AdminScraperJobsMonitor() {
 							<div>
 								<p className="text-sm text-gray-600 mb-1">Last Execution</p>
 								<p className="text-lg font-bold" style={{ color: "#111827" }}>
-									{formatDisplayDateTime(scraperSummary.lastExecution)}
+									{summary.last_execution ? formatDisplayDateTime(summary.last_execution) : "-"}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEF3C7" }}>
@@ -169,13 +369,13 @@ function AdminScraperJobsMonitor() {
 								</tr>
 							</thead>
 							<tbody>
-								{paginatedJobs.map((job) => {
+								{jobs.map((job) => {
 									const statusColors = getScraperJobStatusColor(job.status)
 									return (
 										<tr
 											key={job.id}
 											className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-											onClick={() => setSelectedJob(job)}
+											onClick={() => void openJobDetail(job)}
 										>
 											<td className="py-4 px-4">
 												<p className="font-medium" style={{ color: "#111827" }}>
@@ -200,15 +400,19 @@ function AdminScraperJobsMonitor() {
 												</span>
 											</td>
 											<td className="py-4 px-4">
-												<a
-													href={job.sourceUrl}
-													target="_blank"
-													rel="noopener noreferrer"
-													onClick={(e) => e.stopPropagation()}
-													className="text-sm text-blue-600 hover:underline truncate max-w-[200px] block"
-												>
-													{job.sourceUrl}
-												</a>
+												{job.sourceUrl !== "#" ? (
+													<a
+														href={job.sourceUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														onClick={(e) => e.stopPropagation()}
+														className="text-sm text-blue-600 hover:underline truncate max-w-[200px] block"
+													>
+														{job.sourceUrl}
+													</a>
+												) : (
+													<p className="text-sm text-gray-500">-</p>
+												)}
 											</td>
 											<td className="py-4 px-4">
 												<p className="text-sm text-gray-600">{job.duration}</p>
@@ -216,14 +420,14 @@ function AdminScraperJobsMonitor() {
 											<td className="py-4 px-4">
 												<div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
 													<button
-														onClick={() => setSelectedJob(job)}
+														onClick={() => void openJobDetail(job)}
 														className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
 													>
 														View Details
 													</button>
 													{job.status === "Failed" && (
 														<button
-															onClick={() => handleRetry(job)}
+															onClick={() => void handleRetry(job)}
 															className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
 														>
 															Retry
@@ -234,7 +438,7 @@ function AdminScraperJobsMonitor() {
 										</tr>
 									)
 								})}
-								{paginatedJobs.length === 0 && (
+								{!isLoading && jobs.length === 0 && (
 									<tr>
 										<td colSpan={8} className="py-10 text-center">
 											<div className="flex flex-col items-center justify-center">
@@ -257,16 +461,23 @@ function AdminScraperJobsMonitor() {
 										</td>
 									</tr>
 								)}
+								{isLoading && (
+									<tr>
+										<td colSpan={8} className="py-10 text-center text-gray-500">
+											Loading scraper runs...
+										</td>
+									</tr>
+								)}
 							</tbody>
 						</table>
 					</div>
 
 					{/* Pagination */}
-					{totalPages > 1 && (
+					{totalJobs > 0 && (
 						<div className="mt-6 flex items-center justify-between">
 							<p className="text-sm text-gray-600">
-								Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, scraperJobs.length)} of{" "}
-								{scraperJobs.length} jobs
+								Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalJobs)} of {" "}
+								{totalJobs} jobs
 							</p>
 							<div className="flex items-center gap-2">
 								<button
@@ -365,14 +576,20 @@ function AdminScraperJobsMonitor() {
 										</div>
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Source URL</p>
-											<a
-												href={selectedJob.sourceUrl}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="text-sm text-blue-600 hover:underline"
-											>
-												{selectedJob.sourceUrl}
-											</a>
+											{selectedJob.sourceUrl !== "#" ? (
+												<a
+													href={selectedJob.sourceUrl}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="text-sm text-blue-600 hover:underline"
+												>
+													{selectedJob.sourceUrl}
+												</a>
+											) : (
+												<p className="text-sm font-medium" style={{ color: "#111827" }}>
+													-
+												</p>
+											)}
 										</div>
 										<div>
 											<p className="text-sm text-gray-500 mb-1">Scheduler Triggered</p>
@@ -390,7 +607,7 @@ function AdminScraperJobsMonitor() {
 									</h3>
 									<div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
 										<pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono overflow-x-auto max-h-64 overflow-y-auto">
-											{selectedJob.logs || "No logs available."}
+											{isDetailLoading ? "Loading details..." : selectedJob.logs || "No logs available."}
 										</pre>
 									</div>
 									{selectedJob.errorLog && (
@@ -425,6 +642,58 @@ function AdminScraperJobsMonitor() {
 									)}
 								</div>
 
+								{selectedRunDetail?.university_breakdown && selectedRunDetail.university_breakdown.length > 0 && (
+									<div className="mb-6">
+										<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+											University Breakdown
+										</h3>
+										<div className="overflow-x-auto border border-gray-200 rounded-lg">
+											<table className="w-full text-sm">
+												<thead className="bg-gray-50">
+													<tr>
+														<th className="text-left px-3 py-2 text-gray-600">University</th>
+														<th className="text-right px-3 py-2 text-gray-600">Total</th>
+														<th className="text-right px-3 py-2 text-gray-600">Inserted</th>
+														<th className="text-right px-3 py-2 text-gray-600">Updated</th>
+														<th className="text-right px-3 py-2 text-gray-600">Skipped</th>
+														<th className="text-right px-3 py-2 text-gray-600">Failed</th>
+													</tr>
+												</thead>
+												<tbody>
+													{selectedRunDetail.university_breakdown.map((row) => (
+														<tr key={row.source_university_name} className="border-t border-gray-100">
+															<td className="px-3 py-2 text-gray-800">{row.source_university_name}</td>
+															<td className="px-3 py-2 text-right text-gray-700">{row.total}</td>
+															<td className="px-3 py-2 text-right text-green-700">{row.inserted}</td>
+															<td className="px-3 py-2 text-right text-blue-700">{row.updated}</td>
+															<td className="px-3 py-2 text-right text-amber-700">{row.skipped}</td>
+															<td className="px-3 py-2 text-right text-red-700">{row.failed}</td>
+														</tr>
+													))}
+												</tbody>
+											</table>
+										</div>
+									</div>
+								)}
+
+								{selectedRunDetail?.skip_reasons && selectedRunDetail.skip_reasons.length > 0 && (
+									<div className="mb-6">
+										<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
+											Skip Reasons
+										</h3>
+										<div className="space-y-2">
+											{selectedRunDetail.skip_reasons.map((row, idx) => (
+												<div key={`${row.source_university_name}-${idx}`} className="p-3 border border-amber-200 bg-amber-50 rounded-lg">
+													<p className="text-sm font-medium text-amber-900">
+														{row.source_university_name} ({row.count})
+													</p>
+													<p className="text-sm text-amber-800 mt-1">{row.reason}</p>
+												</div>
+											))}
+										</div>
+									</div>
+								)}
+
 								{/* Change Detection Section */}
 								{selectedJob.changesDetected && selectedJob.changesDetected.length > 0 && (
 									<div className="mb-6">
@@ -447,6 +716,7 @@ function AdminScraperJobsMonitor() {
 															onClick={() => {
 																navigate(`/admin/change-logs?admissionId=${change.admissionId}`)
 																setSelectedJob(null)
+																setSelectedRunDetail(null)
 															}}
 															className="px-3 py-1.5 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
 															style={{ backgroundColor: "#004AAD" }}
@@ -464,15 +734,19 @@ function AdminScraperJobsMonitor() {
 							{/* Drawer Footer */}
 							<div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
 								<button
-									onClick={() => setSelectedJob(null)}
+									onClick={() => {
+										setSelectedJob(null)
+										setSelectedRunDetail(null)
+									}}
 									className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
 								>
 									Close
 								</button>
 								<button
 									onClick={() => {
-										handleRerun(selectedJob.universityId)
+										void handleRerun(selectedJob.id)
 										setSelectedJob(null)
+										setSelectedRunDetail(null)
 									}}
 									className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90"
 									style={{ backgroundColor: "#004AAD" }}
