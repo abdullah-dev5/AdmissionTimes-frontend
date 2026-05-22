@@ -27,3 +27,13 @@ dist-ssr
 .env.*
 !.env.example
 *.sw?
+
+# Docs and test artifacts requested to stay out of commits
+project-docs/
+*.md
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test/
+tests/

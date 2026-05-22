@@ -42,6 +42,12 @@ const toUniversityLabel = (value: string | null | undefined): string => {
 	return String(value).trim()
 }
 
+const toUnixMs = (value?: string | null): number => {
+	if (!value) return 0
+	const parsed = new Date(value).getTime()
+	return Number.isNaN(parsed) ? 0 : parsed
+}
+
 const mapRunToJob = (
 	run: ScraperRunListItem,
 	detail?: Pick<ScraperRunDetail, "events">,
@@ -120,7 +126,8 @@ function AdminScraperJobsMonitor() {
 				status: statusFilter === "all" ? undefined : statusFilter,
 				mode: modeFilter === "all" ? undefined : modeFilter,
 			})
-			setJobs(response.data.map((run) => mapRunToJob(run)))
+			const mappedJobs = response.data.map((run) => mapRunToJob(run))
+			setJobs(mappedJobs)
 			setTotalJobs(response.pagination.total)
 		} catch (error) {
 			console.error("Failed to load scraper runs", error)
@@ -217,14 +224,16 @@ function AdminScraperJobsMonitor() {
 						</h1>
 						<p className="text-gray-600">Track automated scraper executions and update results.</p>
 					</div>
-					<button
-						onClick={handleRunAll}
-						disabled={isActionLoading}
-						className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-						style={{ backgroundColor: "#004AAD" }}
-					>
-						{isActionLoading ? "Running..." : "Run Publish Replay"}
-					</button>
+					{false && (
+						<button
+							onClick={handleRunAll}
+							disabled={isActionLoading}
+							className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+							style={{ backgroundColor: "#004AAD" }}
+						>
+							{isActionLoading ? "Running..." : "Run Publish Replay"}
+						</button>
+					)}
 				</div>
 
 				<div className="mb-6 bg-white rounded-lg shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-end">

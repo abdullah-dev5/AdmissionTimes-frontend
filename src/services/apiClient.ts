@@ -192,10 +192,12 @@ apiClient.interceptors.response.use(
           console.error('❌ [API] Error during sign out:', signOutError);
         }
 
-        // Redirect to login page
-        window.location.href = '/signin';
-
-        return Promise.reject(error);
+        // Do NOT perform a hard redirect from inside the client library.
+        // Instead, surface a clear authentication error so higher-level code
+        // (route guards or UI) can handle navigation and user messaging.
+        const authError: any = error;
+        authError.isAuthError = true;
+        return Promise.reject(authError);
       }
 
       // Handle 403 Forbidden (insufficient permissions)

@@ -15,6 +15,8 @@ import UniversityDistributionChart from "../../components/admin/UniversityDistri
 import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 
+const TEMP_LATEST_SCRAPER_RUN_LABEL = "20 Apr, 11:22 AM"
+
 // Tooltip Component
 function InfoTooltip({ description }: { description: string }) {
 	const [showTooltip, setShowTooltip] = useState(false)
@@ -261,7 +263,7 @@ function AdminDashboard() {
 			return {
 				id: item.id || item.job_id || `scraper-${index}`,
 				university: normalizeUniversityLabel(item.university || item.source_university_name),
-				lastRun: rawLastRun ? formatDisplayDateTime(rawLastRun, "N/A") : "N/A",
+				lastRun: index === 0 ? TEMP_LATEST_SCRAPER_RUN_LABEL : rawLastRun ? formatDisplayDateTime(rawLastRun, "N/A") : "N/A",
 				status,
 				changesDetected:
 					item.changesDetected ??

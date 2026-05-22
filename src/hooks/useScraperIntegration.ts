@@ -41,7 +41,7 @@ export const useScraperIntegration = () => {
 	 */
 	const createScraperJob = useCallback((name: string, universityId: string): ScraperJob => {
 		const job: ScraperJob = {
-			id: `scraper-${Date.now()}`,
+			id: `scraper-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 			name,
 			status: "pending",
 			university_id: universityId,
@@ -176,7 +176,7 @@ export const useScraperIntegration = () => {
 	 */
 	const isScraperEnabled = useCallback(() => {
 		// Replace with actual feature flag check
-		const SCRAPER_ENABLED = process.env.REACT_APP_SCRAPER_ENABLED === "true"
+		const SCRAPER_ENABLED = import.meta.env.VITE_SCRAPER_ENABLED === 'true'
 		console.log(`🔄 [Scraper] Enabled: ${SCRAPER_ENABLED}`)
 		return SCRAPER_ENABLED
 	}, [])

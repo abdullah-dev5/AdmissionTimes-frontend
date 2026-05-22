@@ -219,12 +219,26 @@ function extractUrlFromText(text: string): string | undefined {
 
 function parseCurrencyAmount(text: string): number | null {
   if (!text) return null
+  const normalized = text.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim()
 
-  const normalized = text.replace(/,/g, '')
-  const labeledMatch = normalized.match(/(?:pkr|rs\.?|rupees?)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i)
-  if (labeledMatch?.[1]) return Number(labeledMatch[1])
+  // Prefer clearly labeled currency amounts: PKR, Rs, rupees, $ etc.
+  const labeledMatch = normalized.match(/(?:pkr|rs\.?|rupees?|usd|\$|eur|£)\s*[:\-]?\s*(\d{1,3}(?:[\,\s]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/i)
+  if (labeledMatch?.[1]) {
+    const cleaned = labeledMatch[1].replace(/[ ,]/g, '')
+    const num = Number(cleaned)
+    if (Number.isFinite(num) && num > 0) return num
+  }
 
-  const anyAmountMatch = normalized.match(/\b(\d{4,7}(?:\.\d+)?)\b/)
+  // Look for comma-separated numbers (e.g. 2,500)
+  const commaMatch = normalized.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/)
+  if (commaMatch?.[1]) {
+    const cleaned = commaMatch[1].replace(/,/g, '')
+    const num = Number(cleaned)
+    if (Number.isFinite(num) && num > 0) return num
+  }
+
+  // Fallback: any numeric token of reasonable length (avoid single-digit noise)
+  const anyAmountMatch = normalized.match(/\b(\d{2,7}(?:\.\d+)?)\b/)
   if (!anyAmountMatch?.[1]) return null
 
   const value = Number(anyAmountMatch[1])

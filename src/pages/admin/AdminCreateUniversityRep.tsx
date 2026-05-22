@@ -20,6 +20,13 @@ const initialForm: FormState = {
   website: '',
 }
 
+const normalizeWebsite = (website: string): string | undefined => {
+  const trimmed = website.trim()
+  if (!trimmed) return undefined
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
 function AdminCreateUniversityRep() {
   const [form, setForm] = useState<FormState>(initialForm)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,6 +42,17 @@ function AdminCreateUniversityRep() {
     if (!form.email.trim()) return 'Email is required.'
     if (!form.display_name.trim()) return 'Display name is required.'
     if (!form.university_name.trim()) return 'University name is required.'
+
+    const normalizedWebsite = normalizeWebsite(form.website)
+    if (normalizedWebsite) {
+      try {
+        // Keep client-side validation aligned with backend Joi.uri() requirement.
+        new URL(normalizedWebsite)
+      } catch {
+        return 'Website must be a valid URL (for example: https://www.example.edu).'
+      }
+    }
+
     return ''
   }
 
@@ -58,13 +76,24 @@ function AdminCreateUniversityRep() {
         university_name: form.university_name.trim(),
         city: form.city.trim() || undefined,
         country: form.country.trim() || undefined,
-        website: form.website.trim() || undefined,
+        website: normalizeWebsite(form.website),
       })
 
       setResult(response.data)
       setForm(initialForm)
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || 'Failed to create university representative.'
+      const backendErrors = err?.response?.data?.errors
+      const backendMessage = err?.response?.data?.message
+
+      let message = backendMessage || err?.message || 'Failed to create university representative.'
+
+      if (backendErrors && typeof backendErrors === 'object') {
+        const firstFieldError = Object.values(backendErrors)[0]
+        if (typeof firstFieldError === 'string' && firstFieldError.trim()) {
+          message = firstFieldError
+        }
+      }
+
       setError(message)
     } finally {
       setIsSubmitting(false)
@@ -189,6 +218,7 @@ function AdminCreateUniversityRep() {
                 placeholder="https://www.example.edu"
                 disabled={isSubmitting}
               />
+              <p className="mt-1 text-xs text-gray-500">You can enter with or without https://.</p>
             </div>
 
             <button

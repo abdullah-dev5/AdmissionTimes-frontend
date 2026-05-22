@@ -440,18 +440,6 @@ function ManageAdmissions() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div>
-                        <p className="text-sm font-medium text-blue-900">AI Summary Generated</p>
-                        <p className="text-xs text-blue-700">automatically after submission.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div>
                         <p className="text-sm font-medium text-blue-900">All published admissions</p>
                         <p className="text-xs text-blue-700">are set to 'Pending Audit' by default.</p>
                       </div>
@@ -606,15 +594,6 @@ function ManageAdmissions() {
                           type="text"
                           value="Blank until admin review"
                           disabled
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">AI Summary Preview</label>
-                        <textarea
-                          value="AI-generated summary will appear here after publishing..."
-                          disabled
-                          rows={4}
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
                         />
                       </div>

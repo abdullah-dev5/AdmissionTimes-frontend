@@ -21,6 +21,61 @@ import {
 
 export { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from './scraperAdmissionAdapter';
 
+const GENERIC_PROGRAM_TITLE_PATTERNS = [
+  /^admissions?\s+\d{4}\s+(undergraduate|graduate|postgraduate)\s+programs?$/i,
+  /^undergraduate\s+admissions?\s+\d{4}$/i,
+  /^graduate\s+admissions?\s+\d{4}$/i,
+  /^postgraduate\s+admissions?\s+\d{4}$/i,
+  /^admissions?\s*\d{4}$/i,
+  /^admissions?$/i,
+  /^programs?$/i,
+  /^undergraduate\s+programs?$/i,
+  /^graduate\s+programs?$/i,
+  /^postgraduate\s+programs?$/i,
+]
+
+function readText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function isGenericProgramTitle(title: string): boolean {
+  const normalized = title.trim().replace(/\s+/g, ' ')
+  return GENERIC_PROGRAM_TITLE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+function resolveProgramTitle(backend: Admission & { [key: string]: unknown }): string {
+  const titleCandidates = [
+    readText(backend.title),
+    readText(backend.admission_title),
+    readText(backend.program_title),
+    readText(backend.sub_program_title),
+    readText(backend.program_name),
+    readText(backend.name),
+  ].filter((value): value is string => Boolean(value))
+
+  const specificTitle = titleCandidates.find((title) => !isGenericProgramTitle(title))
+  if (specificTitle) {
+    return specificTitle
+  }
+
+  const fieldOfStudy = readText(backend.field_of_study) || readText(backend.department)
+  if (fieldOfStudy) {
+    return fieldOfStudy
+  }
+
+  const programType = readText(backend.program_type)
+  if (programType) {
+    return programType
+  }
+
+  const degreeLevel = readText(backend.degree_level) || readText(backend.degree_type)
+  if (degreeLevel) {
+    return degreeLevel
+  }
+
+  return titleCandidates[0] || 'Untitled Program'
+}
+
 /**
  * Transform backend admission to frontend StudentAdmission format
  * 
@@ -99,11 +154,8 @@ export function transformAdmission(
     (backend.universities?.name) ||
     safeUniversityFallback;
 
-  // Get program title from supported response shapes
-  const finalProgramTitle =
-    backend.title ||
-    backendAny.program_title ||
-    'Untitled Program';
+  // Prefer a specific program title over generic admission banners.
+  const finalProgramTitle = resolveProgramTitle(backend as Admission & { [key: string]: unknown });
 
   const inferredDegreeLabel = isScraperOrigin ? inferScraperDegreeLabelFromTitle(finalProgramTitle) : null
   

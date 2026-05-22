@@ -132,7 +132,7 @@ const safeLabel = (value: string | null | undefined, fallback: string) => {
 
 const getSubmittedViaLabel = (admission: any) => {
 	if (admission?.data_origin === "scraper") {
-		return "Crawl"
+		return "System Import"
 	}
 
 	return safeLabel(admission?.submitted_by_label || admission?.submitted_by || admission?.created_by, "University")
@@ -595,11 +595,11 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 				{/* Header */}
 				<div className="mb-6">
 					<h1 className="text-2xl font-bold mb-2" style={{ color: "#111827" }}>
-						{resolvedDataOrigin === "scraper" ? "Scraped Verification Center" : "Verification Center"}
+						{resolvedDataOrigin === "scraper" ? "Imported Records Verification Center" : "Verification Center"}
 					</h1>
 					<p className="text-gray-600">
 						{resolvedDataOrigin === "scraper"
-							? "Review and manage scraper-origin admissions synced from scraper DB through backend ingestion, including FAST and other universities."
+							? "Review and manage imported admissions synced through backend ingestion, including FAST and other universities."
 							: "Review and manage admissions requiring verification."}
 					</p>
 				</div>
@@ -753,7 +753,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 												</p>
 													{item.dataOrigin === "scraper" && (
 														<span className="inline-block mt-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
-															Scraped
+																Imported
 														</span>
 													)}
 											</td>
