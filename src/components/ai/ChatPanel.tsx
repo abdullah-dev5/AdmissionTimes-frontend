@@ -115,8 +115,17 @@ const STOP_WORDS = new Set([
   'admission', 'admissions', 'in', 'of', 'the', 'a', 'an', 'for', 'with', 'to', 'from', 'on', 'at',
 ])
 
+const DATE_QUERY_PATTERN =
+  /\b\d{1,2}\s*(?:st|nd|rd|th)?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
+
+const PROGRAM_CODE_QUERY_PATTERN =
+  /\b(bba|bs|bsc|be|mba|ms|msc|mphil|phd|llb|llm|cs)\b/i
+
 const extractQueryKeywords = (query?: string): string[] => {
   if (!query) return []
+  if (DATE_QUERY_PATTERN.test(query) || PROGRAM_CODE_QUERY_PATTERN.test(query)) {
+    return []
+  }
   return query
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -306,16 +315,9 @@ function ChatPanel() {
         clarification_question: data.clarification_question,
       }
       const finalAnswer = resolveAssistantReply(messageText, answer, payload)
-      const conversationalAnswer = buildConversationalReply(finalAnswer, {
-        result_count: data.result_count,
-        results: data.results,
-        clarification_needed: data.clarification_needed,
-        clarification_question: data.clarification_question,
-      }, messageText)
-
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: redactSensitiveData(conversationalAnswer),
+        text: finalAnswer,
         isUser: false,
         timestamp: formatDisplayTime(new Date().toISOString())
       }
@@ -349,7 +351,7 @@ function ChatPanel() {
     }
 
     if (status === 503 || apiMessage.includes('gemini') || apiMessage.includes('not configured')) {
-      return 'AI service is temporarily unavailable right now. Please try again in a moment.'
+      return 'Gemini API is exhausted and has reached its limits.'
     }
 
     if (isTransientStatus(status)) {

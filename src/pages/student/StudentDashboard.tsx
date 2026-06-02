@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor } from '../../data/studentData'
@@ -8,12 +8,13 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
-import { recommendationsService } from '../../services/recommendationsService'
-import { transformAdmission } from '../../utils/transformers'
-
-const RECOMMENDATION_MIN_SCORE = 50
-const RECOMMENDATION_RENDER_MIN_SCORE = 70
-const RECOMMENDATION_RENDER_LIMIT = 4
+import {
+  RECOMMENDATION_COUNT_LIMIT,
+  RECOMMENDATION_MIN_SCORE,
+  RECOMMENDATION_RENDER_LIMIT,
+  filterEligibleRecommendations,
+  mapRecommendationsToAdmissions,
+} from '../../utils/recommendationUtils'
 
 function StudentDashboard() {
   const navigate = useNavigate()
@@ -23,6 +24,8 @@ function StudentDashboard() {
   const { admissions: rawAdmissions, loading, error } = useStudentDashboardData()
   const allAdmissions = useStudentStore((state) => state.admissions)
   const notifications = useStudentStore((state) => state.notifications)
+  const apiRecommendations = useStudentStore((state) => state.apiRecommendations)
+  const fetchRecommendations = useStudentStore((state) => state.fetchRecommendations)
   
   // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
@@ -37,131 +40,42 @@ function StudentDashboard() {
   )
   
   const displayName = user?.display_name?.trim() || 'Student'
-  const [apiRecommendedPrograms, setApiRecommendedPrograms] = useState<typeof admissions>([])
-  const recommendationFetchRef = useRef<{ userId: string | null; lastFetchedAt: number }>({ userId: null, lastFetchedAt: 0 })
+  const userId = user?.id || null
 
-  // Use API stats if complete, otherwise calculate from actual data
-  // NOTE: All hooks must be called before any conditional returns
+  useEffect(() => {
+    if (!userId) return
+    void fetchRecommendations(userId)
+  }, [userId, fetchRecommendations])
+
+  const eligibleRecommendations = useMemo(() => {
+    if (apiRecommendations.length === 0) {
+      return filterEligibleRecommendations(admissions).slice(0, RECOMMENDATION_COUNT_LIMIT)
+    }
+
+    const admissionById = new Map(admissions.map((admission) => [admission.id, admission]))
+    const mapped = mapRecommendationsToAdmissions(apiRecommendations, admissionById)
+    return filterEligibleRecommendations(mapped).slice(0, RECOMMENDATION_COUNT_LIMIT)
+  }, [admissions, apiRecommendations])
+
+  const recommendedPrograms = useMemo(
+    () => eligibleRecommendations.slice(0, RECOMMENDATION_RENDER_LIMIT),
+    [eligibleRecommendations]
+  )
+
   const stats = useMemo(() => {
-    // Calculate stats from actual data (source of truth)
-    const upcoming = admissions.filter(a => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
-    
-    const active = admissions.filter(a => a.daysRemaining >= 0).length
-    
-    const recommendationSource = apiRecommendedPrograms.length > 0 ? apiRecommendedPrograms : admissions
-    const recommendations = recommendationSource.filter(a => a.matchNumeric && a.matchNumeric >= RECOMMENDATION_MIN_SCORE && a.daysRemaining >= 0).length
-    
-    const urgent = admissions.filter(a => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
+    const upcoming = admissions.filter((a) => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
+    const active = admissions.filter((a) => a.daysRemaining >= 0).length
+    const recommendations = Math.min(RECOMMENDATION_COUNT_LIMIT, eligibleRecommendations.length)
+    const urgent = admissions.filter((a) => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
 
-    const calculatedStats = {
+    return {
       active,
       saved: savedAdmissions.length,
       upcoming,
       recommendations,
       urgent,
     }
-
-    console.log('📊 [Dashboard Stats] Calculated from data:', calculatedStats)
-    console.log('📊 [Dashboard] Total admissions:', admissions.length, 'Saved:', savedAdmissions.length)
-    
-    // Debug: Show which admissions are counted
-    if (admissions.length > 0) {
-      const openPrograms = admissions.filter(a => a.programStatus === 'Open' || a.programStatus === 'Closing Soon');
-      console.log(`📊 [Dashboard] Open/ClosingSoon programs: ${openPrograms.length}/${admissions.length}`);
-      
-      const withValidDeadline = admissions.filter(a => a.daysRemaining >= 0);
-      console.log(`📊 [Dashboard] With valid deadline (not closed): ${withValidDeadline.length}/${admissions.length}`);
-    }
-
-    return calculatedStats
-  }, [admissions, apiRecommendedPrograms, savedAdmissions])
-
-  // Get recommended programs (high match, open status, not past deadline)
-  const recommendedPrograms = useMemo(() => {
-    if (apiRecommendedPrograms.length > 0) {
-      return apiRecommendedPrograms
-        .filter(a => (a.matchNumeric || 0) > RECOMMENDATION_RENDER_MIN_SCORE)
-        .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
-        .slice(0, RECOMMENDATION_RENDER_LIMIT)
-    }
-
-    // Fallback: local heuristic when API recommendations are temporarily unavailable.
-    return admissions
-      .filter(a => (a.matchNumeric || 0) > RECOMMENDATION_RENDER_MIN_SCORE)
-      .sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
-      .slice(0, RECOMMENDATION_RENDER_LIMIT)
-  }, [admissions, apiRecommendedPrograms])
-
-  useEffect(() => {
-    const userId = user?.id || null
-    if (!userId) {
-      return
-    }
-
-    const now = Date.now()
-    const sameUser = recommendationFetchRef.current.userId === userId
-    const withinCooldown = sameUser && now - recommendationFetchRef.current.lastFetchedAt < 60_000
-    if (withinCooldown) {
-      return
-    }
-
-    recommendationFetchRef.current = { userId, lastFetchedAt: now }
-
-    let isMounted = true
-    const admissionById = new Map(admissions.map((admission) => [admission.id, admission]))
-
-    recommendationsService
-      .getRecommendations(10, RECOMMENDATION_MIN_SCORE)
-      .then((response) => {
-        const recommendations = response?.data?.recommendations || []
-        const mapped = recommendations
-          .map((recommendation) => {
-            const base = admissionById.get(recommendation.admission_id)
-            if (base) {
-              return {
-                ...base,
-                matchNumeric: recommendation.score,
-                aiSummary: recommendation.reason || base.aiSummary,
-              }
-            }
-
-            const fallbackAdmission = transformAdmission({
-              id: recommendation.admission?.id || recommendation.admission_id,
-              university_id: recommendation.admission?.university_id || null,
-              title: recommendation.admission?.program_name || 'Recommended Program',
-              degree_level: recommendation.admission?.degree_level || null,
-              deadline: recommendation.admission?.deadline || null,
-              application_fee: null,
-              location: null,
-              description: recommendation.reason || null,
-              verification_status: recommendation.admission?.verification_status || recommendation.admission?.status || 'verified',
-              created_at: recommendation.generated_at,
-              updated_at: recommendation.generated_at,
-              match_score: recommendation.score,
-              match_reason: recommendation.reason,
-            } as any)
-
-            return {
-              ...fallbackAdmission,
-              id: recommendation.admission_id,
-              matchNumeric: recommendation.score,
-              aiSummary: recommendation.reason || fallbackAdmission.aiSummary,
-            }
-          })
-          .filter((item): item is NonNullable<typeof item> => Boolean(item))
-
-        if (isMounted) {
-          setApiRecommendedPrograms(mapped)
-        }
-      })
-      .catch((err) => {
-        console.warn('[StudentDashboard] Recommendations API fetch failed, using fallback scoring:', err)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [user?.id, admissions])
+  }, [admissions, eligibleRecommendations, savedAdmissions])
 
   // Get upcoming deadlines for sidebar (with dynamic calculation)
   const upcomingDeadlines = useMemo(() => {
@@ -223,8 +137,9 @@ function StudentDashboard() {
     return 'We could not load your dashboard data at the moment. Please try again shortly.'
   }
 
-  // Show loading state (AFTER all hooks are called)
-  if (loading) {
+  const showInitialLoading = loading && admissions.length === 0
+
+  if (showInitialLoading) {
     return (
       <StudentLayout>
         <LoadingSpinner fullScreen message="Loading dashboard..." />
@@ -232,8 +147,7 @@ function StudentDashboard() {
     )
   }
 
-  // Show error state (AFTER all hooks are called)
-  if (error) {
+  if (error && admissions.length === 0) {
     return (
       <StudentLayout>
         <div className="p-6">

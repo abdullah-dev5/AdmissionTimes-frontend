@@ -27,7 +27,7 @@ export const changelogsService = {
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<ChangeLog>> => {
-    const response = await apiClient.get('/change-logs', { params });
+    const response = await apiClient.get('/changelogs', { params });
     return response.data;
   },
 
@@ -38,7 +38,7 @@ export const changelogsService = {
    * @returns Promise resolving to change log data
    */
   getById: async (id: string): Promise<ApiResponse<ChangeLog>> => {
-    const response = await apiClient.get(`/change-logs/${id}`);
+    const response = await apiClient.get(`/changelogs/${id}`);
     return response.data;
   },
 
@@ -56,7 +56,7 @@ export const changelogsService = {
       limit?: number;
     }
   ): Promise<PaginatedResponse<ChangeLog>> => {
-    const response = await apiClient.get(`/change-logs/admission/${admissionId}`, { params });
+    const response = await apiClient.get(`/changelogs/admission/${admissionId}`, { params });
     return response.data;
   },
 };

@@ -172,6 +172,14 @@ export interface AiSummarizeResponse {
   method: 'ai' | 'fallback';
 }
 
+export interface AiCompareResponse {
+  summary: string;
+  highlights: string[];
+  method: 'ai' | 'fallback';
+  provider: 'gemini' | 'rules';
+  model?: string;
+}
+
 export interface ParsedPdfData {
   title: string;
   degree_level: string;

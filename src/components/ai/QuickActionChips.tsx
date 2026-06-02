@@ -7,7 +7,7 @@ function QuickActionChips({ onSelect, context }: QuickActionChipsProps) {
   const getQuickActions = () => {
     if (context.includes('Dashboard')) {
       return [
-        'Show upcoming deadlines',
+        'Show deadlines this month',
         'Compare saved programs',
         'Any new verified programs?',
         'Explain application statuses'
@@ -50,7 +50,7 @@ function QuickActionChips({ onSelect, context }: QuickActionChipsProps) {
     }
     return [
       'Help me find programs',
-      'Show upcoming deadlines',
+      'Show deadlines this month',
       'How do I compare programs?',
       'Explain admission statuses'
     ]

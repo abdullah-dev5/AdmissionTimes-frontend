@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
-import { showError, showInfo, showSuccess } from '../../utils/swal'
+import aiService from '../../services/aiService'
+import type { AiCompareResponse } from '../../types/api'
+import { showError, showInfo, showSuccess, showWarning } from '../../utils/swal'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -100,44 +102,175 @@ const CompareGrid = ({ admissions }: { admissions: StudentAdmission[] }) => {
   )
 }
 
-const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) => {
-  const highlights = useMemo(() => {
-    if (admissions.length === 0) return []
-    
-    const lowestFee = admissions.reduce((min, a) => a.feeNumeric < min.feeNumeric ? a : min, admissions[0])
-    const earliestDeadline = admissions.reduce((earliest, a) => {
+const buildQuickHighlights = (admissions: StudentAdmission[]): string[] => {
+  if (admissions.length < 2) return []
+
+  const withFee = admissions.filter((a) => Number.isFinite(a.feeNumeric) && a.feeNumeric >= 0)
+  const highlights: string[] = []
+
+  if (withFee.length >= 2) {
+    const lowestFee = withFee.reduce((min, a) => (a.feeNumeric < min.feeNumeric ? a : min), withFee[0])
+    highlights.push(`${lowestFee.university} offers the lowest fee at ${lowestFee.fee}.`)
+  }
+
+  const withDeadline = admissions.filter((a) => a.deadline)
+  if (withDeadline.length >= 2) {
+    const earliestDeadline = withDeadline.reduce((earliest, a) => {
       const dateA = new Date(a.deadline).getTime()
       const dateB = new Date(earliest.deadline).getTime()
       return dateA < dateB ? a : earliest
-    }, admissions[0])
-    const highestMatch = admissions.reduce((max, a) => (a.matchNumeric || 0) > (max.matchNumeric || 0) ? a : max, admissions[0])
-    
-    return [
-      `${lowestFee.university} offers the lowest fee at ${lowestFee.fee}, making it the most cost-effective option.`,
-      `${earliestDeadline.university} has the earliest deadline (${earliestDeadline.deadlineDisplay}), requiring immediate application submission.`,
-      `${highestMatch.university} provides the best match (${getMatchLabel(highestMatch.matchNumeric)}) based on your profile.`,
-      `All ${admissions.length} universities are located in major cities with excellent infrastructure and facilities.`,
-    ]
-  }, [admissions])
+    }, withDeadline[0])
+    highlights.push(
+      `${earliestDeadline.university} has the earliest deadline (${earliestDeadline.deadlineDisplay}).`
+    )
+  }
+
+  const highestMatch = admissions.reduce((max, a) =>
+    (a.matchNumeric || 0) > (max.matchNumeric || 0) ? a : max
+  , admissions[0])
+  if (highestMatch.matchNumeric) {
+    highlights.push(
+      `${highestMatch.university} has the strongest profile match (${getMatchLabel(highestMatch.matchNumeric)}).`
+    )
+  }
+
+  return highlights
+}
+
+const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) => {
+  const [comparison, setComparison] = useState<AiCompareResponse | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [lastSource, setLastSource] = useState<'ai' | 'fallback' | null>(null)
+
+  const admissionIds = useMemo(
+    () =>
+      admissions.map((a) => a.sourceAdmissionId || a.id.split('::program::')[0]),
+    [admissions]
+  )
+
+  const handleGenerateAiComparison = async () => {
+    if (admissionIds.length < 2) {
+      await showWarning('Select at least 2 programs to compare.')
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const response = await aiService.comparePrograms(admissionIds)
+      const result = response.data
+      setComparison(result)
+      setLastSource(result.method === 'ai' ? 'ai' : 'fallback')
+    } catch (err: unknown) {
+      console.warn('[ComparePage] AI comparison failed:', err)
+      const quick = buildQuickHighlights(admissions)
+      setComparison({
+        summary: 'Could not reach the AI service. Showing an instant comparison from program data on this page.',
+        highlights: quick.length > 0 ? quick : ['Review the program cards above for fees, deadlines, and summaries.'],
+        method: 'fallback',
+        provider: 'rules',
+      })
+      setLastSource('fallback')
+      await showWarning('AI comparison is unavailable right now. Showing a quick data-based comparison.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleQuickCompare = () => {
+    const quick = buildQuickHighlights(admissions)
+    setComparison({
+      summary: `Quick comparison of ${admissions.length} programs using fees, deadlines, and match scores shown on this page.`,
+      highlights:
+        quick.length > 0
+          ? quick
+          : ['Add more program details to your watchlist entries for richer comparisons.'],
+      method: 'fallback',
+      provider: 'rules',
+    })
+    setLastSource('fallback')
+  }
+
+  const sourceLabel =
+    lastSource === 'ai'
+      ? 'AI-powered (Gemini)'
+      : lastSource === 'fallback'
+      ? 'Data-based fallback'
+      : null
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mx-6 mb-6">
-      <div className="flex items-center gap-2 mb-4">
-        <svg className="w-5 h-5" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-        <h2 className="text-xl font-semibold" style={{ color: '#111827' }}>AI-Generated Key Differences</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <svg className="w-5 h-5" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <div>
+            <h2 className="text-xl font-semibold" style={{ color: '#111827' }}>Key Differences</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Generate on demand — not shown automatically. AI uses full program details from the server.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleQuickCompare()}
+            disabled={isGenerating}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          >
+            Quick compare
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleGenerateAiComparison()}
+            disabled={isGenerating}
+            className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center gap-2"
+            style={{ backgroundColor: '#2563EB' }}
+          >
+            {isGenerating ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>Generate AI comparison</>
+            )}
+          </button>
+        </div>
       </div>
-      <ul className="space-y-3">
-        {highlights.map((highlight, index) => (
-          <li key={index} className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-gray-700">{highlight}</p>
-          </li>
-        ))}
-      </ul>
+
+      {!comparison && !isGenerating && (
+        <p className="text-sm text-gray-600">
+          Click <strong>Generate AI comparison</strong> for a Gemini analysis across fee, deadline, eligibility, and
+          location. Use <strong>Quick compare</strong> for an instant offline summary if AI is busy.
+        </p>
+      )}
+
+      {isGenerating && (
+        <p className="text-sm text-gray-600">Analyzing {admissions.length} programs…</p>
+      )}
+
+      {comparison && (
+        <>
+          {sourceLabel && (
+            <p className="text-xs font-medium text-blue-700 bg-blue-50 inline-block px-2 py-1 rounded mb-3">
+              {sourceLabel}
+              {comparison.model ? ` · ${comparison.model}` : ''}
+            </p>
+          )}
+          <p className="text-gray-800 mb-4 leading-relaxed">{comparison.summary}</p>
+          <ul className="space-y-3">
+            {comparison.highlights.map((highlight, index) => (
+              <li key={index} className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-gray-700">{highlight}</p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }

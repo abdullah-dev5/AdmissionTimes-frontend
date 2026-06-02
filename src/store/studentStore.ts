@@ -7,6 +7,8 @@ import { admissionsService } from '../services/admissionsService'
 import { transformAdmission, transformNotification } from '../utils/transformers'
 import { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from '../utils/scraperAdmissionAdapter'
 import { buildSearchParams } from '../utils/studentUtils'
+import { recommendationsService, type Recommendation } from '../services/recommendationsService'
+import { RECOMMENDATION_COUNT_LIMIT, RECOMMENDATION_MIN_SCORE } from '../utils/recommendationUtils'
 
 interface StudentStats {
   active_admissions: number
@@ -25,6 +27,9 @@ interface StudentStore {
   error: string | null
   stats: StudentStats | null
   fetchedUserId: string | null  // Track which user's data is loaded
+  apiRecommendations: Recommendation[]
+  recommendationsUserId: string | null
+  recommendationsLoading: boolean
   
   // Computed
   savedAdmissions: () => StudentAdmission[]
@@ -47,6 +52,7 @@ interface StudentStore {
   fetchNotifications: (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => Promise<void>
   markNotificationRead: (id: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
+  fetchRecommendations: (userId: string, options?: { force?: boolean }) => Promise<void>
   searchAdmissions: (filters?: {
     search?: string
     country?: string
@@ -73,6 +79,9 @@ const initialState = {
   error: null,
   stats: null,
   fetchedUserId: null,
+  apiRecommendations: [],
+  recommendationsUserId: null,
+  recommendationsLoading: false,
 }
 
 export const useStudentStore = create<StudentStore>()(
@@ -90,6 +99,46 @@ export const useStudentStore = create<StudentStore>()(
       setError: (error) => set({ error }),
       setStats: (stats) => set({ stats }),
       
+      fetchRecommendations: async (userId, options) => {
+        const { apiRecommendations, recommendationsUserId, recommendationsLoading } = get()
+
+        if (recommendationsLoading) {
+          return
+        }
+
+        if (
+          !options?.force &&
+          recommendationsUserId === userId &&
+          apiRecommendations.length > 0
+        ) {
+          return
+        }
+
+        set({ recommendationsLoading: true })
+
+        try {
+          const response = await recommendationsService.getRecommendations(
+            RECOMMENDATION_COUNT_LIMIT,
+            RECOMMENDATION_MIN_SCORE
+          )
+          const recommendations = response?.data?.recommendations || []
+
+          set((state) => ({
+            recommendationsLoading: false,
+            recommendationsUserId: userId,
+            apiRecommendations:
+              recommendations.length > 0
+                ? recommendations
+                : options?.force
+                ? recommendations
+                : state.apiRecommendations,
+          }))
+        } catch (err) {
+          console.warn('[studentStore] fetchRecommendations failed:', err)
+          set({ recommendationsLoading: false })
+        }
+      },
+
       // Fetch Stats
       fetchStats: async () => {
         try {
@@ -628,6 +677,6 @@ export const useStudentStore = create<StudentStore>()(
       },
       
       // Reset
-      reset: () => set(initialState),
+      reset: () => set({ ...initialState }),
     })
 )

@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
 import type { ApiResponse } from '../types/api';
-import type { AiChatResponse, AiSummarizeResponse } from '../types/api';
+import type { AiChatResponse, AiCompareResponse, AiSummarizeResponse } from '../types/api';
 
 export interface ChatHistoryEntry {
   role: 'user' | 'assistant' | 'ai'
@@ -27,19 +27,42 @@ export const aiService = {
       text: entry.text.slice(0, 500),
     }))
 
-    const response = await apiClient.post('/ai/chat', {
-      message,
-      conversation_context: fullContext.slice(0, 3000) || undefined,
-      conversation_history: conversationHistory,
-    })
+    const response = await apiClient.post(
+      '/ai/chat',
+      {
+        message,
+        conversation_context: fullContext.slice(0, 3000) || undefined,
+        conversation_history: conversationHistory,
+      },
+      { timeout: 60000 }
+    )
     return response.data
   },
 
   summarize: async (rawText: string, sourceType: 'pdf' | 'manual' = 'manual'): Promise<ApiResponse<AiSummarizeResponse>> => {
-    const response = await apiClient.post('/ai/summarize', {
-      raw_text: rawText,
-      source_type: sourceType,
-    });
+    const response = await apiClient.post(
+      '/ai/summarize',
+      {
+        raw_text: rawText,
+        source_type: sourceType,
+      },
+      { timeout: 60000 }
+    );
+    return response.data;
+  },
+
+  comparePrograms: async (
+    admissionIds: string[],
+    focus?: string
+  ): Promise<ApiResponse<AiCompareResponse>> => {
+    const response = await apiClient.post(
+      '/ai/compare',
+      {
+        admission_ids: admissionIds,
+        focus: focus?.trim() || undefined,
+      },
+      { timeout: 60000 }
+    );
     return response.data;
   },
 
