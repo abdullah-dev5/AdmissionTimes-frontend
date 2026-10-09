@@ -1,38 +1,42 @@
 /**
  * Authentication Store (Zustand)
- * 
- * Complete authentication state management with login, signup, logout operations
- * and persistent localStorage storage.
- * 
+ *
+ * Supabase Auth owns the session (tokens are stored by the Supabase client).
+ * This store holds the application profile from GET /auth/me — the backend is
+ * the source of truth for role and university, never token metadata.
+ *
+ * Only non-sensitive profile fields are persisted (no email, no tokens), and
+ * `isLoading` is never persisted so a reload always re-validates the session.
+ *
  * @module store/authStore
  */
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { isAxiosError } from 'axios'
 import { authService, type SignInData, type SignUpData } from '../services/authService'
 import { supabase } from '../services/supabase'
+import { resetUserScopedStores } from './resetStores'
+import { closeRealtime } from '../services/realtime'
 import type { User } from '../types/api'
 
-const isAuthDebugEnabled = import.meta.env.VITE_DEBUG_AUTH === 'true'
-
-// Re-export types for use in other modules
 export type { SignInData, SignUpData }
 
+type Notify = (msg: string) => void
+
 interface AuthStoreState {
-  // State
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
 
-  // Actions - Auth Operations
-  checkAuth: (options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void }) => Promise<void>
-  signIn: (data: SignInData, options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void; navigate?: (path: string) => void }) => Promise<void>
-  signUp: (data: SignUpData, options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void; navigate?: (path: string) => void }) => Promise<void>
-  signOut: (options?: { showSuccess?: (msg: string) => void; navigate?: (path: string) => void }) => Promise<void>
+  checkAuth: (options?: { showError?: Notify; showSuccess?: Notify }) => Promise<void>
+  signIn: (data: SignInData, options?: { showError?: Notify; showSuccess?: Notify; navigate?: (path: string) => void }) => Promise<void>
+  signUp: (data: SignUpData, options?: { showError?: Notify; showSuccess?: Notify; navigate?: (path: string) => void }) => Promise<void>
+  signOut: (options?: { showSuccess?: Notify; navigate?: (path: string) => void }) => Promise<void>
+  /** Clear local auth + user-scoped data without calling Supabase (e.g. after a 401). */
+  clearSession: () => void
   setUser: (user: User | null) => void
-
-  // Cleanup
   reset: () => void
 }
 
@@ -43,233 +47,190 @@ const initialState = {
   error: null,
 }
 
+const DASHBOARD_BY_ROLE: Record<string, string> = {
+  student: '/student/dashboard',
+  university: '/university/dashboard',
+  admin: '/admin/dashboard',
+}
+
+export const dashboardPathFor = (user: Pick<User, 'role'> | null | undefined): string =>
+  DASHBOARD_BY_ROLE[user?.role ?? ''] ?? '/'
+
+const errorMessage = (error: unknown, fallback: string): string => {
+  if (isAxiosError(error)) return error.response?.data?.message || error.message || fallback
+  if (error instanceof Error) return error.message || fallback
+  return fallback
+}
+
+/** 401/403 from /auth/me means the session is unusable; anything else is transient. */
+const isAuthRejection = (error: unknown): boolean =>
+  isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)
+
 export const useAuthStore = create<AuthStoreState>()(
   persist(
     (set, get) => ({
-      // Initial State
       ...initialState,
 
-      // Check Authentication
       checkAuth: async (options) => {
+        set({ isLoading: true, error: null })
         try {
-          set({ isLoading: true, error: null })
-
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          if (sessionError) throw sessionError
 
-          if (sessionError) {
-            throw sessionError
+          if (!session?.access_token) {
+            get().clearSession()
+            return
           }
 
-          if (session?.access_token) {
-            // Get current user from API using JWT
-            const response = await authService.getCurrentUser()
-            const userData = response.data
+          const response = await authService.getCurrentUser()
+          set({ user: response.data, isAuthenticated: true })
+        } catch (error) {
+          const message = errorMessage(error, 'Failed to check authentication')
 
-            if (isAuthDebugEnabled) console.log('🔐 [AuthStore] checkAuth - User data:', userData)
-            if (userData.role !== 'student') {
-              if (isAuthDebugEnabled) console.log('🔐 [AuthStore] checkAuth - university_id:', userData.university_id)
-            }
-
-            set({ user: userData, isAuthenticated: true })
-          } else {
-            set({ user: null, isAuthenticated: false })
-          }
-        } catch (error: any) {
-          console.error('Auth check failed:', error)
-
-          // If persisted refresh token is invalid/revoked, clear local session to stop retry noise.
-          const message = String(error?.message || '')
-          if (message.toLowerCase().includes('invalid refresh token')) {
-            try {
-              await supabase.auth.signOut({ scope: 'local' })
-            } catch {
-              // ignore cleanup failure
-            }
+          if (isAuthRejection(error) || message.toLowerCase().includes('refresh token')) {
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+            get().clearSession()
+            if (isAxiosError(error) && error.response?.status === 403) options?.showError?.(message)
+            return
           }
 
-          set({ user: null, isAuthenticated: false })
-          if (options?.showError) {
-            options.showError('Failed to check authentication')
-          }
+          // Network/server problem: keep the last known profile so the user is
+          // not logged out by a transient backend outage.
+          set({ error: message })
+          options?.showError?.('Could not reach the server. Some data may be out of date.')
         } finally {
           set({ isLoading: false })
         }
       },
 
-      // Sign In
       signIn: async (data, options) => {
+        set({ isLoading: true, error: null })
         try {
-          set({ isLoading: true, error: null })
-          const email = data.email.trim().toLowerCase()
-          const password = data.password
-
-          // Authenticate with Supabase
           const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
+            email: data.email.trim().toLowerCase(),
+            password: data.password,
           })
 
           if (error) {
-            if (error.message.includes('Email not confirmed')) {
-              throw new Error('Please verify your email before signing in. Check your inbox for the verification link.')
-            }
-            throw error
+            throw new Error(
+              error.message.includes('Email not confirmed')
+                ? 'Please verify your email before signing in. Check your inbox for the verification link.'
+                : error.message
+            )
           }
 
-          // Fetch user from backend
+          // Never show data cached for a previous account on this browser.
+          resetUserScopedStores()
+
           const response = await authService.getCurrentUser()
-          const userData = response.data
+          set({ user: response.data, isAuthenticated: true })
 
-          if (isAuthDebugEnabled) console.log('🔐 [AuthStore] User data received:', userData)
-          if (userData.role !== 'student') {
-            if (isAuthDebugEnabled) console.log('🔐 [AuthStore] university_id:', userData.university_id)
-          }
-          if (isAuthDebugEnabled) console.log('🔐 [AuthStore] role:', userData.role)
-
-          set({ user: userData, isAuthenticated: true })
-
-          if (options?.showSuccess) {
-            options.showSuccess('Signed in successfully!')
-          }
-
-          // Navigate to appropriate dashboard
-          if (options?.navigate) {
-            const userType = userData.role || userData.user_type
-            if (userType === 'student') {
-              options.navigate('/student/dashboard')
-            } else if (userType === 'university') {
-              options.navigate('/university/dashboard')
-            } else if (userType === 'admin') {
-              options.navigate('/admin/dashboard')
-            }
-          }
-        } catch (error: any) {
-          console.error('Sign in failed:', error)
-          const errorMsg = error.message || error.response?.data?.message || 'Failed to sign in. Please check your credentials.'
-          set({ error: errorMsg, isLoading: false })
-          if (options?.showError) {
-            options.showError(errorMsg)
-          }
+          options?.showSuccess?.('Signed in successfully!')
+          options?.navigate?.(dashboardPathFor(response.data))
+        } catch (error) {
+          const message = errorMessage(error, 'Failed to sign in. Please check your credentials.')
+          set({ error: message })
+          options?.showError?.(message)
           throw error
         } finally {
           set({ isLoading: false })
         }
       },
 
-      // Sign Up
       signUp: async (data, options) => {
+        set({ isLoading: true, error: null })
         try {
-          set({ isLoading: true, error: null })
           const email = data.email.trim().toLowerCase()
-          const password = data.password
+          const displayName = data.display_name?.trim() || undefined
 
-          // Create user in Supabase Auth
+          // Role is NOT sent as metadata: the backend assigns it (students only
+          // via self-signup) and ignores token metadata for authorization.
           const { data: signUpResult, error } = await supabase.auth.signUp({
             email,
-            password,
+            password: data.password,
             options: {
-              data: {
-                role: data.user_type,
-                university_id: data.university_id || null,
-                display_name: data.display_name || null,
-              },
+              data: { display_name: displayName ?? null },
               emailRedirectTo: `${window.location.origin}/signin`,
             },
           })
-
-          if (error) {
-            throw error
-          }
+          if (error) throw error
 
           const authUserId = signUpResult.user?.id
+          if (!authUserId) throw new Error('Failed to create account')
 
-          if (!authUserId) {
-            throw new Error('Failed to create account in Supabase')
-          }
-
-          // Create user in database
           try {
-            await authService.signUp({
-              ...data,
-              auth_user_id: authUserId,
-            })
-          } catch (backendError: any) {
-            console.error('Database user creation failed:', backendError)
-            // JWT middleware will auto-create the user
+            await authService.signUp({ email, display_name: displayName, auth_user_id: authUserId })
+          } catch (profileError) {
+            // The profile is also provisioned on first sign-in, so this is not fatal.
+            console.warn('Profile creation deferred to first sign-in:', errorMessage(profileError, 'unknown error'))
           }
 
-          if (options?.showSuccess) {
-            options.showSuccess('Account created! Please check your email to verify your account before signing in.')
-          }
-
-          // Navigate to signin page
-          if (options?.navigate) {
-            options.navigate('/signin')
-          }
-        } catch (error: any) {
-          console.error('Sign up failed:', error)
-          const errorMsg = error.message || error.response?.data?.message || 'Failed to create account. Please try again.'
-          set({ error: errorMsg, isLoading: false })
-          if (options?.showError) {
-            options.showError(errorMsg)
-          }
+          options?.showSuccess?.('Account created! Please check your email to verify your account before signing in.')
+          options?.navigate?.('/signin')
+        } catch (error) {
+          const message = errorMessage(error, 'Failed to create account. Please try again.')
+          set({ error: message })
+          options?.showError?.(message)
           throw error
         } finally {
           set({ isLoading: false })
         }
       },
 
-      // Sign Out
       signOut: async (options) => {
         try {
           await supabase.auth.signOut()
         } catch (error) {
-          console.error('Sign out error:', error)
-          // Continue with sign out even if API call fails
+          console.warn('Supabase sign-out failed; clearing local session anyway:', error)
         } finally {
-          set({ user: null, isAuthenticated: false, error: null, isLoading: false })
-
-          if (options?.showSuccess) {
-            options.showSuccess('Signed out successfully')
-          }
-
-          if (options?.navigate) {
-            options.navigate('/signin')
-          }
+          get().clearSession()
+          options?.showSuccess?.('Signed out successfully')
+          options?.navigate?.('/signin')
         }
       },
 
-      // Set User
-      setUser: (user) => {
-        set({ user, isAuthenticated: user !== null })
+      clearSession: () => {
+        closeRealtime()
+        resetUserScopedStores()
+        set({ user: null, isAuthenticated: false, error: null, isLoading: false })
       },
 
-      // Reset
+      setUser: (user) => set({ user, isAuthenticated: user !== null }),
+
       reset: () => set(initialState),
     }),
     {
       name: 'auth-store',
-      version: 1,
+      version: 2,
+      // Persist only what is needed to render the shell; never tokens or email.
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        user: state.user
+          ? {
+              id: state.user.id,
+              role: state.user.role,
+              display_name: state.user.display_name,
+              university_id: state.user.university_id ?? null,
+            }
+          : null,
+      }),
+      migrate: () => ({ user: null, isAuthenticated: false }),
     }
   )
 )
 
-// Helper functions
 export function getAuthState() {
   return useAuthStore.getState()
 }
 
 export function isUserAuthenticated(): boolean {
-  const { isAuthenticated } = useAuthStore.getState()
-  return isAuthenticated
+  return useAuthStore.getState().isAuthenticated
 }
 
 export function getCurrentUser(): User | null {
-  const { user } = useAuthStore.getState()
-  return user
+  return useAuthStore.getState().user
 }
 
 export function getUserRole(): string | null {
-  const { user } = useAuthStore.getState()
-  return user?.user_type || null
+  return useAuthStore.getState().user?.role ?? null
 }

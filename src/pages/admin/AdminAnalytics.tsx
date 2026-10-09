@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
 import { adminService } from "../../services/adminService"
-import { analyticsEvents } from "../../data/adminData"
 import { formatDateTime } from "../../utils/dateUtils"
 import { DEFAULT_ITEMS_PER_PAGE } from "../../constants/pagination"
 import Pagination from "../../components/admin/Pagination"
@@ -78,7 +77,8 @@ function AdminAnalytics() {
 				filters.date_from = dateFrom
 			}
 			if (dateTo) {
-				filters.date_to = dateTo
+				// Inclusive end date: the whole selected day.
+				filters.date_to = `${dateTo}T23:59:59.999`
 			}
 
 			const response = await adminService.getAnalytics(filters)
@@ -94,7 +94,7 @@ function AdminAnalytics() {
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : "Failed to fetch analytics data"
 			setError(getFriendlyErrorMessage(message))
-			// Will fallback to mock data
+			setApiAnalytics([])
 		} finally {
 			setLoading(false)
 		}
@@ -141,10 +141,8 @@ function AdminAnalytics() {
 		return roleMap[role.toLowerCase()] || 'Student'
 	}
 
-	// Use API data if available, otherwise use mock data
-	const analyticsToUse: AnalyticsRow[] = apiAnalytics.length > 0
-		? apiAnalytics
-		: analyticsEvents
+	// Real data only: an empty list is shown as an empty state, never mock rows.
+	const analyticsToUse: AnalyticsRow[] = apiAnalytics
 
 	const users = useMemo(() => {
 		const uniqueUsers = new Set<string>()

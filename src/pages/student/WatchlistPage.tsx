@@ -3,12 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
-import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
-import { showConfirm, showInfo, showSuccess, showWarning } from '../../utils/swal'
+import { showConfirm, showInfo, showWarning } from '../../utils/swal'
+import { formatDaysLeft } from '../../utils/studentUtils'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -239,7 +239,7 @@ const WatchlistCard = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           <span className={`font-medium ${program.daysRemaining <= 7 ? 'text-red-600' : 'text-gray-700'}`}>
-            {program.deadlineDisplay} ({program.daysRemaining >= 0 ? `${program.daysRemaining} days left` : 'Deadline passed'})
+            {program.hasDeadline === false ? formatDaysLeft(program) : `${program.deadlineDisplay} (${formatDaysLeft(program)})`}
           </span>
         </div>
 
@@ -380,7 +380,6 @@ const EmptyState = () => {
 
 function WatchlistPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const { showError, showSuccess } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
   const toggleAlert = useStudentStore((state) => state.toggleAlert)

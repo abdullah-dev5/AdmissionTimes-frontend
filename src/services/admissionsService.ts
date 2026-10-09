@@ -31,9 +31,15 @@ export const admissionsService = {
     delivery_mode?: string;
     page?: number;
     limit?: number;
+    /** Student lists show closed programs below open ones (labelled "Deadline passed"). */
+    include_closed?: boolean;
   }): Promise<PaginatedResponse<Admission>> => {
     // Backend validator caps limit at 100; enforce here to prevent 400 errors
-    const safeParams = params ? { ...params, limit: Math.min(params.limit ?? 100, 100) } : undefined;
+    const safeParams = {
+      ...params,
+      limit: Math.min(params?.limit ?? 100, 100),
+      include_closed: params?.include_closed ?? true,
+    };
     const response = await apiClient.get('/admissions', { params: safeParams });
     return response.data;
   },

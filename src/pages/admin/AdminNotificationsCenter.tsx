@@ -5,6 +5,7 @@ import { type NotificationType } from "../../data/adminData"
 import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
+import { toApiError } from '../../services/apiClient'
 
 const getFriendlyErrorMessage = (raw?: string | null) => {
 	const message = (raw || "").toLowerCase()
@@ -92,9 +93,9 @@ function AdminNotificationsCenter() {
 			if (notifications.length === 0) {
 				console.log('⚠️  [AdminNotificationsCenter] API returned 0 notifications - check if data exists in DB')
 			}
-		} catch (err: any) {
+		} catch (err) {
 			console.error('❌ [AdminNotificationsCenter] Error fetching from API:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to fetch notifications'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to fetch notifications'))
 			// Do not fallback to mock data - show error to user
 			setApiNotifications([])
 		} finally {
@@ -125,6 +126,14 @@ function AdminNotificationsCenter() {
 			const notifType = notif.notification_type || notif.type
 			return notifType !== "deadline_near"
 		})
+
+		// Keep system errors visible only in their dedicated tab.
+		if (activeTab === "All") {
+			filtered = filtered.filter((notif) => {
+				const notifType = notif.notification_type || notif.type
+				return notifType !== "system_error"
+			})
+		}
 
 		// Filter by type (if type field exists)
 		if (activeTab !== "All") {
@@ -160,9 +169,9 @@ function AdminNotificationsCenter() {
 			await adminService.markAllNotificationsAsRead()
 			// Refresh notifications
 			await fetchNotifications()
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 Error marking all as read:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to mark all as read'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to mark all as read'))
 		}
 	}
 
@@ -173,9 +182,9 @@ function AdminNotificationsCenter() {
 			await adminService.markNotificationAsRead(String(id))
 			// Refresh notifications
 			await fetchNotifications()
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 Error marking as read:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to mark as read'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to mark as read'))
 		}
 	}
 
@@ -199,9 +208,9 @@ function AdminNotificationsCenter() {
 
 			// Refresh admin notifications list after dispatch
 			await fetchNotifications()
-		} catch (err: any) {
+		} catch (err) {
 			console.error('❌ [AdminNotificationsCenter] Secret reminder trigger failed:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to trigger deadline reminders'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to trigger deadline reminders'))
 		} finally {
 			setSecretRunning(false)
 		}

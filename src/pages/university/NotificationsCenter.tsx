@@ -155,36 +155,11 @@ function NotificationsCenter() {
 	const markAllNotificationsRead = useUniversityStore((state) => state.markAllNotificationsRead)
 	const [tab, setTab] = useState<"All" | NotificationType>("All")
 	const [query, setQuery] = useState("")
-	const [isUsingRealData, setIsUsingRealData] = useState(false)
+	const loadError = useUniversityStore((state) => state.error)
 
-	// Fetch notifications from API on mount
+	// Load notifications once on mount; failures surface via the store error.
 	useEffect(() => {
-		let isMounted = true
-
-		const initializeNotifications = async () => {
-			try {
-				await fetchNotifications({
-					showError: (msg) => {
-						if (isMounted) {
-							console.warn('⚠️  Could not fetch from API:', msg)
-						}
-					}
-				})
-				if (isMounted) {
-					setIsUsingRealData(true)
-				}
-			} catch (err) {
-				if (isMounted) {
-					console.error('Failed to fetch notifications:', err)
-					setIsUsingRealData(false)
-				}
-			}
-		}
-
-		initializeNotifications()
-		return () => {
-			isMounted = false
-		}
+		void fetchNotifications()
 	}, [fetchNotifications])
 
 	const filtered = useMemo(() => {
@@ -255,7 +230,9 @@ function NotificationsCenter() {
 							<NotificationCard key={n.id} item={n} onMarkRead={markRead} onOpen={openAdmission} />
 						))}
 						{filtered.length === 0 && (
-							<div className="bg-white shadow-sm rounded-xl p-8 text-center text-gray-500">No notifications found.</div>
+							<div className="bg-white shadow-sm rounded-xl p-8 text-center text-gray-500">
+								{loadError && notifications.length === 0 ? "Could not load notifications. Please try again shortly." : "No notifications found."}
+							</div>
 						)}
 					</div>
 				</main>

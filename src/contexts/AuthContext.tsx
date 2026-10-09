@@ -10,11 +10,13 @@
 import { createContext, useContext, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { supabase } from '../services/supabase';
+import type { User } from '../types/api';
 import type { SignInData, SignUpData } from '../services/authService';
 import { useToast } from './ToastContext';
 
 interface AuthContextType {
-  user: any | null;
+  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (data: SignInData) => Promise<void>;
@@ -41,9 +43,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const storeSignUp = useAuthStore((state) => state.signUp);
   const storeSignOut = useAuthStore((state) => state.signOut);
 
-  // Initialize auth on mount only
+  // Validate the session once on mount, then follow Supabase session events
+  // (sign-out in another tab, refresh failure, password recovery).
   useEffect(() => {
-    checkAuth({ showError, showSuccess });
+    void checkAuth({ showError });
+    const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        useAuthStore.getState().clearSession();
+      } else if (event === 'PASSWORD_RECOVERY') {
+        navigate('/reset-password');
+      }
+    });
+    return () => subscription.subscription.unsubscribe();
+    // checkAuth/showError/navigate are stable; run once per provider mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Wrap functions with useCallback to maintain stable references

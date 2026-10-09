@@ -20,6 +20,7 @@ import {
   type ChangeLogItem,
   type NotificationItem,
 } from '../data/universityData'
+import { toApiError } from '../services/apiClient'
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
@@ -143,10 +144,6 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       const response = await dashboardService.getUniversityDashboard()
 
-      if (isDashboardDebugEnabled) {
-        console.log('🟢 [UniversityStore] Dashboard API response:', response)
-        console.log('🟢 [UniversityStore] Response data:', response?.data)
-      }
 
       if (response?.data) {
         const transformed = transformUniversityDashboard(response.data)
@@ -157,10 +154,6 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         const audits = deriveAudits(admissions)
         const stats = response.data.stats || deriveStats(admissions, changeLogs, notifications)
 
-        if (isDashboardDebugEnabled) {
-          console.log('🟢 [UniversityStore] Transformed admissions count:', transformed.admissions.length)
-          console.log('🟢 [UniversityStore] About to set admissions state with:', transformed.admissions)
-        }
 
         set({
           admissions,
@@ -194,9 +187,9 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         })
         console.warn('[UniversityStore] No data in response, showing empty dashboard state')
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('[UniversityStore] Failed to fetch dashboard data:', err)
-      const errorMsg = err.message || 'Failed to load dashboard data'
+      const errorMsg = toApiError(err).message || 'Failed to load dashboard data'
       set({
         error: errorMsg,
         admissions: [],
@@ -223,55 +216,40 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
   // Create or Update Admission
   createOrUpdateAdmission: async (admission, userId, options) => {
-    console.log('🟢 [UniversityStore] Creating/Updating admission:', admission.id, admission.title)
-    console.log('🟢 [UniversityStore] Admission verification_status:', admission.verification_status)
 
     try {
       const universityId = userId
 
       if (!universityId) {
-        console.error('🔴 [UniversityStore] No university ID found')
-        throw new Error('University ID not found. Please ensure you are logged in as a university user.')
+        throw new Error('Your account is not linked to a university. Please contact an administrator.')
       }
 
-      console.log('🟢 [UniversityStore] ✅ Using university_id:', universityId)
 
       const apiPayload = transformAdmissionToApi(admission, universityId)
-      console.log('🟢 [UniversityStore] API payload:', apiPayload)
-      console.log('🟢 [UniversityStore] API payload.university_id:', apiPayload.university_id)
-      console.log('🟢 [UniversityStore] API payload.verification_status:', apiPayload.verification_status)
 
       const isUpdate = admission.id && !admission.id.startsWith('adm-')
 
       let savedAdmission: Admission
       if (isUpdate) {
-        console.log('🟢 [UniversityStore] Updating admission via Backend API:', admission.id)
         const updatePayload = {
           ...apiPayload,
         }
         const apiResponse = await admissionsService.update(admission.id, updatePayload)
         savedAdmission = transformApiAdmissionToFrontend(apiResponse.data)
       } else {
-        console.log('🟢 [UniversityStore] Creating new admission via Backend API')
         const apiResponse = await admissionsService.create(apiPayload)
         savedAdmission = transformApiAdmissionToFrontend(apiResponse.data)
       }
 
-      console.log('🟢 [UniversityStore] ✅ Supabase operation successful:', savedAdmission)
-      console.log('🟢 [UniversityStore] ✅ Saved verification_status:', savedAdmission?.verification_status)
 
       set((state) => {
         const exists = state.admissions.some((item) => item.id === savedAdmission.id)
         let newAdmissions: Admission[]
 
         if (exists) {
-          console.log('🟢 [UniversityStore] Updating existing admission in state')
           newAdmissions = state.admissions.map((item) => (item.id === savedAdmission.id ? savedAdmission : item))
-          console.log('🟢 [UniversityStore] Updated admissions count:', newAdmissions.length)
         } else {
-          console.log('🟢 [UniversityStore] Adding new admission to state')
           newAdmissions = [...state.admissions, savedAdmission]
-          console.log('🟢 [UniversityStore] New admissions count:', newAdmissions.length)
         }
 
         return {
@@ -283,24 +261,23 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       // Create changelog entry if there are changes
       if (options?.diff && options.diff.length > 0) {
-        console.log('[UniversityStore] Appending changelog with', options.diff.length, 'changes')
         get().appendChangeLog({
           admission: savedAdmission.title,
-          modifiedBy: options.modifiedBy ?? 'Rep_01',
+          modifiedBy: options.modifiedBy ?? 'University representative',
           date: formatNow(),
           diff: options.diff,
         })
       }
 
       return { success: true, data: savedAdmission }
-    } catch (error: any) {
+    } catch (error) {
       console.error('[UniversityStore] Failed to save admission:', error)
 
       // Extract error message from response
       let errorMessage = 'Failed to save admission'
       
-      if (error.response?.data) {
-        const apiError = error.response.data
+      const apiError = toApiError(error).response?.data
+      if (apiError) {
         // First try to use the message field
         if (apiError.message) {
           errorMessage = apiError.message
@@ -314,8 +291,9 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         } else if (apiError.error) {
           errorMessage = apiError.error
         }
-      } else if (error.message && error.message !== 'Object') {
-        errorMessage = error.message
+      } else {
+        const message = toApiError(error).message
+        if (message && message !== 'Object') errorMessage = message
       }
 
       set({ error: errorMessage })
@@ -330,11 +308,9 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
   // Delete Admission
   deleteAdmission: async (id) => {
-    console.log('🟢 [UniversityStore] Deleting admission:', id)
 
     try {
       await admissionsService.delete(id)
-      console.log('🟢 [UniversityStore] Delete successful')
 
       set((state) => {
         const newAdmissions = state.admissions.filter((admission) => admission.id !== id)
@@ -345,13 +321,12 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         }
       })
 
-      console.log('🟢 [UniversityStore] Admission deleted successfully from local state')
 
       return { success: true }
-    } catch (error: any) {
+    } catch (error) {
       console.error('🔴 [UniversityStore] Failed to delete admission:', error)
 
-      const errorMessage = error.message || 'Failed to delete admission'
+      const errorMessage = toApiError(error).message || 'Failed to delete admission'
       set({ error: errorMessage })
 
       return { success: false, error: errorMessage }
@@ -395,7 +370,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           stats: deriveStats(get().admissions, get().changeLogs, transformedNotifications),
         })
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('❌ Failed to fetch notifications:', err)
       options?.showError?.('Failed to load notifications')
     }

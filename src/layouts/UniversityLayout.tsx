@@ -6,7 +6,8 @@ import UniversityAIAssistant from "../components/ai/university/UniversityAIAssis
 import { useUniversityDashboardData } from "../hooks/useUniversityDashboardData"
 import { useUniversityStore } from "../store/universityStore"
 import { useAuthStore } from "../store/authStore"
-import { isRealtimeEnabled, supabase } from "../services/supabase"
+import { isRealtimeEnabled } from "../services/supabase"
+import { subscribeToNotifications } from '../services/realtime'
 
 const DASHBOARD_POLL_MS = Math.max(15000, Number(import.meta.env.VITE_DASHBOARD_POLL_MS || 60000))
 
@@ -37,140 +38,26 @@ function UniversityLayout({ children }: UniversityLayoutProps) {
 			return
 		}
 
-		let refreshTimeout: number | null = null
-		let pollId: number | null = null
-		const channelStatus: Record<string, boolean> = {
-			notifications: false,
-			admissions: false,
-			activity: false,
-			watchlists: false,
-		}
-
-		const updatePollingState = () => {
-			const allSubscribed = Object.values(channelStatus).every(Boolean)
-
-			if (allSubscribed) {
-				if (pollId !== null) {
-					window.clearInterval(pollId)
-					pollId = null
-				}
-				return
-			}
-
-			if (pollId === null) {
-				pollId = window.setInterval(() => {
-					refresh()
-				}, DASHBOARD_POLL_MS)
-			}
-		}
-
-		const onChannelStatus = (key: keyof typeof channelStatus, status: string) => {
-			channelStatus[key] = status === "SUBSCRIBED"
-			updatePollingState()
-		}
-
-		const refresh = () => {
+		const refreshNotifications = () => {
 			fetchNotifications().catch(() => {})
+		}
+		const refreshDashboard = () => {
 			fetchDashboardData({ userId: user.id }).catch(() => {})
 		}
 
-		const refreshNotificationsOnly = () => {
-			fetchNotifications().catch(() => {})
-		}
+		// Realtime delivers this user's notifications only (the Supabase data API
+		// is closed to clients; see migration 20261008000001). Dashboard data
+		// (admissions, engagement) is refreshed by polling.
+		const unsubscribe = subscribeToNotifications(user.id, refreshNotifications)
 
-		const refreshDashboardOnly = () => {
-			fetchDashboardData({ userId: user.id }).catch(() => {})
-		}
-
-		const refreshDebounced = () => {
-			if (refreshTimeout !== null) {
-				window.clearTimeout(refreshTimeout)
-			}
-
-			refreshTimeout = window.setTimeout(() => {
-				refresh()
-				refreshTimeout = null
-			}, 300)
-		}
-
-		const channelNamePrefix = `university-live-${user.id}`
-		const channels = isRealtimeEnabled
-			? [
-					supabase
-						.channel(`${channelNamePrefix}-notifications`)
-						.on(
-							"postgres_changes",
-							{
-								event: "INSERT",
-								schema: "public",
-								table: "notifications",
-								filter: `recipient_id=eq.${user.id}`,
-							},
-							() => refreshNotificationsOnly()
-						)
-						.subscribe((status) => onChannelStatus("notifications", status)),
-					supabase
-						.channel(`${channelNamePrefix}-admissions`)
-						.on(
-							"postgres_changes",
-							{
-								event: "*",
-								schema: "public",
-								table: "admissions",
-							},
-							() => refreshDebounced()
-						)
-						.subscribe((status) => onChannelStatus("admissions", status)),
-					supabase
-						.channel(`${channelNamePrefix}-activity`)
-						.on(
-							"postgres_changes",
-							{
-								event: "INSERT",
-								schema: "public",
-								table: "user_activity",
-								filter: "entity_type=eq.admission",
-							},
-							() => refreshDebounced()
-						)
-						.subscribe((status) => onChannelStatus("activity", status)),
-					supabase
-						.channel(`${channelNamePrefix}-watchlists`)
-						.on(
-							"postgres_changes",
-							{
-								event: "*",
-								schema: "public",
-								table: "watchlists",
-							},
-							() => refreshDashboardOnly()
-						)
-						.subscribe((status) => onChannelStatus("watchlists", status)),
-			  ]
-			: []
-
-		if (!isRealtimeEnabled) {
-			if (pollId === null) {
-				pollId = window.setInterval(() => {
-					refresh()
-				}, DASHBOARD_POLL_MS)
-			}
-		} else {
-			updatePollingState()
-		}
+		const pollId = window.setInterval(() => {
+			if (!isRealtimeEnabled) refreshNotifications()
+			refreshDashboard()
+		}, DASHBOARD_POLL_MS)
 
 		return () => {
-			if (pollId !== null) {
-				window.clearInterval(pollId)
-			}
-			if (refreshTimeout !== null) {
-				window.clearTimeout(refreshTimeout)
-			}
-			if (channels.length > 0) {
-				channels.forEach((channel) => {
-					supabase.removeChannel(channel).catch(() => {})
-				})
-			}
+			window.clearInterval(pollId)
+			unsubscribe()
 		}
 	}, [user?.id, user?.role, fetchNotifications, fetchDashboardData])
 

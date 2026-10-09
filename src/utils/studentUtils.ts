@@ -42,6 +42,22 @@ export function transformWatchlistToApi(
   };
 }
 
+type DeadlineAware = { daysRemaining: number; hasDeadline?: boolean; programStatus?: string }
+
+/** Closed = deadline passed (programs without an announced deadline stay open). */
+export function isAdmissionClosed(item: DeadlineAware): boolean {
+  if (item.programStatus === 'Closed') return true
+  return item.hasDeadline !== false && item.daysRemaining < 0
+}
+
+/** Human label for the time left before the deadline. */
+export function formatDaysLeft(item: DeadlineAware): string {
+  if (item.hasDeadline === false) return 'No deadline announced'
+  if (item.daysRemaining < 0) return 'Deadline passed'
+  if (item.daysRemaining === 0) return 'Closes today'
+  return `${item.daysRemaining} day${item.daysRemaining === 1 ? '' : 's'} left`
+}
+
 /**
  * Calculate deadline urgency level
  */

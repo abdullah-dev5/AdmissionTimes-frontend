@@ -7,6 +7,7 @@ import {
 } from "../../services/adminService"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { showConfirm, showError, showSuccess } from "../../utils/swal"
+import { toApiError } from '../../services/apiClient'
 
 function AdminEmailDeliveryLogs() {
   const [statusFilter, setStatusFilter] = useState<"failed" | "sent">("failed")
@@ -48,8 +49,8 @@ function AdminEmailDeliveryLogs() {
       const payload = response.data || { logs: [], meta: { status: null, limit: 100, count: 0 } }
       setLogs(payload.logs || [])
       setMeta(payload.meta || null)
-    } catch (err: any) {
-      setError(err?.message || "Failed to load email delivery logs")
+    } catch (err) {
+      setError(toApiError(err).message || "Failed to load email delivery logs")
       setLogs([])
       setMeta(null)
     } finally {
@@ -99,8 +100,8 @@ function AdminEmailDeliveryLogs() {
       await adminService.replayEmailFromLog(log.id)
       await showSuccess("Replay request sent successfully.")
       await fetchLogs()
-    } catch (err: any) {
-      await showError(err?.message || "Failed to replay email")
+    } catch (err) {
+      await showError(toApiError(err).message || "Failed to replay email")
     } finally {
       setReplayingId(null)
     }
@@ -123,8 +124,8 @@ function AdminEmailDeliveryLogs() {
       await adminService.replayEmailByNotificationId(log.notification_id)
       await showSuccess("Replay by notification sent successfully.")
       await fetchLogs()
-    } catch (err: any) {
-      await showError(err?.message || "Failed to replay email by notification")
+    } catch (err) {
+      await showError(toApiError(err).message || "Failed to replay email by notification")
     } finally {
       setReplayingId(null)
     }
@@ -136,8 +137,8 @@ function AdminEmailDeliveryLogs() {
       const response = await adminService.verifyEmailReadiness()
       setEmailReadiness(response.data || null)
       await showSuccess("Email readiness verification completed.")
-    } catch (err: any) {
-      await showError(err?.message || "Failed to verify email readiness")
+    } catch (err) {
+      await showError(toApiError(err).message || "Failed to verify email readiness")
     } finally {
       setReadinessLoading(false)
     }
@@ -176,8 +177,8 @@ function AdminEmailDeliveryLogs() {
 
       await fetchReadiness()
       await fetchLogs()
-    } catch (err: any) {
-      await showError(err?.message || "Failed to process email retries")
+    } catch (err) {
+      await showError(toApiError(err).message || "Failed to process email retries")
     } finally {
       setRetrying(false)
     }

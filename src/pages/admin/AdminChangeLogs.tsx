@@ -53,7 +53,7 @@ const calculateStats = (logs: AdminChangeLog[]): ChangeLogStats => {
  * Enhanced with statistics, better layout, and action handlers
  */
 function AdminChangeLogs() {
-	const { filters, filteredLogs, updateFilter, resetFilters, loading, error, allLogs } = useChangeLogFilters()
+	const { filters, filteredLogs, updateFilter, resetFilters, loading, error, allLogs, admissionOptions, userOptions } = useChangeLogFilters()
 	const { downloadChangeLog } = useChangeLogActions()
 	const [selectedLog, setSelectedLog] = useState<AdminChangeLog | null>(null)
 	const [currentPage, setCurrentPage] = useState(1)
@@ -132,7 +132,7 @@ function AdminChangeLogs() {
 					<div className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-4">
 						<p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">Total Changes</p>
 						<p className="text-2xl font-bold text-blue-900">{allStats.total}</p>
-						<p className="text-xs text-blue-700 mt-2">All time</p>
+						<p className="text-xs text-blue-700 mt-2">Latest {allStats.total} loaded</p>
 					</div>
 
 					<div className="bg-orange-50 rounded-lg shadow-sm border border-orange-200 p-4">
@@ -178,6 +178,8 @@ function AdminChangeLogs() {
 				<div className="mb-6">
 					<ChangeLogFilters
 						filters={filters}
+						admissionOptions={admissionOptions}
+						userOptions={userOptions}
 						onFilterChange={handleFilterChange}
 						onReset={handleReset}
 					/>

@@ -58,6 +58,9 @@ function StudentHeader() {
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
+            aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={isProfileOpen}
             className="flex items-center gap-3 cursor-pointer transition-colors hover:opacity-80"
           >
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#EC4899' }}>
