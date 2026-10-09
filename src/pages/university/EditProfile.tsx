@@ -4,6 +4,7 @@ import UniversityLayout from '../../layouts/UniversityLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
 import { showError, showSuccess } from '../../utils/swal'
+import { toApiError } from '../../services/apiClient'
 
 function EditProfile() {
   const { user, refreshUser } = useAuth()
@@ -109,13 +110,13 @@ function EditProfile() {
       await refreshUser()
       await showSuccess('Profile updated successfully!')
       navigate('/university/settings')
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update profile:', error)
-      console.error('Error response:', error.response?.data)
-      console.error('Error status:', error.response?.status)
+      console.error('Error response:', toApiError(error).response?.data)
+      console.error('Error status:', toApiError(error).response?.status)
       console.error('User context:', user)
       
-      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to update profile'
+      const errorMessage = toApiError(error).response?.data?.error || toApiError(error).response?.data?.message || toApiError(error).message || 'Failed to update profile'
       await showError(errorMessage)
     } finally {
       setIsSaving(false)

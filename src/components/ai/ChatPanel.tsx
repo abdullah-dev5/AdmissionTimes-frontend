@@ -6,7 +6,7 @@ import LoadingDots from './LoadingDots'
 import ContextBadge from './ContextBadge'
 import QuickActionChips from './QuickActionChips'
 import aiService, { type ChatHistoryEntry } from '../../services/aiService'
-import { formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from '../../utils/dateUtils'
+import { formatDisplayDate, formatDisplayTime } from '../../utils/dateUtils'
 
 interface Message {
   id: string
@@ -50,33 +50,6 @@ const redactSensitiveData = (text: string): string => {
   safe = safe.replace(/\b(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, '$1: [redacted]')
 
   return safe
-}
-
-const formatIsoDateTimeInText = (text: string): string => {
-  return text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?\b/g, (match) => {
-    return formatDisplayDateTime(match, match)
-  })
-}
-
-const formatIsoDateOnlyInText = (text: string): string => {
-  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (match) => {
-    return formatDisplayDate(match, match)
-  })
-}
-
-const formatVerboseJsDateInText = (text: string): string => {
-  return text.replace(
-    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT[+-]\d{4}\s+\([^)]*\)\b/g,
-    (match) => {
-      return formatDisplayDateTime(match, match)
-    }
-  )
-}
-
-const toConversationalText = (text: string): string => {
-  const withDateTime = formatIsoDateTimeInText(text)
-  const withDateOnly = formatIsoDateOnlyInText(withDateTime)
-  return formatVerboseJsDateInText(withDateOnly)
 }
 
 const buildAdmissionResultsSummary = (results: Array<{
@@ -163,31 +136,6 @@ const filterResultsByQuery = (
     const matches = keywords.filter((keyword) => haystack.includes(keyword)).length
     return matches >= requiredMatches
   })
-}
-
-const buildConversationalReply = (
-  answer: string,
-  payload?: AiReplyPayload,
-  query?: string
-): string => {
-  const cleanAnswer = redactSensitiveData(toConversationalText(answer))
-  const originalResults = payload?.results || []
-  const results = filterResultsByQuery(originalResults, query)
-  const hasResultListInAnswer = /(?:^|\n)\s*\d+[\).]|here are the most relevant admissions|i found \d+ match/i.test(cleanAnswer)
-
-  if (!results.length) {
-    if (payload?.clarification_needed && payload.clarification_question) {
-      return [cleanAnswer, redactSensitiveData(payload.clarification_question)].join('\n\n')
-    }
-    return cleanAnswer
-  }
-
-  if (hasResultListInAnswer) {
-    return cleanAnswer
-  }
-
-  const resultsSummary = buildAdmissionResultsSummary(results)
-  return [cleanAnswer, resultsSummary].filter(Boolean).join('\n\n')
 }
 
 const buildDynamicFallbackFromPayload = (query: string, payload?: AiReplyPayload): string => {
@@ -428,10 +376,12 @@ function ChatPanel() {
                 resetInactivityTimer()
               }}
               onKeyPress={handleKeyPress}
+              aria-label="Message the AI assistant"
               placeholder="Ask about deadlines, compare, fees..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             <button
+              aria-label="Send message"
               onClick={() => handleSend()}
               disabled={!inputValue.trim() || isLoading}
               className="px-4 py-2 text-white rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 shadow-sm"

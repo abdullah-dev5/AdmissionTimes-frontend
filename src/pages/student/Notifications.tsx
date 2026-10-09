@@ -19,53 +19,32 @@ function Notifications() {
   const [preferences, setPreferences] = useState<UserPreferences | null>(null)
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
   const [isSavingPrefs, setIsSavingPrefs] = useState(false)
-  const [isUsingRealData, setIsUsingRealData] = useState(false)
+  const loadError = useStudentStore((state) => state.error)
 
-  // Fetch notifications and preferences on mount
+  // Load notifications and preferences once on mount.
   useEffect(() => {
     let isMounted = true
 
-    const initializeNotifications = async () => {
-      try {
-        // Fetch real notifications from API
-        await fetchNotifications({
-          showError: (msg) => {
-            // Silently fallback if API fails
-          }
-        })
-        if (isMounted) {
-          setIsUsingRealData(true)
-        }
-      } catch (err) {
-        if (isMounted) {
-          setIsUsingRealData(false)
-        }
-      }
-    }
+    void fetchNotifications()
 
     const fetchPreferences = async () => {
       try {
         setIsLoadingPrefs(true)
         const response = await preferencesService.get()
-        if (isMounted) {
-          setPreferences(response.data)
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          showError('Failed to load notification preferences.')
-        }
+        if (isMounted) setPreferences(response.data)
+      } catch {
+        if (isMounted) showError('Failed to load notification preferences.')
       } finally {
-        if (isMounted) {
-          setIsLoadingPrefs(false)
-        }
+        if (isMounted) setIsLoadingPrefs(false)
       }
     }
+    void fetchPreferences()
 
-    initializeNotifications()
-    fetchPreferences()
     return () => {
       isMounted = false
     }
+    // showError is a stable toast callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchNotifications])
 
   const emailAlerts = preferences?.email_notifications_enabled ?? true
@@ -77,7 +56,7 @@ function Notifications() {
       const response = await preferencesService.updateNotifications(patch)
       setPreferences(response.data)
       showSuccess('Notification preferences updated.')
-    } catch (err: any) {
+    } catch {
       showError('Failed to update notification preferences.')
     } finally {
       setIsSavingPrefs(false)
@@ -127,15 +106,13 @@ function Notifications() {
     }
   }
 
-  const handleRefresh = () => {
-    // Refresh notifications from API
-    fetchNotifications({
-      showError: (msg) => {
-        showError('Failed to refresh notifications')
-      }
-    }).then(() => {
-      showSuccess('✅ Notifications refreshed from API')
-    })
+  const handleRefresh = async () => {
+    await fetchNotifications()
+    if (useStudentStore.getState().error) {
+      showError('Failed to refresh notifications. Please try again.')
+    } else {
+      showSuccess('Notifications refreshed')
+    }
   }
 
   const handleToggleEmail = () => {
@@ -206,7 +183,11 @@ function Notifications() {
                   </div>
 
                   <div className="space-y-4">
-                    {filteredNotifications.length === 0 ? (
+                    {loadError && notifications.length === 0 ? (
+                      <div className="p-6 text-center">
+                        <p className="text-red-600">Could not load notifications. Check your connection and use Refresh to try again.</p>
+                      </div>
+                    ) : filteredNotifications.length === 0 ? (
                       <div className="text-center py-12">
                         <p className="text-gray-500">No notifications found.</p>
                       </div>

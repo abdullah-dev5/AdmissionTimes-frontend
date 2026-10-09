@@ -10,11 +10,11 @@ import UpdatedBadge from '../../components/admin/UpdatedBadge'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import {
   RECOMMENDATION_COUNT_LIMIT,
-  RECOMMENDATION_MIN_SCORE,
   RECOMMENDATION_RENDER_LIMIT,
   filterEligibleRecommendations,
   mapRecommendationsToAdmissions,
 } from '../../utils/recommendationUtils'
+import { formatDaysLeft } from '../../utils/studentUtils'
 
 function StudentDashboard() {
   const navigate = useNavigate()
@@ -64,7 +64,8 @@ function StudentDashboard() {
 
   const stats = useMemo(() => {
     const upcoming = admissions.filter((a) => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
-    const active = admissions.filter((a) => a.daysRemaining >= 0).length
+    // Open = accepting applications (no deadline announced, or deadline not passed).
+    const active = admissions.filter((a) => a.programStatus !== 'Closed').length
     const recommendations = Math.min(RECOMMENDATION_COUNT_LIMIT, eligibleRecommendations.length)
     const urgent = admissions.filter((a) => a.daysRemaining >= 0 && a.daysRemaining <= 7).length
 
@@ -212,9 +213,9 @@ function StudentDashboard() {
                     </svg>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 mb-1">Active Applications</p>
+                <p className="text-sm text-gray-600 mb-1">Open Programs</p>
                 <p className="text-3xl font-bold mb-1" style={{ color: '#111827' }}>{stats.active}</p>
-                <p className="text-xs" style={{ color: '#10B981' }}>Open & Closing Soon</p>
+                <p className="text-xs" style={{ color: '#10B981' }}>Accepting applications</p>
               </div>
 
               <div className="bg-white rounded-lg p-6 border border-gray-200">
@@ -380,7 +381,7 @@ function StudentDashboard() {
                             <p className="text-sm font-medium mb-1" style={{ color: '#111827' }}>{admission.university}</p>
                             <p className="text-xs text-gray-600 mb-1">{admission.program}</p>
                             <p className="text-xs" style={{ color: color }}>
-                              {admission.daysRemaining < 0 ? 'Deadline passed' : `Deadline in ${admission.daysRemaining} days`}
+                              {formatDaysLeft(admission)}
                             </p>
                           </div>
                         </div>

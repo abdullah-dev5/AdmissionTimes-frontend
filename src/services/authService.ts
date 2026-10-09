@@ -10,13 +10,18 @@
 import apiClient from './apiClient';
 import type { ApiResponse, User } from '../types/api';
 
+/** Self-service signup creates student accounts only. */
 export interface SignUpData {
   email: string;
   password: string;
-  user_type: 'student' | 'university' | 'admin';
   display_name?: string;
-  university_id?: string; // Required for university users
-  auth_user_id?: string; // Supabase Auth UUID
+}
+
+/** Profile creation payload sent to the API after supabase.auth.signUp. */
+export interface CreateProfileData {
+  email: string;
+  display_name?: string;
+  auth_user_id: string;
 }
 
 export interface SignInData {
@@ -36,7 +41,7 @@ export const authService = {
    * @param data - Sign up data
    * @returns Promise resolving to user data
    */
-  signUp: async (data: SignUpData): Promise<ApiResponse<AuthResponse>> => {
+  signUp: async (data: CreateProfileData): Promise<ApiResponse<AuthResponse>> => {
     const response = await apiClient.post('/auth/signup', data);
     return response.data;
   },

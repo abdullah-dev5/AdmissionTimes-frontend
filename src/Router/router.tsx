@@ -12,6 +12,8 @@ const TermsOfService = lazy(() => import("../pages/TermsOfService"));
 const About = lazy(() => import("../pages/About"));
 const SignIn = lazy(() => import("../pages/SignIn"));
 const SignUp = lazy(() => import("../pages/SignUp"));
+const ForgotPassword = lazy(() => import("../pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const StudentDashboard = lazy(() => import("../pages/student/StudentDashboard"));
 const ProgramDetail = lazy(() => import("../pages/ProgramDetail"));
 const Notifications = lazy(() => import("../pages/student/Notifications"));
@@ -45,6 +47,8 @@ const AppRouter = () => {
                 <Route path="/" element={<App />} />
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/signup" element={<SignUp />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/features" element={<Features />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />

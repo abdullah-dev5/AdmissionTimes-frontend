@@ -223,10 +223,6 @@ export interface ScraperManualRunResult {
   };
 }
 
-const toCanonicalAdmissionId = (admissionId: string): string => {
-  if (!admissionId) return admissionId;
-  return admissionId.includes('::program::') ? admissionId.split('::program::')[0] : admissionId;
-};
 
 export const adminService = {
   /**
@@ -310,7 +306,7 @@ export const adminService = {
     admissionId: string,
     data: AdminVerifyAdmissionDTO
   ): Promise<ApiResponse<AdminAdmission>> => {
-    const canonicalId = toCanonicalAdmissionId(admissionId);
+    const canonicalId = (admissionId);
     console.log('✅ [adminService] Verifying admission:', canonicalId, data);
     const response = await apiClient.post(`/admin/admissions/${canonicalId}/verify`, data);
     console.log('✅ [adminService] Verification response:', response.data);
@@ -352,7 +348,7 @@ export const adminService = {
     admissionId: string,
     reason: string
   ): Promise<ApiResponse<AdminAdmission>> => {
-    const canonicalId = toCanonicalAdmissionId(admissionId);
+    const canonicalId = (admissionId);
     console.log('🟠 [adminService] Requesting revision:', canonicalId);
     const response = await apiClient.post(`/admin/admissions/${canonicalId}/revision-required`, {
       reason,
@@ -528,8 +524,10 @@ export const adminService = {
     limit: number = 20,
     filters?: {
       admission_id?: string;
-      user_id?: string;
-      field_name?: string;
+      changed_by?: string;
+      actor_type?: string;
+      action_type?: string;
+      search?: string;
       date_from?: string;
       date_to?: string;
     }

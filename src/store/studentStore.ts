@@ -5,10 +5,10 @@ import { watchlistsService } from '../services/watchlistsService'
 import { notificationsService } from '../services/notificationsService'
 import { admissionsService } from '../services/admissionsService'
 import { transformAdmission, transformNotification } from '../utils/transformers'
-import { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from '../utils/scraperAdmissionAdapter'
 import { buildSearchParams } from '../utils/studentUtils'
 import { recommendationsService, type Recommendation } from '../services/recommendationsService'
 import { RECOMMENDATION_COUNT_LIMIT, RECOMMENDATION_MIN_SCORE } from '../utils/recommendationUtils'
+import { toApiError } from '../services/apiClient'
 
 interface StudentStats {
   active_admissions: number
@@ -45,7 +45,8 @@ interface StudentStore {
   fetchStats: () => Promise<void>
   fetchDashboardData: (options?: { showError?: (msg: string) => void }) => Promise<void>
   toggleSaved: (id: string, options?: { showError?: (msg: string) => void }) => Promise<void>
-  toggleAlert: (id: string, options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void }) => Promise<void>
+  /** Enable/disable deadline reminders. Resolves to true only when the API confirmed the change. */
+  toggleAlert: (id: string, options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void }) => Promise<boolean>
   updateAdmission: (id: string, updates: Partial<StudentAdmission>) => void
   getAdmissionById: (id: string) => StudentAdmission | undefined
   getAdmissionsByIds: (ids: string[]) => StudentAdmission[]
@@ -145,7 +146,7 @@ export const useStudentStore = create<StudentStore>()(
           const response = await dashboardService.getStudentDashboard()
           console.log('📊 [fetchStats] Updated stats:', response.data.stats)
           set({ stats: response.data.stats })
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to fetch stats:', err)
           // Don't throw, just log the error
         }
@@ -160,9 +161,7 @@ export const useStudentStore = create<StudentStore>()(
           const response = await dashboardService.getStudentDashboard()
           
           // Transform recommended programs to StudentAdmission format
-          const transformedAdmissions = flattenProgramAdmissions(response.data.recommended_programs)
-            .filter((prog) => !shouldHideGenericScraperAnnouncement(prog as any))
-            .map((prog) =>
+          const transformedAdmissions = response.data.recommended_programs.map((prog) =>
             transformAdmission(
               prog as any,
               prog.saved
@@ -193,9 +192,9 @@ export const useStudentStore = create<StudentStore>()(
             loading: false,
             error: null,
           })
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to fetch dashboard data:', err)
-          const errorMsg = err.message || 'Failed to fetch dashboard data'
+          const errorMsg = toApiError(err).message || 'Failed to fetch dashboard data'
           
           // Single state update on error
           set({ 
@@ -215,7 +214,7 @@ export const useStudentStore = create<StudentStore>()(
         const admission = admissions.find((a) => a.id === id)
         if (!admission) return
 
-        const backendId = admission.sourceAdmissionId || id.split('::program::')[0]
+        const backendId = id
         
         const wasSaved = admission.saved
         
@@ -266,7 +265,7 @@ export const useStudentStore = create<StudentStore>()(
           
           // Update stats
           await get().fetchStats()
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to toggle saved:', err)
           
           // Rollback
@@ -284,10 +283,10 @@ export const useStudentStore = create<StudentStore>()(
           })
           
           const errorMessage =
-            err.response?.status === 500 &&
-            err.response?.data?.message?.includes('foreign key constraint')
+            toApiError(err).response?.status === 500 &&
+            toApiError(err).response?.data?.message?.includes('foreign key constraint')
               ? 'User account not found. Please ensure you are logged in with a valid user account.'
-              : err.response?.data?.message || 'Failed to update saved programs. Please try again.'
+              : toApiError(err).response?.data?.message || 'Failed to update saved programs. Please try again.'
           
           if (options?.showError) {
             options.showError(errorMessage)
@@ -299,9 +298,22 @@ export const useStudentStore = create<StudentStore>()(
       toggleAlert: async (id, options) => {
         const { admissions } = get()
         const admission = admissions.find((a) => a.id === id)
-        if (!admission) return
+        if (!admission) {
+          // Program not loaded in the list (e.g. opened from a direct link):
+          // save it with alerts on directly, then refresh the student data.
+          try {
+            await watchlistsService.add(id, true)
+            await get().fetchDashboardData().catch(() => undefined)
+            options?.showSuccess?.('Alert enabled! Program added to your saved list.')
+            return true
+          } catch (err) {
+            console.error('Failed to enable alert:', err)
+            options?.showError?.('Failed to enable alert. Please try again.')
+            return false
+          }
+        }
 
-        const backendId = admission.sourceAdmissionId || id.split('::program::')[0]
+        const backendId = id
         
         const wasAlertEnabled = admission.alertEnabled
         const wasSaved = admission.saved
@@ -339,7 +351,8 @@ export const useStudentStore = create<StudentStore>()(
             if (options?.showSuccess) {
               options.showSuccess('Alert enabled! Program automatically added to your saved list.')
             }
-          } catch (err: any) {
+            return true
+          } catch (err) {
             console.error('Failed to enable alert:', err)
             
             // Rollback
@@ -358,6 +371,7 @@ export const useStudentStore = create<StudentStore>()(
             if (options?.showError) {
               options.showError('Failed to enable alert. Please try again.')
             }
+            return false
           }
         } else if (wasSaved) {
           // Already saved, just toggle alert
@@ -425,7 +439,7 @@ export const useStudentStore = create<StudentStore>()(
                 throw new Error('Watchlist not found for this admission')
               }
             }
-          } catch (err: any) {
+          } catch (err) {
             console.error('Failed to toggle alert:', err)
             
             // Rollback
@@ -443,8 +457,11 @@ export const useStudentStore = create<StudentStore>()(
             if (options?.showError) {
               options.showError('Failed to update alert settings. Please try again.')
             }
+            return false
           }
+          return true
         }
+        return false
       },
       
       // Update Admission
@@ -484,7 +501,7 @@ export const useStudentStore = create<StudentStore>()(
           }
           
           set({ loading: false })
-        } catch (err: any) {
+        } catch (err) {
           console.error('❌ Failed to fetch notifications:', err)
           const errorMsg = 'Failed to load notifications'
           set({ error: errorMsg, loading: false })
@@ -501,7 +518,7 @@ export const useStudentStore = create<StudentStore>()(
               notification.id === id ? { ...notification, read: true } : notification
             ),
           })
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to mark notification as read:', err)
           // Update locally anyway
           set({
@@ -522,7 +539,7 @@ export const useStudentStore = create<StudentStore>()(
               read: true,
             })),
           })
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to mark all notifications as read:', err)
           // Update locally anyway
           set({
@@ -605,8 +622,7 @@ export const useStudentStore = create<StudentStore>()(
             throw new Error('Failed to fetch admissions from backend')
           }
 
-          const admissionsData: any[] = flattenProgramAdmissions(Array.from(admissionsById.values()))
-            .filter((admission) => !shouldHideGenericScraperAnnouncement(admission))
+          const admissionsData: any[] = Array.from(admissionsById.values())
           console.log(`✅ Fetched ${admissionsData.length} admissions out of ${total} total`)
 
           if (admissionsData.length === 0) {
@@ -627,15 +643,7 @@ export const useStudentStore = create<StudentStore>()(
           
           // Transform with watchlist data
           const transformed = admissionsData.map(admission => {
-            const admissionIds = [
-              admission.id,
-              admission.source_admission_id,
-              admission.parent_admission_id,
-            ]
-              .filter(Boolean)
-              .map((value) => String(value))
-
-            const watchlist = userWatchlists.find((w) => admissionIds.includes(String(w.admission_id)))
+            const watchlist = userWatchlists.find((w) => String(w.admission_id) === String(admission.id))
             if (watchlist) {
               console.log(`✅ [searchAdmissions] Matched watchlist for admission: ${admission.id} (${admission.title})`)
             }
@@ -658,9 +666,9 @@ export const useStudentStore = create<StudentStore>()(
           })
           
           return transformed
-        } catch (err: any) {
+        } catch (err) {
           console.error('Failed to search admissions:', err)
-          const errorMsg = err.message || 'Failed to search admissions'
+          const errorMsg = toApiError(err).message || 'Failed to search admissions'
           
           // Single state update on error
           set({ 

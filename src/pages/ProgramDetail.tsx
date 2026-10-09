@@ -1,5 +1,5 @@
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
 import StudentLayout from '../layouts/StudentLayout'
 import { useStudentStore } from '../store/studentStore'
 import { useToast } from '../contexts/ToastContext'
@@ -103,91 +103,9 @@ const deriveEligibilityText = (requirements: Record<string, unknown>, existing?:
   )
 }
 
-const inferDegreeFromProgramTitle = (title?: string) => {
-  const text = String(title || '').toLowerCase()
-  if (!text) return 'Degree Not Specified'
-  if (/\bbba\b|bachelor of business administration/.test(text)) return 'BBA'
-  if (/\bmba\b|master of business administration/.test(text)) return 'MBA'
-  if (/\bphd\b|doctor of philosophy|doctorate/.test(text)) return 'PhD'
-  if (/\bmd\b|doctor of medicine/.test(text)) return 'MD'
-  if (/\bmphil\b|master of philosophy/.test(text)) return 'MPhil'
-  if (/\bms\b|master of science|\bmaster\b|postgraduate|post-graduate|\bgraduate\b/.test(text)) return 'MS'
-  if (/\bbs\b|bachelor of science|\bbe\b|bachelor|undergraduate|under-graduate|engineering/.test(text)) return 'BS'
-  return 'Degree Not Specified'
-}
 
-const resolveDegreeText = (current: string | undefined, title: string | undefined, isScraper: boolean) => {
-  if (current && current !== 'Degree Not Specified') {
-    return current
-  }
 
-  const inferred = inferDegreeFromProgramTitle(title)
-  if (inferred !== 'Degree Not Specified') {
-    return inferred
-  }
 
-  return isScraper ? 'BS' : 'Degree Not Specified'
-}
-
-const resolveLocationText = (
-  current: string | undefined,
-  admission: Record<string, unknown>,
-  requirements: Record<string, unknown>,
-) => {
-  const existing = readString(current)
-  if (existing && existing.toLowerCase() !== 'location not specified') {
-    return existing
-  }
-
-  const links = toRequirementsObject(requirements.links)
-  const direct =
-    readString(admission.location) ||
-    readString(admission.campus) ||
-    readString(admission.source_location) ||
-    readString(admission.city) ||
-    readString(requirements.location) ||
-    readString(requirements.campus) ||
-    readString(requirements.source_location) ||
-    readString(requirements.city) ||
-    readString(links.location)
-
-  if (direct && !/(admission|program|apply|deadline)/i.test(direct)) {
-    return direct
-  }
-
-  const city = readString(admission.university_city)
-  const country = readString(admission.university_country)
-  const fallback = [city, country].filter(Boolean).join(', ')
-  return fallback || 'Location not specified'
-}
-
-const resolveFeeText = (
-  current: string | undefined,
-  admission: Record<string, unknown>,
-  requirements: Record<string, unknown>,
-) => {
-  const existing = readString(current)
-  if (existing && !/^not specified$/i.test(existing)) {
-    return existing
-  }
-
-  const fromApi =
-    readString(admission.fee_display) ||
-    readString(admission.fee) ||
-    readString(requirements.fee_display) ||
-    readString(requirements.fee) ||
-    readString(requirements.application_fee)
-
-  if (fromApi) return fromApi
-
-  const amount = Number((admission as Record<string, unknown>).application_fee)
-  if (Number.isFinite(amount) && amount > 0) {
-    const currency = readString(admission.currency) || 'PKR'
-    return `${currency} ${amount}`
-  }
-
-  return 'Not specified'
-}
 
 const formatBackendRequirements = (requirements: Record<string, unknown>): string[] => {
   const hiddenKeys = new Set([
@@ -242,7 +160,7 @@ function ProgramDetail() {
   const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
   const admissions = useStudentStore((state) => state.admissions)
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
-  const resolvedAdmissionId = id?.split('::program::')[0]
+  const resolvedAdmissionId = id
   const routeSelectedAdmission = location.state?.selectedAdmission
   
   const storeProgram = routeSelectedAdmission || (id ? getAdmissionById(id) : undefined)
@@ -320,13 +238,6 @@ function ProgramDetail() {
 
         const mappedProgram: StudentAdmission = {
           ...mappedProgramBase,
-          degree: resolveDegreeText(
-            mappedProgramBase.degree,
-            mappedProgramBase.program,
-            mappedProgramBase.dataOrigin === 'scraper',
-          ),
-          location: resolveLocationText(mappedProgramBase.location, admission as Record<string, unknown>, requirements),
-          fee: resolveFeeText(mappedProgramBase.fee, admission as Record<string, unknown>, requirements),
           officialUrl: mappedProgramBase.officialUrl || resolvedOfficialLinks.primaryUrl,
         }
 
@@ -381,13 +292,6 @@ function ProgramDetail() {
     }).catch(() => {})
   }, [program?.id])
   
-  // Get related programs (same degree type, different university, limit 3)
-  const relatedPrograms = useMemo(() => {
-    if (!program) return []
-    return admissions
-      .filter(a => a.id !== program.id && a.degreeType === program.degreeType)
-      .slice(0, 3)
-  }, [program, admissions])
 
   if (loadState === 'loading') {
     return (
@@ -468,19 +372,18 @@ function ProgramDetail() {
 
   const statusColors = getStatusColor(program.programStatus)
   const daysRemaining = program.daysRemaining
-  const displayDegree = resolveDegreeText(
-    program.degree,
-    program.program,
-    program.dataOrigin === 'scraper',
-  )
+  const displayDegree = program.degree || 'Not specified'
   const displayFee = (program.fee && program.fee !== 'Not specified') ? program.fee : 'Not specified'
   const displayLocation = (program.location && program.location.trim().length > 0)
     ? program.location
     : [program.universityCity, program.universityCountry].filter(Boolean).join(', ') || 'Location not specified'
-  const sourceLabel = program.dataOrigin === 'scraper' ? 'Public listing' : 'University source'
-  const sourceHint = program.dataOrigin === 'scraper'
-    ? 'Shown from a public admissions listing, not an official university submission.'
-    : 'Shown from the university record.'
+  // Same wording as the mobile app (domain/admission.ts SOURCE_LABEL / SOURCE_HINT).
+  const isScraped = program.source === 'scraper' || program.dataOrigin === 'scraper'
+  const sourceLabel = isScraped ? 'Public listing' : 'From university'
+  const sourceHint = isScraped
+    ? "Collected automatically from the university's public announcement and reviewed by AdmissionTimes. Check the official announcement for full details."
+    : 'Entered and maintained by the university, then reviewed by AdmissionTimes.'
+  const programsOffered = program.programsOffered || []
 
   const handleCompare = () => {
     activityService.trackCappedStudentEvent({
@@ -517,9 +420,13 @@ function ProgramDetail() {
         metadata: { source: 'program_detail', action: 'set_reminder' },
       }).catch(() => {})
 
-      await toggleAlert(program.id)
-      showSuccess('Reminder enabled. Program added to watchlist automatically.')
-    } catch (error) {
+      const enabled = await toggleAlert(program.id)
+      if (enabled) {
+        showSuccess('Reminder enabled. Program added to watchlist automatically.')
+      } else {
+        showError('Failed to update reminder settings. Please try again.')
+      }
+    } catch {
       showError('Failed to update reminder settings. Please try again.')
     }
   }
@@ -707,14 +614,34 @@ function ProgramDetail() {
                   <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Overview</h2>
                   <div className="space-y-4 mb-6">
                     <div>
-                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Program Information</h3>
-                      <p className="text-gray-700 leading-relaxed">
-                        {program.program} at {program.university} is a {displayDegree} program located in {displayLocation}.
-                        {program.aiSummary && (
-                          <span className="block mt-2">{program.aiSummary}</span>
-                        )}
-                      </p>
+                      <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>
+                        {isScraped ? 'About this admission' : 'About this program'}
+                      </h3>
+                      {program.description ? (
+                        <p className="text-gray-700 leading-relaxed whitespace-pre-line">{program.description}</p>
+                      ) : (
+                        <p className="text-gray-500 leading-relaxed">
+                          {isScraped
+                            ? "This admission was collected from the university's public announcement, which does not include a program description."
+                            : 'The university has not added a description yet.'}
+                        </p>
+                      )}
                     </div>
+                    {programsOffered.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>
+                          Programs in this admission ({programsOffered.length})
+                        </h3>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                          {programsOffered.map((name) => (
+                            <li key={name} className="flex items-center gap-2 text-gray-700">
+                              <span className="text-blue-600" aria-hidden="true">✓</span>
+                              {name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Degree Type</p>
@@ -726,10 +653,7 @@ function ProgramDetail() {
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Application Fee</p>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-semibold">PKR</span>
-                          <p className="font-semibold text-gray-800">{displayFee}</p>
-                        </div>
+                        <p className={`font-semibold ${displayFee === 'Not specified' ? 'text-gray-400' : 'text-gray-800'}`}>{displayFee}</p>
                       </div>
                       <div className="p-4 bg-gray-50 rounded-lg">
                         <p className="text-sm text-gray-600 mb-1">Deadline</p>

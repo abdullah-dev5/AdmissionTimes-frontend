@@ -85,6 +85,17 @@ export const supabase: SupabaseClient = createClient(url, key, {
 });
 
 /**
+ * Realtime authorizes postgres_changes with the socket's JWT. Keep it in sync
+ * with the user's session; otherwise the socket stays on the anon key and RLS
+ * (own notifications only) hides every event.
+ */
+const syncRealtimeAuth = (accessToken: string | null | undefined) => {
+  if (accessToken) supabase.realtime.setAuth(accessToken)
+}
+void supabase.auth.getSession().then(({ data }) => syncRealtimeAuth(data.session?.access_token))
+supabase.auth.onAuthStateChange((_event, session) => syncRealtimeAuth(session?.access_token))
+
+/**
  * Get current session with JWT token
  * 
  * @returns Promise with session data and access token

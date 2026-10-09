@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { getStatusColor, type StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import aiService from '../../services/aiService'
 import type { AiCompareResponse } from '../../types/api'
-import { showError, showInfo, showSuccess, showWarning } from '../../utils/swal'
+import { showWarning } from '../../utils/swal'
+import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
+import { admissionsService } from '../../services/admissionsService'
+import { transformAdmission } from '../../utils/transformers'
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -144,7 +147,7 @@ const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) =
 
   const admissionIds = useMemo(
     () =>
-      admissions.map((a) => a.sourceAdmissionId || a.id.split('::program::')[0]),
+      admissions.map((a) => a.id),
     [admissions]
   )
 
@@ -278,43 +281,54 @@ const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) =
 
 function ComparePage() {
   const [searchParams] = useSearchParams()
-  const getAdmissionById = useStudentStore((state) => state.getAdmissionById)
+  // Load the student's programs like the other student pages (direct links
+  // to /student/compare must work without visiting the dashboard first).
+  useStudentDashboardData()
   const allAdmissions = useStudentStore((state) => state.admissions)
-  
-  // Memoize saved admissions to prevent unnecessary calculations
-  const savedAdmissions = useMemo(
-    () => allAdmissions.filter((a) => a.saved),
-    [allAdmissions]
-  )
+  const [fetchedById, setFetchedById] = useState<Record<string, StudentAdmission>>({})
+
+  const savedAdmissions = useMemo(() => allAdmissions.filter((a) => a.saved), [allAdmissions])
   const idsParam = searchParams.get('ids')
-  
+  const requestedIds = useMemo(() => (idsParam ? idsParam.split(',').filter(Boolean).slice(0, 4) : []), [idsParam])
+
+  // Programs from a shared link that are not in the loaded list are fetched individually.
+  useEffect(() => {
+    const known = new Set(allAdmissions.map((a) => a.id))
+    const missing = requestedIds.filter((id) => !known.has(id) && !fetchedById[id])
+    if (!missing.length) return
+    let active = true
+    void Promise.all(
+      missing.map((id) =>
+        admissionsService
+          .getById(id)
+          .then((res) => (res.data ? transformAdmission(res.data) : null))
+          .catch(() => null)
+      )
+    ).then((items) => {
+      if (!active) return
+      setFetchedById((prev) => {
+        const next = { ...prev }
+        items.forEach((item) => {
+          if (item) next[item.id] = item
+        })
+        return next
+      })
+    })
+    return () => {
+      active = false
+    }
+  }, [requestedIds, allAdmissions, fetchedById])
+
   const selectedAdmissions = useMemo(() => {
-    if (idsParam) {
-      const ids = idsParam.split(',')
-      return ids
-        .map(id => getAdmissionById(id))
+    if (requestedIds.length) {
+      const byId = new Map(allAdmissions.map((a) => [a.id, a]))
+      return requestedIds
+        .map((id) => byId.get(id) || fetchedById[id])
         .filter((a): a is StudentAdmission => a !== undefined)
     }
     // Default: use first 3 saved admissions
     return savedAdmissions.slice(0, 3)
-  }, [idsParam, getAdmissionById, savedAdmissions])
-
-  const handleSave = async () => {
-    await showSuccess('Comparison saved! You can access it from your saved comparisons.')
-  }
-
-  const handleShare = async () => {
-    const url = window.location.href
-    navigator.clipboard.writeText(url).then(async () => {
-      await showSuccess('Comparison link copied to clipboard!')
-    }).catch(async () => {
-      await showError('Failed to copy link. Please copy manually: ' + url)
-    })
-  }
-
-  const handleExport = async () => {
-    await showInfo('PDF export feature coming soon!')
-  }
+  }, [requestedIds, allAdmissions, fetchedById, savedAdmissions])
 
   const count = selectedAdmissions.length
 
@@ -373,37 +387,6 @@ function ComparePage() {
           <CompareGrid admissions={selectedAdmissions} />
           <CompareHighlights admissions={selectedAdmissions} />
         </div>
-{/*   <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-            </svg>
-            Save Comparison
-          </button>
-          <button
-            onClick={handleShare}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-            Share
-          </button>
-          <button
-            onClick={handleExport}
-            className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 flex items-center gap-2"
-            style={{ backgroundColor: '#2563EB' }}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export PDF
-          </button>
-        </div>*/}
-       
       </div>
     </StudentLayout>
   )

@@ -42,11 +42,6 @@ const toUniversityLabel = (value: string | null | undefined): string => {
 	return String(value).trim()
 }
 
-const toUnixMs = (value?: string | null): number => {
-	if (!value) return 0
-	const parsed = new Date(value).getTime()
-	return Number.isNaN(parsed) ? 0 : parsed
-}
 
 const mapRunToJob = (
 	run: ScraperRunListItem,
@@ -224,16 +219,15 @@ function AdminScraperJobsMonitor() {
 						</h1>
 						<p className="text-gray-600">Track automated scraper executions and update results.</p>
 					</div>
-					{false && (
-						<button
-							onClick={handleRunAll}
-							disabled={isActionLoading}
-							className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-							style={{ backgroundColor: "#004AAD" }}
-						>
-							{isActionLoading ? "Running..." : "Run Publish Replay"}
-						</button>
-					)}
+					<button
+						onClick={handleRunAll}
+						disabled={isActionLoading}
+						title="Re-publish the latest scraped records (does not re-scrape university websites)"
+						className="px-4 py-2 text-sm font-medium text-white rounded-lg cursor-pointer transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+						style={{ backgroundColor: "#004AAD" }}
+					>
+						{isActionLoading ? "Running..." : "Run Publish Replay"}
+					</button>
 				</div>
 
 				<div className="mb-6 bg-white rounded-lg shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-end">

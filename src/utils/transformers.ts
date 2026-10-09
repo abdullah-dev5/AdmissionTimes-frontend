@@ -10,254 +10,81 @@
 
 import type { Admission, Watchlist, Notification, Deadline, DeadlineType } from '../types/api';
 import type { StudentAdmission, StudentNotification } from '../data/studentData';
-import {
-  extractScraperFee,
-  extractScraperOfficialUrl,
-  inferScraperDegreeLabelFromTitle,
-  flattenProgramAdmissions,
-  resolveScraperAdmissionLocation,
-  shouldHideGenericScraperAnnouncement,
-} from './scraperAdmissionAdapter';
+import { daysUntil, formatDate as formatAppDate } from './appDates';
 
-export { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from './scraperAdmissionAdapter';
-
-const GENERIC_PROGRAM_TITLE_PATTERNS = [
-  /^admissions?\s+\d{4}\s+(undergraduate|graduate|postgraduate)\s+programs?$/i,
-  /^undergraduate\s+admissions?\s+\d{4}$/i,
-  /^graduate\s+admissions?\s+\d{4}$/i,
-  /^postgraduate\s+admissions?\s+\d{4}$/i,
-  /^admissions?\s*\d{4}$/i,
-  /^admissions?$/i,
-  /^programs?$/i,
-  /^undergraduate\s+programs?$/i,
-  /^graduate\s+programs?$/i,
-  /^postgraduate\s+programs?$/i,
-]
-
-function readText(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
-}
-
-function isGenericProgramTitle(title: string): boolean {
-  const normalized = title.trim().replace(/\s+/g, ' ')
-  return GENERIC_PROGRAM_TITLE_PATTERNS.some((pattern) => pattern.test(normalized))
-}
-
-function resolveProgramTitle(backend: Admission & { [key: string]: unknown }): string {
-  const titleCandidates = [
-    readText(backend.title),
-    readText(backend.admission_title),
-    readText(backend.program_title),
-    readText(backend.sub_program_title),
-    readText(backend.program_name),
-    readText(backend.name),
-  ].filter((value): value is string => Boolean(value))
-
-  const specificTitle = titleCandidates.find((title) => !isGenericProgramTitle(title))
-  if (specificTitle) {
-    return specificTitle
-  }
-
-  const fieldOfStudy = readText(backend.field_of_study) || readText(backend.department)
-  if (fieldOfStudy) {
-    return fieldOfStudy
-  }
-
-  const programType = readText(backend.program_type)
-  if (programType) {
-    return programType
-  }
-
-  const degreeLevel = readText(backend.degree_level) || readText(backend.degree_type)
-  if (degreeLevel) {
-    return degreeLevel
-  }
-
-  return titleCandidates[0] || 'Untitled Program'
-}
+const text = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 
 /**
- * Transform backend admission to frontend StudentAdmission format
- * 
- * @param backend - Backend admission data (may include match_score and match_reason)
- * @param watchlist - Optional watchlist item for this admission
- * @param universityName - Optional university name (if not in admission)
- * @returns Transformed StudentAdmission object
+ * Map an API admission to the student UI model.
+ *
+ * The backend response contract (shared/utils/admissionContract.ts) owns every
+ * derived value: degree, fee text, location, links, status and source. This
+ * maps it 1:1 (same as the mobile app) and never guesses missing data.
  */
 export function transformAdmission(
   backend: Admission & { match_score?: number; match_reason?: string },
   watchlist?: Watchlist,
   universityName?: string
 ): StudentAdmission {
-  const backendAny = backend as any;
-  const normalizedDeadline =
-    (typeof backendAny.deadline_iso === 'string' && backendAny.deadline_iso) ||
-    (typeof backendAny.deadlineIso === 'string' && backendAny.deadlineIso) ||
-    backend.deadline ||
-    (typeof backendAny.deadline_date === 'string' && backendAny.deadline_date) ||
-    '';
-  const parsedDaysRemaining = Number(
-    backendAny.days_remaining ?? backendAny.daysRemaining
-  );
-  const parsedFeeAmount = Number(
-    backendAny.fee_amount ?? backendAny.feeAmount ?? backend.application_fee
-  );
-  const requirements = (backend.requirements && typeof backend.requirements === 'object' && !Array.isArray(backend.requirements))
-    ? backend.requirements
-    : {} as Record<string, any>
-  const requirementLinks = (requirements.links && typeof requirements.links === 'object' && !Array.isArray(requirements.links))
-    ? requirements.links
-    : {} as Record<string, any>
-
-  const officialLinks = [
-    ...(Array.isArray(requirements.officialLinks) ? requirements.officialLinks : []),
-    ...(Array.isArray(requirementLinks.officialLinks) ? requirementLinks.officialLinks : []),
-  ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-
-  const isScraperOrigin =
-    String(backendAny.data_origin || backendAny.dataOrigin || '').toLowerCase() === 'scraper' ||
-    String(backendAny.source_system || '').toLowerCase().includes('scraper')
-
-  const officialUrl =
-    (typeof backendAny.primary_apply_url === 'string' && backendAny.primary_apply_url) ||
-    (typeof backendAny.admission_portal_url === 'string' && backendAny.admission_portal_url) ||
-    (typeof backendAny.university_website_url === 'string' && backendAny.university_website_url) ||
-    officialLinks[0] ||
-    (typeof requirements.admissionPortalLink === 'string' ? requirements.admissionPortalLink : '') ||
-    (typeof requirementLinks.admissionPortalLink === 'string' ? requirementLinks.admissionPortalLink : '') ||
-    (typeof requirements.websiteUrl === 'string' ? requirements.websiteUrl : '') ||
-    (typeof requirementLinks.websiteUrl === 'string' ? requirementLinks.websiteUrl : '') ||
-    undefined
-
-  const eligibility =
-    (typeof backendAny.eligibility_text === 'string' && backendAny.eligibility_text) ||
-    (typeof requirements.eligibility === 'string' && requirements.eligibility) ||
-    (typeof requirements.criteria === 'string' && requirements.criteria) ||
-    undefined
-  const rawVerificationStatus =
-    backend.verification_status ||
-    backendAny.verification_status ||
-    backendAny.status ||
-    undefined;
-  const uuidLikePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  const fallbackUniversityId = backend.university_id || backendAny.university_id;
-  const safeUniversityFallback =
-    fallbackUniversityId && !uuidLikePattern.test(String(fallbackUniversityId))
-      ? String(fallbackUniversityId)
-      : 'University';
-
-  // Get university name from different sources (in order of preference)
-  const finalUniversityName = 
-    universityName ||
-    backendAny.university_name ||
-    (backend.universities?.name) ||
-    safeUniversityFallback;
-
-  // Prefer a specific program title over generic admission banners.
-  const finalProgramTitle = resolveProgramTitle(backend as Admission & { [key: string]: unknown });
-
-  const inferredDegreeLabel = isScraperOrigin ? inferScraperDegreeLabelFromTitle(finalProgramTitle) : null
-  
-  // Debug logging for watchlist data
-  if (watchlist) {
-    console.log('🔄 [transformAdmission] Watchlist data for', backend.id, ':', {
-      watchlistId: watchlist.id,
-      alert_opt_in: watchlist.alert_opt_in,
-    });
-  }
-  
-  // Map match score to match label and numeric value
-  const matchScore = Number(backend.match_score || backendAny.match_score || 0);
-  const matchLabel =
-    (typeof backendAny.match_label === 'string' && backendAny.match_label) ||
-    getMatchLabel(matchScore);
-
-  const degreeLabel =
-    backendAny.degree_label ||
-    backend.degree_level ||
-    backendAny.degree ||
-    inferredDegreeLabel ||
-    (isScraperOrigin ? 'BS' : 'Degree Not Specified');
-  const degreeType = backendAny.degree_type || mapDegreeType(degreeLabel);
-  const scraperFee = isScraperOrigin ? extractScraperFee({ ...backendAny, requirements }) : { feeNumeric: null as number | null }
-  const feeNumeric =
-    Number.isFinite(parsedFeeAmount)
-      ? parsedFeeAmount
-      : (typeof scraperFee.feeNumeric === 'number' ? scraperFee.feeNumeric : backend.application_fee);
-  const normalizedBackendFeeDisplay =
-    typeof backendAny.fee_display === 'string' && backendAny.fee_display.trim().length > 0
-      ? backendAny.fee_display.trim()
-      : undefined
-  const backendFeeDisplayIsZero = !!normalizedBackendFeeDisplay && /(?:^|\s)(?:pkr|rs\.?)[\s:]*0+(?:\.0+)?(?:\s|$)/i.test(normalizedBackendFeeDisplay)
-  const feeDisplay =
-    (isScraperOrigin && backendFeeDisplayIsZero ? undefined : normalizedBackendFeeDisplay) ||
-    (typeof scraperFee.feeDisplay === 'string' ? scraperFee.feeDisplay : undefined) ||
-    formatCurrency(feeNumeric);
-  // Always derive timeline from deadline for UI consistency.
-  // Backend-provided days can become stale and conflict with deadline display.
-  const calculatedDaysRemaining = calculateDaysRemaining(normalizedDeadline);
-  const daysRemaining =
-    Number.isFinite(calculatedDaysRemaining)
-      ? calculatedDaysRemaining
-      : (Number.isFinite(parsedDaysRemaining) ? parsedDaysRemaining : -1);
-  const programStatus = Number.isFinite(daysRemaining)
-    ? calculateProgramStatusFromDays(daysRemaining)
-    : calculateProgramStatus(normalizedDeadline);
-  
-  const fallbackLocation = isScraperOrigin
-    ? ''
-    : ''
-
-  const scraperResolvedLocation = isScraperOrigin
-    ? resolveScraperAdmissionLocation({
-      ...backendAny,
-      requirements,
-      university_city: backendAny.university_city || backend.universities?.city,
-      university_country: backendAny.university_country || backend.universities?.country,
-    })
-    : null
-
-  const finalLocation = isScraperOrigin
-    ? (scraperResolvedLocation || fallbackLocation || 'Location not specified')
-    : (backend.location || 'Location not specified')
-
-  const scraperOfficialUrl = isScraperOrigin
-    ? extractScraperOfficialUrl({ ...backendAny, requirements })
-    : undefined
+  const api = backend as Admission & Record<string, any>
+  const deadline = text(api.deadline_iso) || text(api.deadline) || ''
+  const hasDeadline = api.has_deadline ?? Boolean(deadline)
+  // Same calendar-day rule as the backend and mobile (Pakistan time).
+  const daysRemaining = daysUntil(deadline || null)
+  const programStatus: StudentAdmission['programStatus'] = !hasDeadline
+    ? 'Open'
+    : daysRemaining < 0
+      ? 'Closed'
+      : daysRemaining <= 7
+        ? 'Closing Soon'
+        : 'Open'
+  const degree = text(api.degree_label) || text(api.degree_level) || 'Not specified'
+  const location = text(api.location_display) || text(api.location) || text(api.university_city) || 'Location not specified'
+  const feeAmount = typeof api.fee_amount === 'number' ? api.fee_amount : Number.NaN
+  const matchScore = Number(api.match_score || 0)
+  const source: 'university' | 'scraper' =
+    api.source === 'scraper' || String(api.data_origin || '').toLowerCase() === 'scraper' ? 'scraper' : 'university'
 
   return {
-    id: backend.id,
-    sourceAdmissionId: backendAny.source_admission_id || backendAny.parent_admission_id || backendAny.original_admission_id || undefined,
-    university: finalUniversityName,
-    universityLogo: backend.universities?.logo_url || backendAny.university_logo_url || undefined,  // University logo URL
-    universityCity: backend.universities?.city || backendAny.university_city || undefined,      // University city
-    universityCountry: backend.universities?.country || backendAny.university_country || undefined, // University country
-    program: finalProgramTitle,
-    degree: degreeLabel,
-    degreeType,
-    deadline: normalizedDeadline,
-    deadlineDisplay: formatDate(normalizedDeadline),
-    fee: feeDisplay,
-    feeNumeric,
-    location: finalLocation,
-    city: extractCity(finalLocation),
-    status: mapVerificationStatus(rawVerificationStatus),
-    verificationStatus: mapRawVerificationStatus(rawVerificationStatus),
-    dataOrigin: isScraperOrigin ? 'scraper' : (backendAny.data_origin || backendAny.dataOrigin || undefined),
+    id: String(api.id),
+    university: universityName || text(api.university_name) || text(api.universities?.name) || 'Unknown university',
+    universityLogo: api.university_logo_url || api.universities?.logo_url || undefined,
+    universityCity: text(api.university_city) || text(api.universities?.city),
+    universityCountry: text(api.university_country) || text(api.universities?.country),
+    program: api.title,
+    description: text(api.description),
+    degree,
+    degreeType: mapDegreeType(text(api.degree_type) || degree),
+    deadline,
+    deadlineDisplay: formatAppDate(deadline || null),
+    fee: text(api.fee_display) || 'Not specified',
+    // NaN = fee unknown (sorted last, excluded from comparisons).
+    feeNumeric: feeAmount,
+    location,
+    city: extractCity(location),
+    status: mapVerificationStatus(api.verification_status),
+    verificationStatus: mapRawVerificationStatus(api.verification_status),
+    dataOrigin: source,
+    source,
     programStatus,
-    updated: formatRelativeTime(backend.updated_at),
+    updated: formatRelativeTime(api.updated_at),
     daysRemaining,
-    match: matchLabel,
+    hasDeadline,
+    match: text(api.match_label) || getMatchLabel(matchScore),
     matchNumeric: matchScore,
     saved: !!watchlist,
-    watchlistId: watchlist?.id,  // Store watchlist ID for delete operations
+    watchlistId: watchlist?.id,
     alertEnabled: watchlist?.alert_opt_in || false,
-    aiSummary: backend.match_reason || backend.description || undefined,
-    eligibility,
-    officialUrl: scraperOfficialUrl || officialUrl,
-    logoBg: '#1F2937', // Default logo background color
-  };
+    aiSummary: api.match_reason || undefined,
+    eligibility: text(api.eligibility_text),
+    officialUrl: text(api.primary_apply_url),
+    websiteUrl: text(api.university_website_url),
+    portalUrl: text(api.admission_portal_url),
+    announcementUrl: text(api.source_announcement_url),
+    programsOffered: Array.isArray(api.programs_offered) ? api.programs_offered : [],
+    logoBg: '#1F2937',
+  }
 }
 
 /**
@@ -322,11 +149,6 @@ function extractProgramIdFromPath(path: string | null): string | undefined {
   return match?.[1]
 }
 
-function calculateProgramStatusFromDays(daysRemaining: number): 'Open' | 'Closing Soon' | 'Closed' {
-  if (daysRemaining < 0) return 'Closed';
-  if (daysRemaining <= 7) return 'Closing Soon';
-  return 'Open';
-}
 
 /**
  * Map backend verification status to frontend status
@@ -362,18 +184,6 @@ function mapRawVerificationStatus(
   return map[(status || '').toLowerCase()] || 'pending';
 }
 
-/**
- * Calculate program status based on deadline
- */
-function calculateProgramStatus(deadline: string | null | undefined): 'Open' | 'Closing Soon' | 'Closed' {
-  if (!deadline) {
-    return 'Closed'; // Default to Closed if no deadline
-  }
-  const daysRemaining = calculateDaysRemaining(deadline);
-  if (daysRemaining < 0) return 'Closed';
-  if (daysRemaining <= 7) return 'Closing Soon';
-  return 'Open';
-}
 
 /**
  * Get match label from numeric score (0-100)
@@ -383,53 +193,10 @@ function getMatchLabel(score: number): string {
   if (score >= 80) return 'High Match';
   if (score >= 70) return 'Good Match';
   if (score >= 60) return 'Fair Match';
-  if (score >= 50) return 'Match';
   return '';
 }
 
-/**
- * Calculate days remaining until deadline
- */
-function calculateDaysRemaining(deadline: string | null | undefined): number {
-  if (!deadline) {
-    return -1; // Return -1 (past) if no deadline
-  }
-  const trimmed = String(deadline).trim();
-  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const deadlineDate = dateOnlyMatch
-    ? new Date(
-        Number(dateOnlyMatch[1]),
-        Number(dateOnlyMatch[2]) - 1,
-        Number(dateOnlyMatch[3]),
-        23,
-        59,
-        59,
-        999
-      )
-    : new Date(trimmed);
-  if (Number.isNaN(deadlineDate.getTime())) {
-    return -1;
-  }
-  const now = new Date();
-  const diffTime = deadlineDate.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
 
-/**
- * Format date to human-readable string
- */
-function formatDate(dateString: string | null | undefined): string {
-  if (!dateString) {
-    return 'No deadline'; // Default if no date provided
-  }
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}
 
 /**
  * Format date to relative time string (e.g., "2 days ago")
@@ -456,21 +223,6 @@ function formatRelativeTime(dateString: string | null | undefined): string {
   }
 }
 
-/**
- * Format currency amount
- */
-function formatCurrency(amount: number | null | undefined): string {
-  if (!amount) {
-    return 'Not specified'; // Default if no amount provided
-  }
-  // For now, assume PKR currency
-  // Can be enhanced to support multiple currencies
-  return new Intl.NumberFormat('en-PK', {
-    style: 'currency',
-    currency: 'PKR',
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
 
 /**
  * Extract city from location string
@@ -651,10 +403,7 @@ export function transformDeadline(backend: Deadline): any {
  * @returns Number of days remaining (negative if past deadline)
  */
 export function calculateDaysRemainingFromDate(deadlineDate: string): number {
-  const now = new Date();
-  const deadline = new Date(deadlineDate);
-  const diffTime = deadline.getTime() - now.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return daysUntil(deadlineDate);
 }
 
 /**

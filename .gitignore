@@ -37,3 +37,11 @@ project-docs/
 *.spec.tsx
 test/
 tests/
+
+# Never commit credentials
+credentials*.txt
+*credentials*.txt
+
+# Playwright artifacts
+e2e-report/
+test-results/

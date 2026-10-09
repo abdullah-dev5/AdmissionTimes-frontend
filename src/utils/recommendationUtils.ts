@@ -10,8 +10,7 @@ export function mapRecommendationsToAdmissions(
   recommendations: Recommendation[],
   admissionsById: Map<string, StudentAdmission>
 ): StudentAdmission[] {
-  return recommendations
-    .map((recommendation) => {
+  return recommendations.map((recommendation): StudentAdmission => {
       const base = admissionsById.get(recommendation.admission_id)
       if (base) {
         return {
@@ -42,7 +41,7 @@ export function mapRecommendationsToAdmissions(
         updated_at: recommendation.generated_at,
         match_score: recommendation.score,
         match_reason: recommendation.reason,
-      } as any)
+      } as unknown as Parameters<typeof transformAdmission>[0])
 
       return {
         ...fallbackAdmission,
@@ -51,7 +50,6 @@ export function mapRecommendationsToAdmissions(
         aiSummary: recommendation.reason || fallbackAdmission.aiSummary,
       }
     })
-    .filter((item): item is StudentAdmission => Boolean(item))
 }
 
 export function filterEligibleRecommendations(admissions: StudentAdmission[]): StudentAdmission[] {

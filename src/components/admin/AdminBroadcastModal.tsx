@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
+import { toApiError } from '../../services/apiClient'
 
 interface AdminBroadcastModalProps {
   onClose: () => void;
@@ -60,9 +61,9 @@ export const AdminBroadcastModal = ({ onClose, onSuccess }: AdminBroadcastModalP
       console.log('✅ Broadcast sent successfully:', response.data);
       onSuccess();
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       console.error('❌ Failed to send broadcast:', err);
-      setError(err.response?.data?.message || 'Failed to send broadcast notification');
+      setError(toApiError(err).response?.data?.message || 'Failed to send broadcast notification');
     } finally {
       setIsSubmitting(false);
     }
@@ -233,11 +234,11 @@ export const AdminBroadcastModal = ({ onClose, onSuccess }: AdminBroadcastModalP
               type="text"
               value={actionUrl}
               onChange={(e) => setActionUrl(e.target.value)}
-              placeholder="/admin/dashboard or https://example.com"
+              placeholder="/student/search"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Optional link users can click to learn more or take action
+              Optional in-app path (must start with /). External links are not allowed in broadcasts.
             </p>
           </div>
         </div>

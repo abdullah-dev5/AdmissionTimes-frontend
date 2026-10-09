@@ -7,6 +7,7 @@ function AiAssistantWidget() {
     <>
       <button
         onClick={toggleChat}
+        aria-label={isOpen ? 'Close AI assistant' : 'Open AI assistant'}
         className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center cursor-pointer transition-all z-[10000] ${
           isOpen ? 'scale-90' : 'scale-100'
         }`}

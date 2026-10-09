@@ -36,7 +36,7 @@ export const buildUniversityResultsSummary = (results: UniversityChatResult[]): 
 }
 
 const answerAlreadyListsResults = (answer: string): boolean =>
-  /(?:^|\n)\s*\d+[\).]|here are \d+ of your admission|your admissions:/i.test(answer)
+  /(?:^|\n)\s*\d+[).]|here are \d+ of your admission|your admissions:/i.test(answer)
 
 export const mergeUniversityChatReply = (
   answer: string,

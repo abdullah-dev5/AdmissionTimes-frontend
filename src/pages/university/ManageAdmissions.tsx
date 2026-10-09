@@ -16,7 +16,9 @@ function ManageAdmissions() {
   const isEditMode = !!editId
 
   const { user } = useAuth()
-  const universityId = user?.university_id || user?.id || null
+  // Admissions belong to the rep's university; a user id is never a valid substitute.
+  const universityId = user?.university_id ?? null
+  const modifiedBy = user?.display_name || user?.email || 'University representative'
   const admissions = useUniversityStore((state) => state.admissions)
   const getAdmissionById = useUniversityStore((state) => state.getAdmissionById)
   const createOrUpdateAdmission = useUniversityStore((state) => state.createOrUpdateAdmission)
@@ -219,7 +221,7 @@ function ManageAdmissions() {
 
   const handleSaveDraft = async () => {
     if (!universityId) {
-      await showError('University ID not found. Please re-login and try again.')
+      await showError('Your account is not linked to a university. Please contact an administrator.')
       return
     }
 
@@ -230,12 +232,10 @@ function ManageAdmissions() {
       verification_status: 'draft' as const,
     }
     
-    console.log('🟡 [ManageAdmissions] Saving draft:', draftWithStatus)
-    console.log('🟡 [ManageAdmissions] Draft verification_status:', draftWithStatus.verification_status)
     const result = await createOrUpdateAdmission(
       draftWithStatus,
       universityId,
-      { diff: computeDiff(existingAdmission ?? null, draftWithStatus), modifiedBy: 'Rep_01' }
+      { diff: computeDiff(existingAdmission ?? null, draftWithStatus), modifiedBy }
     )
     
     if (result?.success) {
@@ -252,7 +252,7 @@ function ManageAdmissions() {
     }
 
     if (!universityId) {
-      await showError('University ID not found. Please re-login and try again.')
+      await showError('Your account is not linked to a university. Please contact an administrator.')
       return
     }
 
@@ -264,9 +264,6 @@ function ManageAdmissions() {
     }
     const diff = computeDiff(existingAdmission ?? null, payloadWithStatus)
 
-    console.log('🟡 [ManageAdmissions] Publishing admission:', payloadWithStatus)
-    console.log('🟡 [ManageAdmissions] Publish verification_status:', payloadWithStatus.verification_status)
-    console.log('🟡 [ManageAdmissions] Changes:', diff)
     
     // Show appropriate message based on whether editing verified/rejected admission
     let successMessage = ''
@@ -283,7 +280,7 @@ function ManageAdmissions() {
     const result = await createOrUpdateAdmission(
       payloadWithStatus,
       universityId,
-      { diff, modifiedBy: 'Rep_01' }
+      { diff, modifiedBy }
     )
 
     if (result?.success) {
@@ -450,8 +447,9 @@ function ManageAdmissions() {
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Basic Details</h2>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Program Title <span className="text-red-500">*</span></label>
+                        <label htmlFor="admission-programTitle" className="block text-sm font-medium text-gray-700 mb-2">Program Title <span className="text-red-500">*</span></label>
                         <input
+                          id="admission-programTitle"
                           type="text"
                           value={formData.programTitle}
                           onChange={(e) => setFormData({ ...formData, programTitle: e.target.value })}
@@ -460,8 +458,9 @@ function ManageAdmissions() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Degree Type</label>
+                          <label htmlFor="admission-degreeType" className="block text-sm font-medium text-gray-700 mb-2">Degree Type</label>
                           <select
+                            id="admission-degreeType"
                             value={formData.degreeType}
                             onChange={(e) => setFormData({ ...formData, degreeType: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
@@ -473,8 +472,9 @@ function ManageAdmissions() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Department/Discipline</label>
+                          <label htmlFor="admission-department" className="block text-sm font-medium text-gray-700 mb-2">Department/Discipline</label>
                           <input
+                            id="admission-department"
                             type="text"
                             value={formData.department}
                             onChange={(e) => setFormData({ ...formData, department: e.target.value })}
@@ -484,8 +484,9 @@ function ManageAdmissions() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Academic Year</label>
+                          <label htmlFor="admission-academicYear" className="block text-sm font-medium text-gray-700 mb-2">Academic Year</label>
                           <input
+                            id="admission-academicYear"
                             type="text"
                             value={formData.academicYear}
                             onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
@@ -493,9 +494,10 @@ function ManageAdmissions() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Application Deadline</label>
+                          <label htmlFor="admission-applicationDeadline" className="block text-sm font-medium text-gray-700 mb-2">Application Deadline</label>
                           <div className="relative">
                             <input
+                              id="admission-applicationDeadline"
                               type="date"
                               value={formData.applicationDeadline}
                               onChange={(e) => setFormData({ ...formData, applicationDeadline: e.target.value })}
@@ -509,10 +511,11 @@ function ManageAdmissions() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Fee</label>
+                          <label htmlFor="admission-fee" className="block text-sm font-medium text-gray-700 mb-2">Fee</label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">Rs</span>
                             <input
+                              id="admission-fee"
                               type="text"
                               value={formData.fee}
                               onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
@@ -527,8 +530,9 @@ function ManageAdmissions() {
                   <div className="bg-white rounded-lg shadow-sm p-6">
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Program Information</h2>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Overview</label>
+                      <label htmlFor="admission-overview" className="block text-sm font-medium text-gray-700 mb-2">Overview</label>
                       <textarea
+                        id="admission-overview"
                         value={formData.overview}
                         onChange={(e) => setFormData({ ...formData, overview: e.target.value })}
                         placeholder="Provide a brief summary of the program..."
@@ -541,8 +545,9 @@ function ManageAdmissions() {
                   <div className="bg-white rounded-lg shadow-sm p-6">
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Eligibility</h2>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Eligibility Criteria</label>
+                      <label htmlFor="admission-eligibility" className="block text-sm font-medium text-gray-700 mb-2">Eligibility Criteria</label>
                       <textarea
+                        id="admission-eligibility"
                         value={formData.eligibility}
                         onChange={(e) => setFormData({ ...formData, eligibility: e.target.value })}
                         placeholder="List the eligibility criteria..."
@@ -556,8 +561,9 @@ function ManageAdmissions() {
                     <h2 className="text-xl font-semibold mb-4" style={{ color: '#111827' }}>Official Links</h2>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">University Website URL</label>
+                        <label htmlFor="admission-websiteUrl" className="block text-sm font-medium text-gray-700 mb-2">University Website URL</label>
                         <input
+                          id="admission-websiteUrl"
                           type="url"
                           value={formData.websiteUrl}
                           onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
@@ -565,8 +571,9 @@ function ManageAdmissions() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Admission Portal Link</label>
+                        <label htmlFor="admission-admissionPortalLink" className="block text-sm font-medium text-gray-700 mb-2">Admission Portal Link</label>
                         <input
+                          id="admission-admissionPortalLink"
                           type="url"
                           value={formData.admissionPortalLink}
                           onChange={(e) => setFormData({ ...formData, admissionPortalLink: e.target.value })}

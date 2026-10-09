@@ -60,6 +60,9 @@ export interface Admission {
   
   // REQUIRED: User must provide
   title: string;
+
+  // Joined from universities by the API
+  university_name?: string | null;
   
   // OPTIONAL: User may provide (all nullable)
   description?: string | null;
@@ -291,6 +294,7 @@ export interface User {
   role: 'student' | 'university' | 'admin' | 'maintenance';  // Changed from user_type to role
   user_type?: 'student' | 'university' | 'admin' | 'maintenance';  // Keep as optional for backward compatibility
   university_id?: string | null;  // For university users - maps to universities.id
+  status?: 'active' | 'suspended';
   created_at: string;
   updated_at: string;
 }
@@ -460,13 +464,13 @@ export interface UniversityDashboard {
 }
 
 /**
- * Admin Dashboard Response
- * Aggregated data for admin dashboard with real backend structure
+ * Admin Dashboard Response (GET /admin/dashboard)
  */
 export interface AdminDashboard {
   stats: AdminDashboardStats;
-  recent_actions: AdminAuditLog[];
-  pending_admissions: AdminAdmission[];
+  pending_verifications: AdminPendingVerification[];
+  recent_actions: AdminRecentAction[];
+  scraper_activity: AdminScraperActivity[];
   reminder_coverage?: {
     look_ahead_days: number;
     total_targets_next_7_days: number;
@@ -483,14 +487,50 @@ export interface AdminDashboard {
   };
 }
 
-/**
- * Admin Dashboard Statistics
- */
 export interface AdminDashboardStats {
-  total: number;
-  pending: number;
-  verified: number;
-  rejected: number;
+  pending_verifications: number;
+  total_admissions: number;
+  total_universities: number;
+  total_students: number;
+  recent_actions: number;
+  scraper_jobs_running: number;
+}
+
+export interface AdminPendingVerification {
+  id: string;
+  admission_id: string;
+  program_title: string;
+  admission_title?: string;
+  university_name: string | null;
+  submitted_at: string | null;
+  submitted_on?: string | null;
+  submitted_by_label?: string | null;
+  verification_status: Admission['verification_status'];
+  status_label?: string;
+  admin_notes?: string | null;
+}
+
+export interface AdminRecentAction {
+  id: string;
+  admission_id: string;
+  program_title: string;
+  admission_title?: string;
+  field: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  changed_at: string;
+  changed_at_iso?: string;
+  changed_by: string | null;
+  changed_by_label?: string | null;
+  action_label?: string;
+}
+
+export interface AdminScraperActivity {
+  id: string;
+  university: string;
+  lastRun: string | null;
+  status: string;
+  changesDetected: number;
 }
 
 /**

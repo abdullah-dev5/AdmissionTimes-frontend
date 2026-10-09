@@ -8,7 +8,7 @@
  */
 
 import apiClient from './apiClient';
-import type { ApiResponse, PaginatedResponse, User, StudentProfile, UniversityProfile } from '../types/api';
+import type { ApiResponse, PaginatedResponse, User, UniversityProfile } from '../types/api';
 
 export const usersService = {
   /**
@@ -65,11 +65,6 @@ export const usersService = {
    * @param userId - User ID (optional, defaults to current user)
    * @returns Promise resolving to student profile
    */
-  getStudentProfile: async (userId?: string): Promise<ApiResponse<StudentProfile>> => {
-    const endpoint = userId ? `/users/${userId}/student-profile` : '/users/me/student-profile';
-    const response = await apiClient.get(endpoint);
-    return response.data;
-  },
 
   /**
    * Update student profile
@@ -77,10 +72,6 @@ export const usersService = {
    * @param data - Updated student profile data
    * @returns Promise resolving to updated profile
    */
-  updateStudentProfile: async (data: Partial<StudentProfile>): Promise<ApiResponse<StudentProfile>> => {
-    const response = await apiClient.put('/users/me/student-profile', data);
-    return response.data;
-  },
 
   /**
    * Get university profile

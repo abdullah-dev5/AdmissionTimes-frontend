@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { adminService, type CreateUniversityRepResult } from '../../services/adminService'
+import { toApiError } from '../../services/apiClient'
 
 type FormState = {
   email: string
@@ -81,11 +82,11 @@ function AdminCreateUniversityRep() {
 
       setResult(response.data)
       setForm(initialForm)
-    } catch (err: any) {
-      const backendErrors = err?.response?.data?.errors
-      const backendMessage = err?.response?.data?.message
+    } catch (err) {
+      const backendErrors = toApiError(err).response?.data?.errors
+      const backendMessage = toApiError(err).response?.data?.message
 
-      let message = backendMessage || err?.message || 'Failed to create university representative.'
+      let message = backendMessage || toApiError(err).message || 'Failed to create university representative.'
 
       if (backendErrors && typeof backendErrors === 'object') {
         const firstFieldError = Object.values(backendErrors)[0]

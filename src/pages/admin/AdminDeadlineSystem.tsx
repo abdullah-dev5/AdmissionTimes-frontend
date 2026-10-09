@@ -8,6 +8,7 @@ import {
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { showConfirm, showError, showSuccess } from "../../utils/swal"
+import { toApiError } from '../../services/apiClient'
 
 const getFriendlyErrorMessage = (raw?: string | null) => {
   const message = (raw || "").toLowerCase()
@@ -43,8 +44,8 @@ function AdminDeadlineSystem() {
       setLoadingHealth(true)
       const response = await adminService.getSchedulerHealth()
       setHealth(response.data || null)
-    } catch (err: any) {
-      setError(err?.message || "Failed to load scheduler health")
+    } catch (err) {
+      setError(toApiError(err).message || "Failed to load scheduler health")
       setHealth(null)
     } finally {
       setLoadingHealth(false)
@@ -62,8 +63,8 @@ function AdminDeadlineSystem() {
       })
 
       setLogs(response.data || [])
-    } catch (err: any) {
-      setError(err?.message || "Failed to load reminder logs")
+    } catch (err) {
+      setError(toApiError(err).message || "Failed to load reminder logs")
       setLogs([])
     } finally {
       setLoadingLogs(false)
@@ -99,8 +100,8 @@ function AdminDeadlineSystem() {
 
       await showSuccess("Deadline reminder trigger completed.")
       await Promise.all([fetchHealth(), fetchLogs()])
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || "Failed to trigger reminders"
+    } catch (err) {
+      const message = toApiError(err).response?.data?.message || toApiError(err).message || "Failed to trigger reminders"
       setError(message)
       await showError(message)
     } finally {
@@ -129,8 +130,8 @@ function AdminDeadlineSystem() {
 
       await showSuccess(`Cleanup completed. Deleted ${deletedCount} manual test notifications.`)
       await fetchLogs()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || "Failed to cleanup manual test notifications"
+    } catch (err) {
+      const message = toApiError(err).response?.data?.message || toApiError(err).message || "Failed to cleanup manual test notifications"
       setError(message)
       await showError(message)
     } finally {

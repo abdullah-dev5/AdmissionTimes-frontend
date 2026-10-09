@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,10 +8,19 @@ import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 import { showInfo, showWarning } from '../../utils/swal'
+import { isAdmissionClosed } from '../../utils/studentUtils'
 
 const normalizeDeadlineDate = (deadline?: string | null) => {
   if (!deadline) return ''
   return String(deadline).substring(0, 10)
+}
+
+/** Sort fees with unknown values (NaN) always last. */
+const compareFees = (a: number, b: number, order: 'asc' | 'desc'): number => {
+  const aKnown = Number.isFinite(a)
+  const bKnown = Number.isFinite(b)
+  if (!aKnown || !bKnown) return aKnown === bKnown ? 0 : aKnown ? -1 : 1
+  return order === 'asc' ? a - b : b - a
 }
 
 function SearchAdmissions() {
@@ -172,16 +180,15 @@ function SearchAdmissions() {
     if (sortBy === 'Deadline') {
       filtered.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     } else if (sortBy === 'Fee (Low to High)') {
-      filtered.sort((a, b) => a.feeNumeric - b.feeNumeric)
+      filtered.sort((a, b) => compareFees(a.feeNumeric, b.feeNumeric, 'asc'))
     } else if (sortBy === 'Fee (High to Low)') {
-      filtered.sort((a, b) => b.feeNumeric - a.feeNumeric)
+      filtered.sort((a, b) => compareFees(a.feeNumeric, b.feeNumeric, 'desc'))
     } else if (sortBy === 'Relevance') {
       filtered.sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
     }
 
     // Always keep deadline-passed/closed cards below active admissions.
-    const isDeadlinePassed = (item: typeof filtered[number]) =>
-      item.daysRemaining < 0 || item.programStatus === 'Closed'
+    const isDeadlinePassed = (item: typeof filtered[number]) => isAdmissionClosed(item)
     const activeAdmissions = filtered.filter((item) => !isDeadlinePassed(item))
     const passedAdmissions = filtered.filter((item) => isDeadlinePassed(item))
 

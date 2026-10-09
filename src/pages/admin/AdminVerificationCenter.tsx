@@ -10,7 +10,7 @@ import {
 import { formatDisplayDate, formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { showSuccessToast } from "../../utils/swal"
-import { flattenProgramAdmissions, shouldHideGenericScraperAnnouncement } from "../../utils/scraperAdmissionAdapter"
+import { toApiError } from '../../services/apiClient'
 
 const formatLabel = (value: string) =>
 	value
@@ -176,15 +176,7 @@ const inferDegreeFromTitle = (title?: string | null): string => {
 	return "N/A"
 }
 
-const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "sourceAdmissionId">): string => {
-	if (item.sourceAdmissionId && item.sourceAdmissionId.trim().length > 0) {
-		return item.sourceAdmissionId
-	}
-
-	const currentId = String(item.id || "")
-	const normalized = currentId.includes("::program::") ? currentId.split("::program::")[0] : currentId
-	return isUuid(normalized) ? normalized : ""
-}
+const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string => (isUuid(String(item.id || "")) ? String(item.id) : "")
 
 	interface AdminVerificationCenterProps {
 		forcedDataOrigin?: "scraper" | "manual" | "university"
@@ -219,18 +211,15 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 	const [error, setError] = useState<string | null>(null)
 	const [submitting, setSubmitting] = useState(false)
 
-	// Fetch pending admissions on component mount
+	// Initial load + refetch when filters change (runs on mount too).
 	useEffect(() => {
-		fetchAllAdmissions()
-	}, [])
-
-	useEffect(() => {
-		// Refetch when status filter changes
 		if (currentPage === 1) {
 			fetchAllAdmissions()
 		} else {
 			setCurrentPage(1)
 		}
+		// fetchAllAdmissions reads the latest filters; re-run only when filters change.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [statusFilter, dataOriginFilter])
 
 	useEffect(() => {
@@ -241,21 +230,26 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 		return () => {
 			window.clearInterval(intervalId)
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [statusFilter, dataOriginFilter, resolvedDataOrigin])
 
 	useEffect(() => {
-		const selectedId = (location.state as { selectedId?: string } | null | undefined)?.selectedId
+		// Deep links: router state (in-app) or ?admission=<id> (notification links).
+		const selectedId =
+			(location.state as { selectedId?: string } | null | undefined)?.selectedId ||
+			new URLSearchParams(location.search).get('admission') ||
+			undefined
 		if (!selectedId || !apiVerifications.length) {
 			return
 		}
 		if (selectedItem?.id === selectedId) {
 			return
 		}
-		const match = apiVerifications.find((item) => item.id === selectedId)
+		const match = apiVerifications.find((item) => item.id === selectedId || resolveCanonicalAdmissionId(item) === selectedId)
 		if (match) {
 			handleReview(match)
 		}
-	}, [apiVerifications, location.state, selectedItem?.id])
+	}, [apiVerifications, location.state, location.search, selectedItem?.id])
 
 	/**
 	 * Fetch all admissions from API with status filter
@@ -291,9 +285,9 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 			// Transform API data to VerificationItem format
 			const transformed = transformApiAdmissions(allAdmissions)
 			setApiVerifications(transformed)
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to fetch admissions'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to fetch admissions'))
 		} finally {
 			setLoading(false)
 		}
@@ -304,8 +298,8 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 	 */
 	const transformApiAdmissions = (data: any): VerificationItem[] => {
 		// Handle both paginated and non-paginated responses
-		const admissions = flattenProgramAdmissions(Array.isArray(data) ? data : (data?.data || data?.pending_verifications || []))
-			.filter((admission) => !shouldHideGenericScraperAnnouncement(admission))
+		// One row per real admission (multi-program announcements are verified as a whole).
+		const admissions: any[] = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
 		const statusMap: Record<string, VerificationStatus> = {
 			pending: "Pending",
 			verified: "Verified",
@@ -319,10 +313,6 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 				admission.fee_display ||
 				admission.fee ||
 				(admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A')
-			const sourceAdmissionId =
-				admission.source_admission_id ||
-				admission.parent_admission_id ||
-				(String(admission.id || '').includes('::program::') ? String(admission.id).split('::program::')[0] : undefined)
 
 			const universityName = safeLabel(
 				admission.university_name || admission.universities?.name || admission.location,
@@ -343,7 +333,6 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 				dataOrigin: ((admission.data_origin || (String(admission.source_system || '').toLowerCase().includes('scraper') ? 'scraper' : 'manual')) as "scraper" | "manual" | "university"),
 				sourceSystem: admission.source_system || null,
 				id: admission.id || admission.admission_id,
-				sourceAdmissionId,
 				admissionTitle: resolvedTitle,
 				university: universityName,
 				submittedBy: getSubmittedViaLabel(admission),
@@ -534,16 +523,13 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 			}
 
 			if (actionType === 'Verify') {
-				console.log('✅ Verifying admission:', admissionId)
 				await adminService.verifyAdmission(admissionId, {
 					verification_status: 'verified',
 					verification_comments: remarks,
 				})
 			} else if (actionType === 'Reject') {
-				console.log('❌ Rejecting admission:', admissionId)
 				await adminService.rejectAdmission(admissionId, remarks)
 			} else if (actionType === 'Revision') {
-				console.log('🟠 Requesting revision:', admissionId)
 				await adminService.requestRevision(admissionId, remarks)
 			}
 
@@ -563,9 +549,9 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 
 			// Refresh the list after successful action
 			await fetchAllAdmissions()
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to submit action'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to submit action'))
 		} finally {
 			setSubmitting(false)
 		}
@@ -1054,7 +1040,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 									<div className="flex flex-wrap gap-3 mb-4">
 										<button
 											onClick={() => handleActionSelect("Verify")}
-											disabled={selectedItem.verificationStatusRaw === 'verified'}
+											disabled={selectedItem.verificationStatusRaw === 'verified' || submitting}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Verify"
 													? "text-white"
@@ -1068,7 +1054,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 										</button>
 										<button
 											onClick={() => handleActionSelect("Reject")}
-											disabled={selectedItem.verificationStatusRaw === 'rejected'}
+											disabled={selectedItem.verificationStatusRaw === 'rejected' || submitting}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Reject"
 													? "text-white"
@@ -1127,7 +1113,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id" | "source
 								{actionType && (
 									<button
 										onClick={handleSubmitAction}
-										disabled={remarks.trim().length < 10}
+										disabled={remarks.trim().length < 10 || submitting}
 										className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors hover:opacity-90"
 										style={{ backgroundColor: "#004AAD" }}
 									>
