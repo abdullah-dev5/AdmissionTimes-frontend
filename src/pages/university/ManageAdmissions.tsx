@@ -12,6 +12,10 @@ import { createLogger } from '../../utils/logger'
 
 const log = createLogger('ManageAdmissions')
 
+// The hosted API (Vercel) rejects request bodies over 4.5 MB.
+const MAX_PDF_MB = Number(import.meta.env.VITE_MAX_PDF_MB) || 4
+const MAX_PDF_BYTES = MAX_PDF_MB * 1024 * 1024
+
 function ManageAdmissions() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -140,8 +144,8 @@ function ManageAdmissions() {
       return
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      await showWarning('File size must be less than 10MB.')
+    if (file.size > MAX_PDF_BYTES) {
+      await showWarning(`File size must be ${MAX_PDF_MB} MB or less.`)
       return
     }
 
