@@ -32,11 +32,26 @@ export interface ChangeLogQuery {
   actor_type?: string
   date_from?: string
   date_to?: string
+  search?: string
+}
+
+/** GET /changelogs/summary: counts over everything the viewer may see. */
+export interface ChangeLogSummary {
+  total: number
+  by_actor: { admin: number; university: number; system: number }
+  reviews: number
+  today: number
+  last_7_days: number
 }
 
 export const changelogsService = {
   list: async (page = 1, limit = 100, filters: ChangeLogQuery = {}): Promise<PaginatedResponse<ApiChangeLogEntry>> => {
     const response = await apiClient.get('/changelogs', { params: { page, limit, ...filters } })
     return response.data
+  },
+
+  summary: async (): Promise<ChangeLogSummary> => {
+    const response = await apiClient.get('/changelogs/summary')
+    return response.data.data
   },
 }

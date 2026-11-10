@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { adminService } from "../services/adminService"
 import { getApiErrorMessage } from "../services/apiClient"
-import type { ApiChangeLogEntry } from "../services/changelogsService"
+import { changelogsService, type ApiChangeLogEntry, type ChangeLogSummary } from "../services/changelogsService"
 import type { AdminChangeLog, ChangeType } from "../data/adminData"
+import { changeReason, pktDayBound } from "../utils/changelogFormatting"
+import { DEFAULT_ITEMS_PER_PAGE } from "../constants/pagination"
 
 export interface ChangeLogFilters {
 	admissionId: string
@@ -32,8 +34,6 @@ const ACTOR_BY_CHANGE_TYPE: Record<ChangeType, string> = {
 	"Scraper Update": "system",
 }
 
-const FETCH_LIMIT = 100
-
 type ApiChangeLog = ApiChangeLogEntry & { change_type?: ChangeType }
 
 const stringify = (value: unknown): string => {
@@ -58,26 +58,31 @@ const toAdminChangeLog = (log: ApiChangeLog): AdminChangeLog =>
 				newValue: stringify(log.new_value),
 			},
 		],
-		reasonForChange: typeof log.metadata?.reason === "string" ? log.metadata.reason : undefined,
+		// The backend stores moderation reasons as rejection_reason / admin_notes.
+		reasonForChange: changeReason(log.metadata),
 		metadata: log.metadata ?? undefined,
 		action_type: log.action_type ?? undefined,
 		actor_type: log.actor_type ?? undefined,
 	}) as AdminChangeLog
 
 /**
- * Change-log listing with server-side filters. Dropdown options are built from
- * real logs returned by the API (accumulated across loads), never mock data.
+ * Change-log listing, paged and filtered on the server (it used to load the
+ * newest 100 entries and page through those only). Dropdown options are built
+ * from real logs returned by the API (accumulated across loads).
  */
 export const useChangeLogFilters = () => {
 	const [filters, setFilters] = useState<ChangeLogFilters>(DEFAULT_FILTERS)
+	const [page, setPage] = useState(1)
 	const [logs, setLogs] = useState<AdminChangeLog[]>([])
+	const [total, setTotal] = useState(0)
+	const [summary, setSummary] = useState<ChangeLogSummary | null>(null)
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const knownAdmissions = useRef(new Map<string, string>())
 	const knownUsers = useRef(new Map<string, string>())
 	const [optionsVersion, setOptionsVersion] = useState(0)
 
-	const fetchChangeLogs = useCallback(async (active: ChangeLogFilters, isCancelled: () => boolean) => {
+	const fetchChangeLogs = useCallback(async (active: ChangeLogFilters, pageNumber: number, isCancelled: () => boolean) => {
 		setLoading(true)
 		setError(null)
 		try {
@@ -85,11 +90,10 @@ export const useChangeLogFilters = () => {
 			if (active.admissionId !== "All") params.admission_id = active.admissionId
 			if (active.userId !== "All") params.changed_by = active.userId
 			if (active.changeType !== "All") params.actor_type = ACTOR_BY_CHANGE_TYPE[active.changeType]
-			if (active.dateFrom) params.date_from = `${active.dateFrom}T00:00:00`
-			// Inclusive end date: the whole selected day.
-			if (active.dateTo) params.date_to = `${active.dateTo}T23:59:59.999`
+			if (active.dateFrom) params.date_from = pktDayBound(active.dateFrom, false)
+			if (active.dateTo) params.date_to = pktDayBound(active.dateTo, true)
 
-			const response = await adminService.getChangeLogs(1, FETCH_LIMIT, params)
+			const response = await adminService.getChangeLogs(pageNumber, DEFAULT_ITEMS_PER_PAGE, params)
 			if (isCancelled()) return
 
 			const rows: ApiChangeLog[] = Array.isArray(response.data) ? response.data : []
@@ -99,10 +103,12 @@ export const useChangeLogFilters = () => {
 			})
 			setOptionsVersion((version) => version + 1)
 			setLogs(rows.map(toAdminChangeLog))
+			setTotal(response.pagination?.total ?? rows.length)
 		} catch (err) {
 			if (isCancelled()) return
 			setError(getApiErrorMessage(err, "Failed to fetch change logs"))
 			setLogs([])
+			setTotal(0)
 		} finally {
 			if (!isCancelled()) setLoading(false)
 		}
@@ -110,16 +116,18 @@ export const useChangeLogFilters = () => {
 
 	useEffect(() => {
 		let cancelled = false
-		void fetchChangeLogs(filters, () => cancelled)
+		void fetchChangeLogs(filters, page, () => cancelled)
 		return () => {
 			cancelled = true
 		}
-	}, [filters, fetchChangeLogs])
+	}, [filters, page, fetchChangeLogs])
 
-	const filteredLogs = useMemo(
-		() => [...logs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-		[logs]
-	)
+	useEffect(() => {
+		changelogsService
+			.summary()
+			.then(setSummary)
+			.catch(() => setSummary(null))
+	}, [])
 
 	const admissionOptions: FilterOption[] = useMemo(
 		() =>
@@ -137,14 +145,22 @@ export const useChangeLogFilters = () => {
 
 	const updateFilter = <K extends keyof ChangeLogFilters>(key: K, value: ChangeLogFilters[K]) => {
 		setFilters((prev) => ({ ...prev, [key]: value }))
+		setPage(1)
 	}
 
-	const resetFilters = () => setFilters(DEFAULT_FILTERS)
+	const resetFilters = () => {
+		setFilters(DEFAULT_FILTERS)
+		setPage(1)
+	}
 
 	return {
 		filters,
-		filteredLogs,
-		allLogs: logs,
+		logs,
+		page,
+		setPage,
+		total,
+		totalPages: Math.max(1, Math.ceil(total / DEFAULT_ITEMS_PER_PAGE)),
+		summary,
 		admissionOptions,
 		userOptions,
 		updateFilter,

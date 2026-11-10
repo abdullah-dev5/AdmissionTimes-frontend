@@ -28,12 +28,17 @@ function ManageAdmissions() {
   const deleteAdmission = useUniversityStore((state) => state.deleteAdmission)
   const existingAdmission = editId ? getAdmissionById(editId) : null
 
-  // Determine if we need to change status to pending on edit
-  const requiresStatusReset = useMemo(() => {
-    if (!existingAdmission) return false
-    // If admission is verified or rejected, editing should reset to pending
-    return ['verified', 'rejected'].includes(existingAdmission.verification_status || '')
-  }, [existingAdmission])
+  // What a save without submitting does depends on the current status (the
+  // backend never moves a submitted admission back to draft):
+  // new/draft -> stays a private draft; rejected -> keeps the edits, not resubmitted;
+  // pending/verified -> every save goes to review, so there is no separate button.
+  const currentStatus = existingAdmission?.verification_status || (existingAdmission ? 'pending' : 'draft')
+  const secondarySave: { label: string; success: string } | null =
+    currentStatus === 'draft'
+      ? { label: 'Save as Draft', success: 'Draft saved. It stays private until you publish it.' }
+      : currentStatus === 'rejected'
+        ? { label: 'Save without resubmitting', success: 'Changes saved. Resubmit when you are ready for review.' }
+        : null
 
   const [formData, setFormData] = useState({
     // REQUIRED: Program Title
@@ -242,7 +247,7 @@ function ManageAdmissions() {
     )
     
     if (result?.success) {
-      await showSuccess('Draft saved successfully!')
+      await showSuccess(secondarySave?.success || 'Changes saved.')
     }
     // Error alert is shown by context
   }
@@ -271,8 +276,10 @@ function ManageAdmissions() {
     // Show appropriate message based on whether editing verified/rejected admission
     let successMessage = ''
     if (isEditMode) {
-      if (requiresStatusReset) {
-        successMessage = `Admission "${formData.programTitle}" updated! Status changed to "Pending Audit" for re-verification.`
+      if (currentStatus === 'verified') {
+        successMessage = `Admission "${formData.programTitle}" updated and sent for re-verification. It is hidden from new students until an admin verifies it again.`
+      } else if (currentStatus === 'rejected') {
+        successMessage = `Admission "${formData.programTitle}" revised and resubmitted for review.`
       } else {
         successMessage = `Admission "${formData.programTitle}" updated and submitted for review!`
       }
@@ -336,21 +343,34 @@ function ManageAdmissions() {
                 </p>
               </div>
 
-              {/* Alert banner for verified/rejected admissions that will reset to pending */}
-              {requiresStatusReset && (
+              {/* What saving will do, for admissions already submitted */}
+              {currentStatus === 'verified' && (
                 <div className="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm font-medium text-blue-800">Status Will Change on Save</p>
-                      <p className="text-sm text-blue-700 mt-1">
-                        This admission is currently <strong>{existingAdmission?.verification_status || 'verified'}</strong>. 
-                        When you save changes, the status will automatically change to <strong>"Pending Audit"</strong> for re-verification by admins.
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-sm font-medium text-blue-800">This admission is live</p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Saving changes sends it back to <strong>Pending Audit</strong> for re-verification. Until an admin verifies it again it is
+                    hidden from new students; students who already saved it keep access and reminders.
+                  </p>
+                </div>
+              )}
+              {currentStatus === 'rejected' && (
+                <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
+                  <p className="text-sm font-medium text-red-800">Rejected by an admin</p>
+                  {existingAdmission?.rejection_reason ? (
+                    <p className="text-sm text-red-700 mt-1 whitespace-pre-line">
+                      <strong>Reason:</strong> {existingAdmission.rejection_reason}
+                    </p>
+                  ) : null}
+                  <p className="text-sm text-red-700 mt-1">
+                    Fix the points above, then use <strong>Update &amp; Publish</strong> to resubmit it for review.
+                  </p>
+                </div>
+              )}
+              {currentStatus === 'pending' && isEditMode && (
+                <div className="mb-6 bg-amber-50 border-l-4 border-amber-400 p-4">
+                  <p className="text-sm text-amber-800">
+                    This admission is waiting for admin review. Your changes are saved to the same review.
+                  </p>
                 </div>
               )}
 
@@ -617,12 +637,14 @@ function ManageAdmissions() {
                     >
                       Cancel / Back
                     </Link>
-                    <button 
-                      onClick={handleSaveDraft}
-                      className="px-6 py-2 text-sm font-medium border rounded-lg transition-colors text-blue-600 border-blue-600 hover:bg-blue-50 cursor-pointer"
-                    >
-                      Save as Draft
-                    </button>
+                    {secondarySave ? (
+                      <button
+                        onClick={handleSaveDraft}
+                        className="px-6 py-2 text-sm font-medium border rounded-lg transition-colors text-blue-600 border-blue-600 hover:bg-blue-50 cursor-pointer"
+                      >
+                        {secondarySave.label}
+                      </button>
+                    ) : null}
                     <button 
                       onClick={handlePublish}
                       className="px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors cursor-pointer hover:opacity-90"

@@ -302,7 +302,10 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 	const transformApiAdmissions = (data: any): VerificationItem[] => {
 		// Handle both paginated and non-paginated responses
 		// One row per real admission (multi-program announcements are verified as a whole).
-		const admissions: any[] = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
+		const admissions: any[] = (Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])).filter(
+			// Drafts are private to their university; they used to show up here as "Pending".
+			(admission: { verification_status?: string }) => admission.verification_status !== 'draft'
+		)
 		const statusMap: Record<string, VerificationStatus> = {
 			pending: "Pending",
 			verified: "Verified",
@@ -333,6 +336,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 					admission.admin_notes ||
 					null,
 				verificationStatusRaw: admission.verification_status,
+				needsReverification: Boolean(admission.needs_reverification),
 				dataOrigin: ((admission.data_origin || (String(admission.source_system || '').toLowerCase().includes('scraper') ? 'scraper' : 'manual')) as "scraper" | "manual" | "university"),
 				sourceSystem: admission.source_system || null,
 				id: admission.id || admission.admission_id,
@@ -421,9 +425,17 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 			})
 			
 			const changelogs = changelogResponse.data ?? []
-			
+			const timeOf = (entry: { created_at?: string; changed_at_iso?: string | null }) => new Date(entry.created_at || entry.changed_at_iso || 0).getTime()
+
+			// Re-review shows what changed since the last admin decision, not the
+			// whole history (otherwise fields approved long ago look like new edits).
+			const lastDecisionAt = changelogs
+				.filter((entry) => entry.actor_type === 'admin' && ['verified', 'rejected', 'status_changed'].includes(String(entry.action_type || '').toLowerCase()))
+				.reduce((latest: number, entry) => Math.max(latest, timeOf(entry)), 0)
+
 			// Keep field-level change actions relevant for review
 			const updatedChanges = changelogs
+				.filter((entry) => timeOf(entry) > lastDecisionAt)
 				.filter((log: any) => ['updated', 'status_changed', 'verified', 'rejected'].includes(String(log.action_type || '').toLowerCase()))
 				.filter((log: any) => Boolean(log.field_name))
 				.sort((a: any, b: any) => {
@@ -735,6 +747,14 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 																Imported
 														</span>
 													)}
+													{item.needsReverification && item.verificationStatusRaw === 'pending' && (
+														<span
+															className="inline-block mt-1 ml-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800"
+															title="Was verified, then edited by the university. Hidden from new students until re-verified."
+														>
+															Re-verification
+														</span>
+													)}
 											</td>
 											<td className="py-4 px-4">
 												<p className="text-sm text-gray-600">{item.university}</p>
@@ -973,9 +993,14 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 								{/* Field-Level Differences */}
 								{selectedItem.diffData && selectedItem.diffData.length > 0 ? (
 									<div className="mb-6">
-										<h3 className="text-lg font-semibold mb-4" style={{ color: "#111827" }}>
-											Field-Level Differences
+										<h3 className="text-lg font-semibold mb-1" style={{ color: "#111827" }}>
+											Changes since the last review
 										</h3>
+										<p className="text-xs text-gray-500 mb-4">
+											{selectedItem.needsReverification
+												? 'This program was verified and live; the university edited it. Check these fields before re-verifying.'
+												: 'Field edits made after the last admin decision on this admission.'}
+										</p>
 										<div className="space-y-3">
 											{selectedItem.diffData.map((diff, idx) => (
 												<div key={idx} className="border border-gray-200 rounded-lg p-4">
