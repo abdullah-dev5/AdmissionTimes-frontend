@@ -4,6 +4,9 @@ import UniversityLayout from "../../layouts/UniversityLayout"
 import { type NotificationItem } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('NotificationsCenter')
 
 type NotificationType = NotificationItem["type"]
 
@@ -185,7 +188,7 @@ function NotificationsCenter() {
 	const handleRefresh = () => {
 		fetchNotifications({
 			showError: (msg) => {
-				console.error('Failed to refresh notifications:', msg)
+				log.error('Failed to refresh notifications:', msg)
 			}
 		})
 	}

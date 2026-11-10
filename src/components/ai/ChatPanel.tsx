@@ -193,6 +193,8 @@ function ChatPanel() {
       clearInactivityTimer()
     }
     return () => clearInactivityTimer()
+  // The inactivity timer is reset only when the panel opens/closes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   const resetInactivityTimer = () => {

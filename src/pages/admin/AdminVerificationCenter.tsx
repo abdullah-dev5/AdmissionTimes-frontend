@@ -11,6 +11,9 @@ import { formatDisplayDate, formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { showSuccessToast } from "../../utils/swal"
 import { toApiError } from '../../services/apiClient'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('AdminVerificationCenter')
 
 const formatLabel = (value: string) =>
 	value
@@ -286,7 +289,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 			const transformed = transformApiAdmissions(allAdmissions)
 			setApiVerifications(transformed)
 		} catch (err) {
-			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
+			log.error('Error fetching admissions:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to fetch admissions'))
 		} finally {
 			setLoading(false)
@@ -417,17 +420,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 				admission_id: admissionId,
 			})
 			
-			// Handle both paginated and non-paginated responses
-			let changelogs: any[] = []
-			if (Array.isArray(changelogResponse)) {
-				changelogs = changelogResponse
-			} else if (Array.isArray(changelogResponse?.data)) {
-				changelogs = changelogResponse.data
-			} else if (Array.isArray(changelogResponse?.data?.data)) {
-				changelogs = changelogResponse.data.data
-			} else if (Array.isArray(changelogResponse?.data?.changelogs)) {
-				changelogs = changelogResponse.data.changelogs
-			}
+			const changelogs = changelogResponse.data ?? []
 			
 			// Keep field-level change actions relevant for review
 			const updatedChanges = changelogs
@@ -455,13 +448,13 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 						oldValue: oldRaw,
 						newValue: newRaw,
 						changeCount: 1,
-						latestAt: log.created_at || log.changed_at || log.changed_at_iso,
+						latestAt: log.changed_at_iso || log.created_at,
 					})
 				} else {
 					const existing = fieldMap.get(field)!
 					existing.newValue = newRaw
 					existing.changeCount += 1
-					existing.latestAt = log.created_at || log.changed_at || log.changed_at_iso || existing.latestAt
+					existing.latestAt = log.changed_at_iso || log.created_at || existing.latestAt
 				}
 			}
 
@@ -473,9 +466,9 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 			
 			// Update selected item with diff data
 			setSelectedItem((prev) => prev ? { ...prev, diffData } : item)
-			console.log('🔍 [AdminVerificationCenter] Changelog diff data:', diffData)
+			log.debug('Changelog diff data:', diffData)
 		} catch (err) {
-			console.error('🔴 [AdminVerificationCenter] Error fetching changelog:', err)
+			log.error('Error fetching changelog:', err)
 		}
 	}
 
@@ -550,7 +543,7 @@ const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string
 			// Refresh the list after successful action
 			await fetchAllAdmissions()
 		} catch (err) {
-			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
+			log.error('Error submitting action:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to submit action'))
 		} finally {
 			setSubmitting(false)

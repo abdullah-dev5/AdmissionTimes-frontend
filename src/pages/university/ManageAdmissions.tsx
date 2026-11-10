@@ -8,6 +8,9 @@ import { formatDateForInput, sanitizeAdmission } from '../../utils/admissionUtil
 import { formatDisplayDate } from '../../utils/dateUtils'
 import { admissionsService } from '../../services/admissionsService'
 import { showConfirm, showError, showSuccess, showWarning } from '../../utils/swal'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('ManageAdmissions')
 
 function ManageAdmissions() {
   const navigate = useNavigate()
@@ -155,7 +158,7 @@ function ManageAdmissions() {
       }, 5000)
     } catch (error) {
       setExtractionStatus('Error processing PDF. Please fill the form manually.')
-      console.error('PDF extraction error:', error)
+      log.error('PDF extraction error:', error)
     } finally {
       setIsProcessing(false)
     }

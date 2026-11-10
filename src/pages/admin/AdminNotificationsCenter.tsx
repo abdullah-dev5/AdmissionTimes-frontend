@@ -6,6 +6,9 @@ import { AdminBroadcastModal } from "../../components/admin/AdminBroadcastModal"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { toApiError } from '../../services/apiClient'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('AdminNotificationsCenter')
 
 const getFriendlyErrorMessage = (raw?: string | null) => {
 	const message = (raw || "").toLowerCase()
@@ -63,6 +66,8 @@ function AdminNotificationsCenter() {
 	// Fetch notifications on mount
 	useEffect(() => {
 		fetchNotifications()
+	// Load once on mount; later loads are triggered explicitly.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	/**
@@ -74,27 +79,21 @@ function AdminNotificationsCenter() {
 		try {
 			setLoading(true)
 			setError(null)
-			console.log('📡 [AdminNotificationsCenter] Fetching real notifications from API...')
+			log.debug('Fetching real notifications from API...')
 			
 			const response = await adminService.getNotifications(1, 100)
-			console.log('✅ [AdminNotificationsCenter] API response received:', response)
+			log.debug('API response received:', response)
 			
-			// Extract data from response (handle various response formats)
-			let notifications: any[] = []
-			if (Array.isArray(response.data)) {
-				notifications = response.data
-			} else if (response.data?.data && Array.isArray(response.data.data)) {
-				notifications = response.data.data
-			}
+			const notifications = response.data ?? []
 			
-			console.log(`✅ [AdminNotificationsCenter] Extracted ${notifications.length} notifications from API response`)
+			log.debug(`Extracted ${notifications.length} notifications from API response`)
 			setApiNotifications(notifications)
 			
 			if (notifications.length === 0) {
-				console.log('⚠️  [AdminNotificationsCenter] API returned 0 notifications - check if data exists in DB')
+				log.debug('API returned 0 notifications - check if data exists in DB')
 			}
 		} catch (err) {
-			console.error('❌ [AdminNotificationsCenter] Error fetching from API:', err)
+			log.error('Error fetching from API:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to fetch notifications'))
 			// Do not fallback to mock data - show error to user
 			setApiNotifications([])
@@ -165,12 +164,12 @@ function AdminNotificationsCenter() {
 	const handleMarkAllAsRead = async () => {
 		try {
 			setError(null)
-			console.log('📋 Marking all notifications as read')
+			log.debug('Marking all notifications as read')
 			await adminService.markAllNotificationsAsRead()
 			// Refresh notifications
 			await fetchNotifications()
 		} catch (err) {
-			console.error('🔴 Error marking all as read:', err)
+			log.error('Error marking all as read:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to mark all as read'))
 		}
 	}
@@ -178,12 +177,12 @@ function AdminNotificationsCenter() {
 	const handleMarkAsRead = async (id: string | number) => {
 		try {
 			setError(null)
-			console.log('📖 Marking notification as read:', id)
+			log.debug('Marking notification as read:', id)
 			await adminService.markNotificationAsRead(String(id))
 			// Refresh notifications
 			await fetchNotifications()
 		} catch (err) {
-			console.error('🔴 Error marking as read:', err)
+			log.error('Error marking as read:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to mark as read'))
 		}
 	}
@@ -192,7 +191,7 @@ function AdminNotificationsCenter() {
 		try {
 			setSecretRunning(true)
 			setError(null)
-			console.log('🕵️ [AdminNotificationsCenter] Secret reminder trigger started (7,3,1)')
+			log.debug('Secret reminder trigger started (7,3,1)')
 
 			const response = await adminService.triggerDeadlineReminders([7, 3, 1], true)
 			const result = response.data || { targets: 0, attempted: 0, succeeded: 0, failed: 0, deduped: 0 }
@@ -209,7 +208,7 @@ function AdminNotificationsCenter() {
 			// Refresh admin notifications list after dispatch
 			await fetchNotifications()
 		} catch (err) {
-			console.error('❌ [AdminNotificationsCenter] Secret reminder trigger failed:', err)
+			log.error('Secret reminder trigger failed:', err)
 			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to trigger deadline reminders'))
 		} finally {
 			setSecretRunning(false)

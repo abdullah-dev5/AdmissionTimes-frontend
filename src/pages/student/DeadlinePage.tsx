@@ -8,6 +8,9 @@ import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import { formatDisplayDateLong } from '../../utils/dateUtils'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('DeadlinePage')
 
 const parseDeadlineDate = (deadline?: string | null): Date | null => {
   if (!deadline) return null
@@ -347,8 +350,8 @@ const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (S
   // Debug: Log deadlines passed to calendar
   useEffect(() => {
     if (deadlines.length > 0) {
-      console.log('📅 [CalendarView] Received deadlines:', deadlines.length)
-      console.log('📅 [CalendarView] Sample deadlines:', deadlines.slice(0, 2).map(d => d.deadline))
+      log.debug('Received deadlines:', deadlines.length)
+      log.debug('Sample deadlines:', deadlines.slice(0, 2).map(d => d.deadline))
     }
   }, [deadlines])
   
@@ -595,12 +598,12 @@ function DeadlinePage() {
   // Debug: Log deadline dates format
   useEffect(() => {
     if (deadlines.length > 0) {
-      console.log('📅 [DeadlinePage] Sample deadline dates:', deadlines.slice(0, 3).map(d => ({
+      log.debug('Sample deadline dates:', deadlines.slice(0, 3).map(d => ({
         program: d.program,
         deadline: d.deadline,
         daysRemaining: d.daysRemaining
       })))
-      console.log('📅 [DeadlinePage] Total deadlines with dates:', deadlines.filter(d => d.deadline).length)
+      log.debug('Total deadlines with dates:', deadlines.filter(d => d.deadline).length)
     }
   }, [deadlines])
 

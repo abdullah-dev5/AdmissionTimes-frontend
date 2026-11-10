@@ -16,6 +16,9 @@ import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
 import { toApiError } from '../../services/apiClient'
 import type { AdminAdmission, AdminDashboard as AdminDashboardData, AdminPendingVerification, AdminRecentAction, AdminScraperActivity, Notification } from '../../types/api'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('AdminDashboard')
 
 /** Pending rows come from /admin/dashboard or the admissions list; both shapes are accepted. */
 type PendingRow = Partial<Omit<AdminAdmission, 'status_label'>> & Partial<AdminPendingVerification> & { id: string }
@@ -331,7 +334,7 @@ function AdminDashboard() {
 				const notificationsResponse = await adminService.getNotifications(1, 4)
 				setDashboardNotifications(Array.isArray(notificationsResponse?.data) ? notificationsResponse.data : [])
 			} catch (notificationError) {
-				console.warn('[AdminDashboard] Latest notifications unavailable:', notificationError)
+				log.warn('Latest notifications unavailable:', notificationError)
 				setDashboardNotifications([])
 			}
 
@@ -340,7 +343,7 @@ function AdminDashboard() {
 				const scraperRunsResponse = await adminService.getScraperRuns(1, 4)
 				setDashboardScraperActivities(scraperRunsResponse?.data || [])
 			} catch (scraperActivityError) {
-				console.warn('[AdminDashboard] Scraper activity fallback unavailable:', scraperActivityError)
+				log.warn('Scraper activity fallback unavailable:', scraperActivityError)
 				setDashboardScraperActivities([])
 			}
 
@@ -349,12 +352,12 @@ function AdminDashboard() {
 				const emailMetricsResponse = await adminService.getEmailMetrics()
 				setEmailMetrics(emailMetricsResponse.data || null)
 			} catch (metricsError) {
-				console.warn('[AdminDashboard] Email metrics unavailable:', metricsError)
+				log.warn('Email metrics unavailable:', metricsError)
 				setEmailMetrics(null)
 			}
 
 		} catch (err) {
-			console.error('[AdminDashboard] Failed to fetch dashboard data:', err)
+			log.error('Failed to fetch dashboard data:', err)
 			setDashboardError(toApiError(err).message || 'Failed to load dashboard data')
 		} finally {
 			setDashboardLoading(false)

@@ -9,6 +9,9 @@ import type { Admission } from '../types/api'
 import type { StudentAdmission } from '../data/studentData'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { transformAdmission } from '../utils/transformers'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('ProgramDetail')
 
 
 const readString = (value: unknown): string | undefined => {
@@ -123,7 +126,7 @@ function ProgramDetail() {
       } catch (error) {
         const status = (error as { response?: { status?: number } })?.response?.status
         if (status !== 404) {
-          console.warn('Failed to hydrate program details:', error)
+          log.warn('Failed to hydrate program details:', error)
         }
         if (!cancelled) {
           if (storeProgramRef.current) {

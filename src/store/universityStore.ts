@@ -21,6 +21,9 @@ import {
   type NotificationItem,
 } from '../data/universityData'
 import { toApiError } from '../services/apiClient'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('universityStore')
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
@@ -155,7 +158,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           fetchedUserId: options?.userId || null,
         })
 
-        if (isDashboardDebugEnabled) console.log('🟢 [UniversityStore] ✅ State updated successfully')
+        if (isDashboardDebugEnabled) log.debug('State updated successfully')
       } else {
         const admissions: Admission[] = []
         const notifications: NotificationItem[] = []
@@ -175,10 +178,10 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           stats: deriveStats(admissions, changeLogs, notifications),
           fetchedUserId: options?.userId || null,
         })
-        console.warn('[UniversityStore] No data in response, showing empty dashboard state')
+        log.warn('No data in response, showing empty dashboard state')
       }
     } catch (err) {
-      console.error('[UniversityStore] Failed to fetch dashboard data:', err)
+      log.error('Failed to fetch dashboard data:', err)
       const errorMsg = toApiError(err).message || 'Failed to load dashboard data'
       set({
         error: errorMsg,
@@ -252,7 +255,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       return { success: true, data: savedAdmission }
     } catch (error) {
-      console.error('[UniversityStore] Failed to save admission:', error)
+      log.error('Failed to save admission:', error)
 
       // Extract error message from response
       let errorMessage = 'Failed to save admission'
@@ -305,7 +308,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       return { success: true }
     } catch (error) {
-      console.error('🔴 [UniversityStore] Failed to delete admission:', error)
+      log.error('Failed to delete admission:', error)
 
       const errorMessage = toApiError(error).message || 'Failed to delete admission'
       set({ error: errorMessage })
@@ -349,7 +352,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         })
       }
     } catch (err) {
-      console.error('❌ Failed to fetch notifications:', err)
+      log.error('Failed to fetch notifications:', err)
       options?.showError?.('Failed to load notifications')
     }
   },

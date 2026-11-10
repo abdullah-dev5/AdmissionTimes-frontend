@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { adminService } from "../services/adminService"
 import { getApiErrorMessage } from "../services/apiClient"
+import type { ApiChangeLogEntry } from "../services/changelogsService"
 import type { AdminChangeLog, ChangeType } from "../data/adminData"
 
 export interface ChangeLogFilters {
@@ -33,24 +34,7 @@ const ACTOR_BY_CHANGE_TYPE: Record<ChangeType, string> = {
 
 const FETCH_LIMIT = 100
 
-interface ApiChangeLog {
-	id: string
-	admission_id: string
-	admission_title?: string | null
-	program_title?: string | null
-	changed_by?: string | null
-	modified_by?: string | null
-	change_type?: ChangeType
-	actor_type?: string
-	action_type?: string
-	field_name?: string | null
-	old_value?: unknown
-	new_value?: unknown
-	diff_summary?: string | null
-	changed_at_iso?: string | null
-	created_at?: string
-	metadata?: Record<string, unknown> | null
-}
+type ApiChangeLog = ApiChangeLogEntry & { change_type?: ChangeType }
 
 const stringify = (value: unknown): string => {
 	if (value === null || value === undefined) return ""
@@ -76,8 +60,8 @@ const toAdminChangeLog = (log: ApiChangeLog): AdminChangeLog =>
 		],
 		reasonForChange: typeof log.metadata?.reason === "string" ? log.metadata.reason : undefined,
 		metadata: log.metadata ?? undefined,
-		action_type: log.action_type,
-		actor_type: log.actor_type,
+		action_type: log.action_type ?? undefined,
+		actor_type: log.actor_type ?? undefined,
 	}) as AdminChangeLog
 
 /**

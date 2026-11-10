@@ -9,6 +9,9 @@
 
 import type { UniversityDashboard } from '../types/api'
 import type { Admission, ChangeLogItem, NotificationItem } from '../data/universityData'
+import { createLogger } from './logger'
+
+const log = createLogger('dashboardTransformers')
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
@@ -208,8 +211,8 @@ const deriveChangeStatus = (change: any): ChangeLogItem['status'] | undefined =>
  */
 export function transformUniversityDashboard(data: UniversityDashboard) {
   if (isDashboardDebugEnabled) {
-    console.log('🔵 [dashboardTransformers] Raw API data:', data)
-    console.log('🔵 [dashboardTransformers] recent_admissions count:', data.recent_admissions?.length || 0)
+    log.debug('Raw API data:', data)
+    log.debug('recent_admissions count:', data.recent_admissions?.length || 0)
   }
   
   // Transform recent_admissions (all admissions) to Admission objects
@@ -307,7 +310,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
   })});
 
   if (isDashboardDebugEnabled) {
-    console.log('🔵 [dashboardTransformers] Transformed admissions count:', admissions.length)
+    log.debug('Transformed admissions count:', admissions.length)
   }
 
   // Transform recent_changes to ChangeLogItem objects

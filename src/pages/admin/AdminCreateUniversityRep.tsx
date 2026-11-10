@@ -2,6 +2,7 @@ import { useState } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { adminService, type CreateUniversityRepResult } from '../../services/adminService'
 import { toApiError } from '../../services/apiClient'
+import { useToast } from '../../contexts/ToastContext'
 
 type FormState = {
   email: string
@@ -33,6 +34,7 @@ function AdminCreateUniversityRep() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string>('')
   const [result, setResult] = useState<CreateUniversityRepResult | null>(null)
+  const { showSuccess, showError } = useToast()
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -112,9 +114,9 @@ function AdminCreateUniversityRep() {
 
     try {
       await navigator.clipboard.writeText(text)
-      alert('Credentials copied to clipboard.')
+      showSuccess('Credentials copied to clipboard.')
     } catch {
-      alert('Unable to copy credentials automatically. Please copy manually.')
+      showError('Unable to copy credentials automatically. Please copy them manually.')
     }
   }
 
