@@ -302,7 +302,8 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
       admission.remarks ||
       '',
     eligibility,
-    academicYear: admission.academic_year || extractYear((admission.deadline_iso || admission.deadline || admission.created_at || '')),
+    // Only what the university entered; never derived from the deadline.
+    academicYear: admission.academic_year || admission.requirements?.academicYear || undefined,
   })});
 
   if (isDashboardDebugEnabled) {
@@ -322,7 +323,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
       ''
 
     return {
-      id: index + 1,
+      id: String(change.id ?? index + 1),
       admissionId: change.admission_id || undefined,
       admission: change.program_title || change.admission_title || 'Admission',
       modifiedBy: normalizeActorLabel(change),
@@ -403,19 +404,3 @@ function mapNotificationCategory(notificationType: string): 'Admin Feedback' | '
   return typeMap[notificationType?.toLowerCase()] || 'System Alert';
 }
 
-/**
- * Extract academic year from date string
- * 
- * @param dateStr - ISO date string
- * @returns Academic year string (e.g., "2025-2026")
- */
-function extractYear(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    const year = date.getFullYear();
-    return `${year}-${year + 1}`;
-  } catch {
-    const now = new Date();
-    return `${now.getFullYear()}-${now.getFullYear() + 1}`;
-  }
-}

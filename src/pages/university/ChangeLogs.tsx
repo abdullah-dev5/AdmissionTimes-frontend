@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { changelogsService, type ApiChangeLogEntry } from "../../services/changelogsService"
+import { getApiErrorMessage } from "../../services/apiClient"
 import DiffValueDisplay from "../../components/changelog/DiffValueDisplay"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type Admission, type ChangeLogItem } from "../../data/universityData"
@@ -377,9 +379,47 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 	)
 }
 
+const stringifyValue = (value: unknown): string => {
+	if (value === null || value === undefined) return ""
+	return typeof value === "string" ? value : JSON.stringify(value)
+}
+
+const toChangeLogItem = (row: ApiChangeLogEntry): ChangeLogItem => ({
+	id: String(row.id),
+	admissionId: row.admission_id,
+	admission: row.admission_title || row.program_title || "Unknown program",
+	modifiedBy: row.modified_by || (row.actor_type === "admin" ? "Admin" : row.actor_type === "system" ? "System" : "University"),
+	date: row.changed_at_iso || row.created_at || "",
+	diff: [{ field: row.field_name || "record", old: stringifyValue(row.old_value), new: stringifyValue(row.new_value) }],
+	remarks: row.diff_summary || undefined,
+})
+
+/** Latest changes for this university (the API scopes results to the signed-in rep's university). */
+const CHANGELOG_LIMIT = 100
+
 function ChangeLogs() {
-	const changeLogs = useUniversityStore((state) => state.changeLogs)
 	const admissions = useUniversityStore((state) => state.admissions)
+	const [changeLogs, setChangeLogs] = useState<ChangeLogItem[]>([])
+	const [loading, setLoading] = useState(true)
+	const [loadError, setLoadError] = useState<string | null>(null)
+
+	useEffect(() => {
+		let cancelled = false
+		changelogsService
+			.list(1, CHANGELOG_LIMIT)
+			.then((response) => {
+				if (!cancelled) setChangeLogs((response.data || []).map(toChangeLogItem))
+			})
+			.catch((err) => {
+				if (!cancelled) setLoadError(getApiErrorMessage(err, "Failed to load change logs"))
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false)
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [])
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
 	const [admission, setAdmission] = useState("All Admissions")
@@ -444,7 +484,13 @@ function ChangeLogs() {
 						/>
 					</div>
 					<div className="bg-white shadow-sm rounded-xl p-4">
-						<ChangeTable data={filtered} admissions={admissions} onViewDiff={setSelected} />
+						{loadError ? (
+							<p className="text-sm text-red-700" role="alert">{loadError}</p>
+						) : loading ? (
+							<p className="text-sm text-gray-500">Loading change logs…</p>
+						) : (
+							<ChangeTable data={filtered} admissions={admissions} onViewDiff={setSelected} />
+						)}
 					</div>
 				</main>
 				<DiffModal item={selected} onClose={() => setSelected(null)} />

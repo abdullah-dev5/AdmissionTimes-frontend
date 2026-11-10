@@ -34,6 +34,8 @@ export interface StudentAdmission {
   logoBg: string
   aiSummary?: string
   eligibility?: string
+  /** Academic year entered by the university, e.g. "2026-2027". */
+  academicYear?: string
   officialUrl?: string
   websiteUrl?: string
   portalUrl?: string
