@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { toApiError } from '../services/apiClient'
+import { MIN_PASSWORD_LENGTH } from '../utils/validation'
 
 const getFriendlyAuthError = (raw?: string) => {
   const message = (raw || '').toLowerCase()
@@ -65,8 +66,8 @@ function SignUp() {
 
     if (!formData.password) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters'
+    } else if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      newErrors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
     }
 
     if (!formData.confirmPassword) {
@@ -178,7 +179,7 @@ function SignUp() {
                     ? 'border-red-500 focus:ring-red-500'
                     : 'border-gray-300 focus:ring-blue-500'
                 }`}
-                placeholder="At least 6 characters"
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 disabled={isLoading}
               />
               {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
