@@ -73,7 +73,9 @@ function StudentLayout({ children }: StudentLayoutProps) {
       }
     }
 
-    // Shared per-user channel (see services/realtime); poll while it is not live.
+    // Load once now; afterwards the shared per-user channel (see services/realtime)
+    // triggers refreshes, with polling while it is not live.
+    refresh()
     const unsubscribe = subscribeToNotifications(user.id, refresh, (live) => (live ? stopPolling() : startPolling()))
 
     return () => {

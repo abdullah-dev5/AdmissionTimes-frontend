@@ -26,6 +26,8 @@ export interface StudentAdmission {
   dataOrigin?: string
   programStatus: ProgramStatus
   updated: string
+  /** When the admission was first published (ISO). */
+  createdAt?: string
   daysRemaining: number
   /** False when no deadline has been announced (daysRemaining is then meaningless). */
   hasDeadline?: boolean

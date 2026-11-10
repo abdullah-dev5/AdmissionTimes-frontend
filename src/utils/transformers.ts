@@ -69,6 +69,7 @@ export function transformAdmission(
     source,
     programStatus,
     updated: formatRelativeTime(api.updated_at),
+    createdAt: api.created_at,
     daysRemaining,
     hasDeadline,
     match: text(api.match_label) || getMatchLabel(matchScore),
