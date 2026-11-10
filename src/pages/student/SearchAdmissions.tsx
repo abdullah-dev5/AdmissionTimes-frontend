@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
-import { useAuth } from '../../contexts/AuthContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
@@ -25,15 +24,13 @@ const compareFees = (a: number, b: number, order: 'asc' | 'desc'): number => {
 
 function SearchAdmissions() {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const { showError } = useToast()
   const toggleSaved = useStudentStore((state) => state.toggleSaved)
-  const searchAdmissions = useStudentStore((state) => state.searchAdmissions)
   const { admissions: rawAdmissions } = useStudentDashboardData()
   
   // ✅ Filter admissions - HIDE rejected admissions from students
   const admissions = useMemo(
-    () => filterStudentVisibleAdmissions(rawAdmissions, true),  // Enable debug logging
+    () => filterStudentVisibleAdmissions(rawAdmissions),
     [rawAdmissions]
   )
   
@@ -46,7 +43,7 @@ function SearchAdmissions() {
   const [deadlineFilter, setDeadlineFilter] = useState('')
   const [programTitleFilter, setProgramTitleFilter] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState('Relevance')
+  const [sortBy, setSortBy] = useState('Deadline')
   const [compareIds, setCompareIds] = useState<string[]>([])
   const getDisplayLocation = (admission: { dataOrigin?: string; location?: string; universityCity?: string; universityCountry?: string }) => {
     const isScraperRecord = (admission.dataOrigin || '').toLowerCase() === 'scraper'
@@ -57,33 +54,6 @@ function SearchAdmissions() {
 
     return [admission.universityCity, admission.universityCountry].filter(Boolean).join(', ')
   }
-
-  // Debounced server-side search: fires when the text query or degree filter changes.
-  // Fields the backend can filter (search, degree_level) are delegated to the server;
-  // fields only available client-side (city, university name, fee range, deadline) continue
-  // to run against the returned dataset via the useMemo below.
-  const isFirstRender = useRef(true)
-  useEffect(() => {
-    // Skip on the initial mount – useStudentDashboardData handles the first load
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    if (!user?.id) return
-
-    const timer = setTimeout(() => {
-      searchAdmissions(
-        {
-          search: searchQuery.trim() || undefined,
-          degreeLevel: degreeFilter || undefined,
-          limit: 100,
-        },
-        { showError, userId: user.id },
-      )
-    }, 400) // 400 ms debounce – responsive but avoids hammering the API on every keystroke
-
-    return () => clearTimeout(timer)
-  }, [searchQuery, degreeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savedIds = useMemo(() => admissions.filter(a => a.saved).map(a => a.id), [admissions])
 
@@ -120,7 +90,6 @@ function SearchAdmissions() {
 
   // Filter and sort admissions
   const filteredAdmissions = useMemo(() => {
-    console.log('🔍 [Filter] Starting with', admissions.length, 'admissions');
     let filtered = [...admissions]
 
     // Search query
@@ -131,25 +100,21 @@ function SearchAdmissions() {
         a.program.toLowerCase().includes(query) ||
         a.degree.toLowerCase().includes(query)
       )
-      console.log('🔍 [Filter] After search query:', filtered.length);
     }
 
     // University filter
     if (universityFilter) {
       filtered = filtered.filter(a => a.university === universityFilter)
-      console.log('🔍 [Filter] After university filter:', filtered.length);
     }
 
     // City filter
     if (cityFilter) {
       filtered = filtered.filter(a => a.city === cityFilter)
-      console.log('🔍 [Filter] After city filter:', filtered.length);
     }
 
     // Degree filter
     if (degreeFilter) {
       filtered = filtered.filter(a => a.degreeType === degreeFilter)
-      console.log('🔍 [Filter] After degree filter:', filtered.length);
     }
 
     // Deadline filter
@@ -158,33 +123,28 @@ function SearchAdmissions() {
         const normalized = normalizeDeadlineDate(a.deadline)
         return normalized !== '' && normalized <= deadlineFilter
       })
-      console.log('🔍 [Filter] After deadline filter:', filtered.length);
     }
 
     // Program title filter
     if (programTitleFilter.trim()) {
       const query = programTitleFilter.toLowerCase()
       filtered = filtered.filter(a => a.program.toLowerCase().includes(query))
-      console.log('🔍 [Filter] After program title filter:', filtered.length);
     }
 
     // Status filter
     if (selectedStatus.length > 0) {
       filtered = filtered.filter(a => selectedStatus.includes(a.status))
-      console.log('🔍 [Filter] After status filter:', filtered.length);
     }
-
-    console.log('🔍 [Filter] Final filtered count:', filtered.length);
 
     // Sort
     if (sortBy === 'Deadline') {
-      filtered.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      // Programs without an announced deadline go last.
+      const deadlineKey = (a: typeof filtered[number]) => (a.deadline ? new Date(a.deadline).getTime() : Number.POSITIVE_INFINITY)
+      filtered.sort((a, b) => deadlineKey(a) - deadlineKey(b))
     } else if (sortBy === 'Fee (Low to High)') {
       filtered.sort((a, b) => compareFees(a.feeNumeric, b.feeNumeric, 'asc'))
     } else if (sortBy === 'Fee (High to Low)') {
       filtered.sort((a, b) => compareFees(a.feeNumeric, b.feeNumeric, 'desc'))
-    } else if (sortBy === 'Relevance') {
-      filtered.sort((a, b) => (b.matchNumeric || 0) - (a.matchNumeric || 0))
     }
 
     // Always keep deadline-passed/closed cards below active admissions.
@@ -464,7 +424,6 @@ function SearchAdmissions() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 >
-                  <option>Relevance</option>
                   <option>Deadline</option>
                   <option>Fee (Low to High)</option>
                   <option>Fee (High to Low)</option>

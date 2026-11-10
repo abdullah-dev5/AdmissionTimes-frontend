@@ -9,36 +9,15 @@ import type { Admission } from '../types/api'
 import type { StudentAdmission } from '../data/studentData'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { transformAdmission } from '../utils/transformers'
+import { createLogger } from '../utils/logger'
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const log = createLogger('ProgramDetail')
 
-const toRequirementsObject = (requirements: unknown): Record<string, unknown> => {
-  if (!requirements) return {}
-  if (typeof requirements === 'string') {
-    try {
-      const parsed = JSON.parse(requirements)
-      return typeof parsed === 'object' && parsed && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
-    } catch {
-      return {}
-    }
-  }
-
-  return typeof requirements === 'object' && !Array.isArray(requirements)
-    ? requirements as Record<string, unknown>
-    : {}
-}
 
 const readString = (value: unknown): string | undefined => {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
 
-const readStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-}
 
 interface ResolvedOfficialLinks {
   universityWebsiteUrl?: string
@@ -46,110 +25,21 @@ interface ResolvedOfficialLinks {
   primaryUrl?: string
 }
 
-const getOfficialLinks = (admission: Admission, requirements: Record<string, unknown>): ResolvedOfficialLinks => {
-  const backendAny = admission as Admission & { source_url?: string; source_details_link?: string }
-  const backendPrimaryUrl = readString((admission as Admission).primary_apply_url)
-  const backendPortalUrl = readString((admission as Admission).admission_portal_url)
-  const backendWebsiteUrl = readString((admission as Admission).university_website_url)
-  const backendSourceUrl = readString(backendAny.source_url)
-  const backendSourceDetailsUrl = readString(backendAny.source_details_link)
-  const links = toRequirementsObject(requirements.links)
-  const officialLinks = [
-    ...readStringArray(requirements.officialLinks),
-    ...readStringArray(links.officialLinks),
-  ]
-
-  const admissionPortalLink =
-    readString(requirements.admissionPortalLink) ||
-    readString(requirements.admission_portal_link) ||
-    readString(requirements.portalLink) ||
-    readString(links.admissionPortalLink) ||
-    readString(links.admission_portal_link) ||
-    readString(links.portalLink) ||
-    readString(admission.admission_portal_link)
-
-  const universityWebsiteUrl =
-    readString(requirements.websiteUrl) ||
-    readString(requirements.website_url) ||
-    readString(requirements.officialWebsite) ||
-    readString(links.websiteUrl) ||
-    readString(links.website_url) ||
-    readString(links.officialWebsite) ||
-    readString(admission.website_url)
-
-  const sourceDetailsLink =
-    backendSourceDetailsUrl ||
-    readString(requirements.source_details_link) ||
-    readString(requirements.source_url) ||
-    readString(links.source_details_link)
-
+/** Links come from the backend contract only (http(s)-validated there). */
+const getOfficialLinks = (admission: Admission): ResolvedOfficialLinks => {
+  const api = admission as Admission & Record<string, unknown>
   return {
-    admissionPortalLink: backendPortalUrl || admissionPortalLink || backendSourceUrl || sourceDetailsLink,
-    universityWebsiteUrl: backendWebsiteUrl || universityWebsiteUrl,
-    primaryUrl: backendPrimaryUrl || backendPortalUrl || backendSourceUrl || sourceDetailsLink || backendWebsiteUrl || admissionPortalLink || universityWebsiteUrl || officialLinks[0],
+    admissionPortalLink: readString(api.admission_portal_url) || readString(api.source_announcement_url),
+    universityWebsiteUrl: readString(api.university_website_url),
+    primaryUrl: readString(api.primary_apply_url),
   }
 }
 
-const deriveEligibilityText = (requirements: Record<string, unknown>, existing?: string) => {
-  const requirementLinks = toRequirementsObject(requirements.links)
-  return (
-    readString(requirements.eligibility) ||
-    readString(requirements.generalRequirements) ||
-    readString(requirements.criteria) ||
-    readString(requirements.requirements) ||
-    readString(requirementLinks.eligibility) ||
-    readString(existing) ||
-    undefined
-  )
-}
 
 
 
 
 
-const formatBackendRequirements = (requirements: Record<string, unknown>): string[] => {
-  const hiddenKeys = new Set([
-    'links',
-    'officialLinks',
-    'websiteUrl',
-    'website_url',
-    'officialWebsite',
-    'admissionPortalLink',
-    'admission_portal_link',
-    'portalLink',
-    'eligibility',
-    'eligibilityCriteria',
-    'eligibility_criteria',
-    'generalRequirements',
-    'criteria',
-    'requirements',
-  ])
-
-  return Object.entries(requirements)
-    .filter(([key]) => !hiddenKeys.has(key))
-    .map(([key, value]) => {
-      if (Array.isArray(value)) {
-        const list = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        if (list.length === 0) return ''
-        return `${key.replace(/_/g, ' ')}: ${list.join(', ')}`
-      }
-
-      if (typeof value === 'object' && value !== null) {
-        const nested = Object.entries(value as Record<string, unknown>)
-          .filter(([, nestedValue]) => ['string', 'number', 'boolean'].includes(typeof nestedValue))
-          .map(([nestedKey, nestedValue]) => `${nestedKey}: ${String(nestedValue)}`)
-        return nested.length > 0 ? `${key.replace(/_/g, ' ')}: ${nested.join(', ')}` : ''
-      }
-
-      if (['string', 'number', 'boolean'].includes(typeof value)) {
-        return `${key.replace(/_/g, ' ')}: ${String(value)}`
-      }
-
-      return ''
-    })
-    .filter((line) => line.length > 0)
-    .filter((line, index, all) => all.indexOf(line) === index)
-}
 
 function ProgramDetail() {
   const { id } = useParams()
@@ -166,7 +56,6 @@ function ProgramDetail() {
   const storeProgram = routeSelectedAdmission || (id ? getAdmissionById(id) : undefined)
   const storeProgramRef = useRef(storeProgram)
   const [program, setProgram] = useState<StudentAdmission | undefined>(storeProgram)
-  const [requirementsLines, setRequirementsLines] = useState<string[]>([])
   const [officialLinks, setOfficialLinks] = useState<ResolvedOfficialLinks>({
     primaryUrl: storeProgram?.officialUrl,
   })
@@ -183,23 +72,9 @@ function ProgramDetail() {
 
     const hydrateProgram = async () => {
       try {
-        let response: Awaited<ReturnType<typeof admissionsService.getById>> | null = null
-        let admission: any = null
-
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            response = await admissionsService.getById(resolvedAdmissionId)
-            admission = response.data
-            break
-          } catch (requestError) {
-            const status = (requestError as { response?: { status?: number } })?.response?.status
-            const shouldRetry = attempt === 0 && (status === 401 || status === 403)
-            if (!shouldRetry) {
-              throw requestError
-            }
-            await delay(450)
-          }
-        }
+        // apiClient already refreshes the session and retries once on 401.
+        const response = await admissionsService.getById(resolvedAdmissionId)
+        const admission: Admission | undefined = response.data
 
         if (!admission?.id) {
           throw new Error('Admission payload is missing')
@@ -207,15 +82,10 @@ function ProgramDetail() {
 
         if (cancelled) return
 
-        if (!admission?.id) {
-          throw new Error('Admission payload is missing')
-        }
-
-        const requirements = toRequirementsObject(admission.requirements)
-        const resolvedOfficialLinks = getOfficialLinks(admission, requirements)
+        const resolvedOfficialLinks = getOfficialLinks(admission)
         const mappedProgramBase: StudentAdmission = {
           ...transformAdmission(
-            admission as any,
+            admission,
             storeProgramRef.current?.saved
               ? {
                   id: storeProgramRef.current.watchlistId || '',
@@ -233,7 +103,6 @@ function ProgramDetail() {
           alertEnabled: storeProgramRef.current?.alertEnabled || false,
           saved: storeProgramRef.current?.saved || false,
           watchlistId: storeProgramRef.current?.watchlistId,
-          eligibility: deriveEligibilityText(requirements, storeProgramRef.current?.eligibility),
         }
 
         const mappedProgram: StudentAdmission = {
@@ -253,18 +122,20 @@ function ProgramDetail() {
           setProgram(mappedProgram)
         }
         setOfficialLinks(resolvedOfficialLinks)
-        setRequirementsLines(formatBackendRequirements(requirements))
         setLoadState('ready')
       } catch (error) {
         const status = (error as { response?: { status?: number } })?.response?.status
         if (status !== 404) {
-          console.warn('Failed to hydrate program details:', error)
+          log.warn('Failed to hydrate program details:', error)
         }
         if (!cancelled) {
           if (storeProgramRef.current) {
             setProgram(storeProgramRef.current)
-            setRequirementsLines([])
-            setOfficialLinks({ primaryUrl: storeProgramRef.current.officialUrl })
+            setOfficialLinks({
+              primaryUrl: storeProgramRef.current.officialUrl,
+              universityWebsiteUrl: storeProgramRef.current.websiteUrl,
+              admissionPortalLink: storeProgramRef.current.portalUrl || storeProgramRef.current.announcementUrl,
+            })
             setLoadState('ready')
             return
           }
@@ -287,7 +158,7 @@ function ProgramDetail() {
     activityService.trackCappedStudentEvent({
       activity_type: 'viewed',
       entity_type: 'admission',
-      entity_id: resolvedAdmissionId || program.id,
+      entity_id: program.id,
       metadata: { source: 'program_detail', action: 'page_view' },
     }).catch(() => {})
   }, [program?.id])
@@ -686,14 +557,10 @@ function ProgramDetail() {
                       <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>General Requirements</h3>
                       <p className="text-gray-700">{program.eligibility || 'Please contact the university directly for specific eligibility requirements and required documents for this program.'}</p>
                     </div>
-                    {requirementsLines.length > 0 && (
+                    {program.academicYear && (
                       <div className="p-4 bg-gray-50 rounded-lg">
-                        <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Saved Requirements (From Backend)</h3>
-                        <ul className="list-disc list-inside space-y-1 text-gray-700">
-                          {requirementsLines.map((line, idx) => (
-                            <li key={`${line}-${idx}`}>{line}</li>
-                          ))}
-                        </ul>
+                        <h3 className="text-lg font-semibold mb-2" style={{ color: '#111827' }}>Academic Year</h3>
+                        <p className="text-gray-700">{program.academicYear}</p>
                       </div>
                     )}
                   </div>

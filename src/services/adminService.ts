@@ -15,7 +15,18 @@ import type {
   AdminDashboard,
   AdminVerifyAdmissionDTO,
   AdminBulkVerifyDTO,
+  Notification,
 } from '../types/api';
+import { createLogger } from '../utils/logger'
+import type { ApiChangeLogEntry } from './changelogsService'
+
+/** POST /admin/admissions/bulk-verify response. */
+export interface BulkVerifyResult {
+  succeeded: AdminAdmission[];
+  failed: Array<{ id: string; error: string }>;
+}
+
+const log = createLogger('adminService')
 
 export interface CreateUniversityRepPayload {
   email: string;
@@ -232,9 +243,9 @@ export const adminService = {
    * @returns Promise resolving to admin dashboard data
    */
   getDashboard: async (): Promise<ApiResponse<AdminDashboard>> => {
-    console.log('📊 [adminService] Fetching admin dashboard...');
+    log.debug('Fetching admin dashboard...');
     const response = await apiClient.get('/admin/dashboard');
-    console.log('📊 [adminService] Dashboard response:', response.data);
+    log.debug('Dashboard response:', response.data);
     return response.data;
   },
 
@@ -250,11 +261,11 @@ export const adminService = {
     page: number = 1,
     limit: number = 20
   ): Promise<PaginatedResponse<AdminAdmission>> => {
-    console.log('🔵 [adminService] Fetching pending admissions...', { page, limit });
+    log.debug('Fetching pending admissions...', { page, limit });
     const response = await apiClient.get('/admin/admissions/pending', {
       params: { page, limit },
     });
-    console.log('🔵 [adminService] Pending admissions response:', response.data);
+    log.debug('Pending admissions response:', response.data);
     return response.data;
   },
 
@@ -273,11 +284,11 @@ export const adminService = {
     status?: string,
     dataOrigin?: 'scraper' | 'manual' | 'university'
   ): Promise<PaginatedResponse<AdminAdmission>> => {
-    console.log('🔵 [adminService] Fetching all admissions...', { page, limit, status, dataOrigin });
+    log.debug('Fetching all admissions...', { page, limit, status, dataOrigin });
     const response = await apiClient.get('/admin/admissions', {
       params: { page, limit, status, data_origin: dataOrigin },
     });
-    console.log('🔵 [adminService] All admissions response:', response.data);
+    log.debug('All admissions response:', response.data);
     return response.data;
   },
 
@@ -289,7 +300,7 @@ export const adminService = {
    * @returns Promise resolving to admission details
    */
   getAdmissionDetails: async (admissionId: string): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('📄 [adminService] Fetching admission details:', admissionId);
+    log.debug('Fetching admission details:', admissionId);
     const response = await apiClient.get(`/admin/admissions/${admissionId}`);
     return response.data;
   },
@@ -307,9 +318,9 @@ export const adminService = {
     data: AdminVerifyAdmissionDTO
   ): Promise<ApiResponse<AdminAdmission>> => {
     const canonicalId = (admissionId);
-    console.log('✅ [adminService] Verifying admission:', canonicalId, data);
+    log.debug('Verifying admission:', canonicalId, data);
     const response = await apiClient.post(`/admin/admissions/${canonicalId}/verify`, data);
-    console.log('✅ [adminService] Verification response:', response.data);
+    log.debug('Verification response:', response.data);
     return response.data;
   },
 
@@ -327,7 +338,7 @@ export const adminService = {
     rejectionReason: string,
     adminNotes?: string
   ): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('🔴 [adminService] Rejecting admission:', admissionId);
+    log.debug('Rejecting admission:', admissionId);
     return adminService.verifyAdmission(admissionId, {
       verification_status: 'rejected',
       rejection_reason: rejectionReason,
@@ -349,7 +360,7 @@ export const adminService = {
     reason: string
   ): Promise<ApiResponse<AdminAdmission>> => {
     const canonicalId = (admissionId);
-    console.log('🟠 [adminService] Requesting revision:', canonicalId);
+    log.debug('Requesting revision:', canonicalId);
     const response = await apiClient.post(`/admin/admissions/${canonicalId}/revision-required`, {
       reason,
     });
@@ -368,7 +379,7 @@ export const adminService = {
     admissionId: string,
     verificationComments?: string
   ): Promise<ApiResponse<AdminAdmission>> => {
-    console.log('🟢 [adminService] Accepting admission:', admissionId);
+    log.debug('Accepting admission:', admissionId);
     return adminService.verifyAdmission(admissionId, {
       verification_status: 'verified',
       verification_comments: verificationComments,
@@ -384,10 +395,10 @@ export const adminService = {
    */
   bulkVerifyAdmissions: async (
     data: AdminBulkVerifyDTO
-  ): Promise<ApiResponse<{ successful: number; failed: number; errors: any[] }>> => {
-    console.log('⚡ [adminService] Bulk verifying admissions:', data);
+  ): Promise<ApiResponse<BulkVerifyResult>> => {
+    log.debug('Bulk verifying admissions:', data);
     const response = await apiClient.post('/admin/admissions/bulk-verify', data);
-    console.log('⚡ [adminService] Bulk verification response:', response.data);
+    log.debug('Bulk verification response:', response.data);
     return response.data;
   },
 
@@ -402,8 +413,8 @@ export const adminService = {
   bulkAcceptAdmissions: async (
     admissionIds: string[],
     adminNotes?: string
-  ): Promise<ApiResponse<{ successful: number; failed: number; errors: any[] }>> => {
-    console.log('🟢⚡ [adminService] Bulk accepting admissions:', admissionIds.length);
+  ): Promise<ApiResponse<BulkVerifyResult>> => {
+    log.debug('Bulk accepting admissions:', admissionIds.length);
     return adminService.bulkVerifyAdmissions({
       admission_ids: admissionIds,
       verification_status: 'verified',
@@ -422,8 +433,8 @@ export const adminService = {
   bulkRejectAdmissions: async (
     admissionIds: string[],
     rejectionReason: string
-  ): Promise<ApiResponse<{ successful: number; failed: number; errors: any[] }>> => {
-    console.log('🔴⚡ [adminService] Bulk rejecting admissions:', admissionIds.length);
+  ): Promise<ApiResponse<BulkVerifyResult>> => {
+    log.debug('Bulk rejecting admissions:', admissionIds.length);
     return adminService.bulkVerifyAdmissions({
       admission_ids: admissionIds,
       verification_status: 'rejected',
@@ -439,7 +450,7 @@ export const adminService = {
    * @param limit - Items per page (default: 20)
    * @returns Promise resolving to list of notifications
    */
-  getNotifications: async (page: number = 1, limit: number = 20): Promise<ApiResponse<any>> => {
+  getNotifications: async (page: number = 1, limit: number = 20): Promise<PaginatedResponse<Notification>> => {
     const response = await apiClient.get('/notifications', {
       params: {
         page,
@@ -455,7 +466,7 @@ export const adminService = {
    * @param notificationId - Notification ID
    * @returns Promise resolving to updated notification
    */
-  markNotificationAsRead: async (notificationId: string): Promise<ApiResponse<any>> => {
+  markNotificationAsRead: async (notificationId: string): Promise<ApiResponse<Notification>> => {
     const response = await apiClient.patch(`/notifications/${notificationId}/read`, {
       is_read: true,
     });
@@ -467,7 +478,7 @@ export const adminService = {
    * 
    * @returns Promise resolving to success message
    */
-  markAllNotificationsAsRead: async (): Promise<ApiResponse<any>> => {
+  markAllNotificationsAsRead: async (): Promise<ApiResponse<{ updated_count: number }>> => {
     const response = await apiClient.patch('/notifications/read-all', {});
     return response.data;
   },
@@ -531,7 +542,7 @@ export const adminService = {
       date_from?: string;
       date_to?: string;
     }
-  ): Promise<ApiResponse<any>> => {
+  ): Promise<PaginatedResponse<ApiChangeLogEntry>> => {
     const response = await apiClient.get('/changelogs', {
       params: {
         page,
@@ -556,7 +567,7 @@ export const adminService = {
     date_to?: string;
     page?: number;
     limit?: number;
-  }): Promise<ApiResponse<any>> => {
+  }): Promise<PaginatedResponse<Record<string, unknown>>> => {
     const response = await apiClient.get('/analytics/user-activity', {
       params: filters,
     });
@@ -569,7 +580,7 @@ export const adminService = {
    * 
    * @returns Promise resolving to analytics stats
    */
-  getAnalyticsStats: async (): Promise<ApiResponse<any>> => {
+  getAnalyticsStats: async (): Promise<ApiResponse<Record<string, unknown>>> => {
     const response = await apiClient.get('/analytics/stats');
     return response.data;
   },

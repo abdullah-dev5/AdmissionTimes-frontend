@@ -1,3 +1,14 @@
+/**
+ * Student store (Zustand).
+ *
+ * Mirrors the mobile app's store: the catalog of verified admissions (open and
+ * closed) is loaded once per user and shared by every student page; search and
+ * filters work on top of it and never replace it. Save/reminder actions are
+ * optimistic, rolled back on failure, and report the outcome.
+ *
+ * @module store/studentStore
+ */
+
 import { create } from 'zustand'
 import type { StudentAdmission, StudentNotification } from '../data/studentData'
 import { dashboardService } from '../services/dashboardService'
@@ -5,7 +16,6 @@ import { watchlistsService } from '../services/watchlistsService'
 import { notificationsService } from '../services/notificationsService'
 import { admissionsService } from '../services/admissionsService'
 import { transformAdmission, transformNotification } from '../utils/transformers'
-import { buildSearchParams } from '../utils/studentUtils'
 import { recommendationsService, type Recommendation } from '../services/recommendationsService'
 import { RECOMMENDATION_COUNT_LIMIT, RECOMMENDATION_MIN_SCORE } from '../utils/recommendationUtils'
 import { toApiError } from '../services/apiClient'
@@ -19,672 +29,239 @@ interface StudentStats {
   urgent_deadlines: number
 }
 
+type Notify = (msg: string) => void
+type WatchEntry = { watchlistId: string; alertOptIn: boolean }
+
 interface StudentStore {
-  // State
   admissions: StudentAdmission[]
   notifications: StudentNotification[]
   loading: boolean
   error: string | null
   stats: StudentStats | null
-  fetchedUserId: string | null  // Track which user's data is loaded
+  /** User whose catalog is loaded (the store is reset on sign-out). */
+  fetchedUserId: string | null
   apiRecommendations: Recommendation[]
   recommendationsUserId: string | null
   recommendationsLoading: boolean
-  
-  // Computed
-  savedAdmissions: () => StudentAdmission[]
-  
-  // Actions
-  setAdmissions: (admissions: StudentAdmission[]) => void
-  setNotifications: (notifications: StudentNotification[]) => void
-  setLoading: (loading: boolean) => void
-  setError: (error: string | null) => void
-  setStats: (stats: StudentStats | null) => void
-  
-  // API Actions
+
+  /** Load the verified catalog and the user's watchlist (once per user unless forced). */
+  loadCatalog: (userId: string, options?: { force?: boolean; showError?: Notify }) => Promise<void>
   fetchStats: () => Promise<void>
-  fetchDashboardData: (options?: { showError?: (msg: string) => void }) => Promise<void>
-  toggleSaved: (id: string, options?: { showError?: (msg: string) => void }) => Promise<void>
+  fetchRecommendations: (userId: string, options?: { force?: boolean }) => Promise<void>
+  toggleSaved: (id: string, options?: { showError?: Notify }) => Promise<boolean>
   /** Enable/disable deadline reminders. Resolves to true only when the API confirmed the change. */
-  toggleAlert: (id: string, options?: { showError?: (msg: string) => void; showSuccess?: (msg: string) => void }) => Promise<boolean>
-  updateAdmission: (id: string, updates: Partial<StudentAdmission>) => void
+  toggleAlert: (id: string, options?: { showError?: Notify; showSuccess?: Notify }) => Promise<boolean>
   getAdmissionById: (id: string) => StudentAdmission | undefined
-  getAdmissionsByIds: (ids: string[]) => StudentAdmission[]
-  fetchNotifications: (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => Promise<void>
+  fetchNotifications: () => Promise<void>
   markNotificationRead: (id: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
-  fetchRecommendations: (userId: string, options?: { force?: boolean }) => Promise<void>
-  searchAdmissions: (filters?: {
-    search?: string
-    country?: string
-    city?: string
-    degreeLevel?: string
-    fieldOfStudy?: string
-    minFee?: number
-    maxFee?: number
-    deadline?: string
-    deliveryMode?: string
-    verificationStatus?: string
-    page?: number
-    limit?: number
-  }, options?: { showError?: (msg: string) => void, userId?: string }) => Promise<StudentAdmission[]>
-  
-  // Cleanup
   reset: () => void
 }
 
+const PAGE_SIZE = 100
+const MAX_PAGES = 5
+
 const initialState = {
-  admissions: [],
-  notifications: [],
+  admissions: [] as StudentAdmission[],
+  notifications: [] as StudentNotification[],
   loading: false,
-  error: null,
-  stats: null,
-  fetchedUserId: null,
-  apiRecommendations: [],
-  recommendationsUserId: null,
+  error: null as string | null,
+  stats: null as StudentStats | null,
+  fetchedUserId: null as string | null,
+  apiRecommendations: [] as Recommendation[],
+  recommendationsUserId: null as string | null,
   recommendationsLoading: false,
 }
 
-export const useStudentStore = create<StudentStore>()(
-  (set, get) => ({
-      // Initial State
-      ...initialState,
-      
-      // Computed - returns filtered array that should be selected with shallow equality
-      savedAdmissions: () => get().admissions.filter((admission) => admission.saved),
-      
-      // Basic Setters
-      setAdmissions: (admissions) => set({ admissions }),
-      setNotifications: (notifications) => set({ notifications }),
-      setLoading: (loading) => set({ loading }),
-      setError: (error) => set({ error }),
-      setStats: (stats) => set({ stats }),
-      
-      fetchRecommendations: async (userId, options) => {
-        const { apiRecommendations, recommendationsUserId, recommendationsLoading } = get()
+let catalogInFlight: Promise<void> | null = null
 
-        if (recommendationsLoading) {
-          return
-        }
+const withWatchState = (admission: StudentAdmission, entry: WatchEntry | undefined): StudentAdmission => ({
+  ...admission,
+  saved: Boolean(entry),
+  alertEnabled: entry?.alertOptIn ?? false,
+  watchlistId: entry?.watchlistId,
+})
 
-        if (
-          !options?.force &&
-          recommendationsUserId === userId &&
-          apiRecommendations.length > 0
-        ) {
-          return
-        }
+/** All verified admissions (students only ever receive verified ones), open and closed. */
+const fetchCatalog = async () => {
+  const rows = []
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const response = await admissionsService.listPublic({ page, limit: PAGE_SIZE, include_closed: true })
+    rows.push(...response.data)
+    if (!response.pagination?.hasNext) break
+  }
+  return rows
+}
 
-        set({ recommendationsLoading: true })
+export const useStudentStore = create<StudentStore>()((set, get) => {
+  const entryOf = (id: string): WatchEntry | undefined => {
+    const admission = get().admissions.find((a) => a.id === id)
+    return admission?.saved ? { watchlistId: admission.watchlistId ?? '', alertOptIn: Boolean(admission.alertEnabled) } : undefined
+  }
 
-        try {
-          const response = await recommendationsService.getRecommendations(
-            RECOMMENDATION_COUNT_LIMIT,
-            RECOMMENDATION_MIN_SCORE
-          )
-          const recommendations = response?.data?.recommendations || []
+  const applyEntry = (id: string, entry: WatchEntry | undefined) =>
+    set((state) => ({ admissions: state.admissions.map((a) => (a.id === id ? withWatchState(a, entry) : a)) }))
 
-          set((state) => ({
-            recommendationsLoading: false,
-            recommendationsUserId: userId,
-            apiRecommendations:
-              recommendations.length > 0
-                ? recommendations
-                : options?.force
-                ? recommendations
-                : state.apiRecommendations,
-          }))
-        } catch (err) {
-          console.warn('[studentStore] fetchRecommendations failed:', err)
-          set({ recommendationsLoading: false })
-        }
-      },
+  /** A program opened from a direct link may not be in the catalog yet. */
+  const ensureInCatalog = async (id: string) => {
+    if (get().admissions.some((a) => a.id === id)) return
+    const response = await admissionsService.getById(id)
+    if (response.data) set((state) => ({ admissions: [...state.admissions, transformAdmission(response.data)] }))
+  }
 
-      // Fetch Stats
-      fetchStats: async () => {
-        try {
-          const response = await dashboardService.getStudentDashboard()
-          console.log('📊 [fetchStats] Updated stats:', response.data.stats)
-          set({ stats: response.data.stats })
-        } catch (err) {
-          console.error('Failed to fetch stats:', err)
-          // Don't throw, just log the error
-        }
-      },
-      
-      // Fetch Dashboard Data
-      fetchDashboardData: async (options) => {
-        // Set loading state at start
+  return {
+    ...initialState,
+
+    loadCatalog: async (userId, options) => {
+      if (catalogInFlight) return catalogInFlight
+      if (!options?.force && get().fetchedUserId === userId && get().admissions.length > 0) return
+
+      const run = async () => {
         set({ loading: true, error: null })
-        
         try {
-          const response = await dashboardService.getStudentDashboard()
-          
-          // Transform recommended programs to StudentAdmission format
-          const transformedAdmissions = response.data.recommended_programs.map((prog) =>
-            transformAdmission(
-              prog as any,
-              prog.saved
-                ? {
-                    id: '',
-                    user_id: '',
-                    admission_id: prog.id,
-                    created_at: '',
-                    updated_at: '',
-                    alert_opt_in: Boolean(prog.alert_enabled),
-                    notes: null,
-                  }
-                : undefined,
-              prog.university_name
-            )
-          )
-          
-          // Transform notifications
-          const transformedNotifications = response.data.recent_notifications.map((notif) =>
-            transformNotification(notif)
-          )
-          
-          // Single state update on success
-          set({
-            admissions: transformedAdmissions,
-            notifications: transformedNotifications,
-            stats: response.data.stats,
-            loading: false,
-            error: null,
-          })
-        } catch (err) {
-          console.error('Failed to fetch dashboard data:', err)
-          const errorMsg = toApiError(err).message || 'Failed to fetch dashboard data'
-          
-          // Single state update on error
-          set({ 
-            error: errorMsg,
-            loading: false,
-          })
-          
-          if (options?.showError) {
-            options.showError('Failed to load dashboard data. Please try again.')
-          }
-        }
-      },
-      
-      // Toggle Saved
-      toggleSaved: async (id, options) => {
-        const { admissions } = get()
-        const admission = admissions.find((a) => a.id === id)
-        if (!admission) return
-
-        const backendId = id
-        
-        const wasSaved = admission.saved
-        
-        // Optimistic update
-        set({
-          admissions: admissions.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  saved: !wasSaved,
-                  // Saving should opt into deadline reminders by default.
-                  alertEnabled: !wasSaved ? true : false,
-                  watchlistId: !wasSaved ? a.watchlistId : undefined,
-                }
-              : a
-          ),
-        })
-        
-        try {
-          if (wasSaved) {
-            // Remove from watchlist
-            if (admission.watchlistId) {
-              await watchlistsService.remove(admission.watchlistId)
-              console.log('✅ Removed from watchlist (also disabled alerts):', admission.watchlistId)
-            } else {
-              await watchlistsService.removeByAdmissionId(backendId)
-              console.log('✅ Removed from watchlist (also disabled alerts) by admission ID:', backendId)
-            }
-          } else {
-            // Add to watchlist
-            const response = await watchlistsService.add(backendId, true)
-            console.log('✅ Added to watchlist:', backendId, 'with alert:', true, 'Response:', response)
-            
-            // Update watchlist ID
-            if (response.data?.id) {
-              set({
-                admissions: get().admissions.map((a) =>
-                  a.id === id ? { ...a, watchlistId: response.data.id } : a
-                ),
-              })
-              console.log('✅ Stored watchlist ID:', response.data.id)
-            } else {
-              console.warn('⚠️ No watchlist ID in response:', response)
-            }
-          }
-          
-          console.log('✅ Watchlist updated successfully')
-          
-          // Update stats
-          await get().fetchStats()
-        } catch (err) {
-          console.error('Failed to toggle saved:', err)
-          
-          // Rollback
-          set({
-            admissions: admissions.map((a) =>
-              a.id === id
-                ? {
-                    ...a,
-                    saved: wasSaved,
-                    alertEnabled: wasSaved ? a.alertEnabled : false,
-                    watchlistId: wasSaved ? a.watchlistId : undefined,
-                  }
-                : a
-            ),
-          })
-          
-          const errorMessage =
-            toApiError(err).response?.status === 500 &&
-            toApiError(err).response?.data?.message?.includes('foreign key constraint')
-              ? 'User account not found. Please ensure you are logged in with a valid user account.'
-              : toApiError(err).response?.data?.message || 'Failed to update saved programs. Please try again.'
-          
-          if (options?.showError) {
-            options.showError(errorMessage)
-          }
-        }
-      },
-      
-      // Toggle Alert
-      toggleAlert: async (id, options) => {
-        const { admissions } = get()
-        const admission = admissions.find((a) => a.id === id)
-        if (!admission) {
-          // Program not loaded in the list (e.g. opened from a direct link):
-          // save it with alerts on directly, then refresh the student data.
-          try {
-            await watchlistsService.add(id, true)
-            await get().fetchDashboardData().catch(() => undefined)
-            options?.showSuccess?.('Alert enabled! Program added to your saved list.')
-            return true
-          } catch (err) {
-            console.error('Failed to enable alert:', err)
-            options?.showError?.('Failed to enable alert. Please try again.')
-            return false
-          }
-        }
-
-        const backendId = id
-        
-        const wasAlertEnabled = admission.alertEnabled
-        const wasSaved = admission.saved
-        
-        console.log('🔔 [toggleAlert] Current state:', { id, wasAlertEnabled, wasSaved, watchlistId: admission.watchlistId })
-        
-        // If not saved and enabling alert, add to saved first
-        if (!wasSaved && !wasAlertEnabled) {
-          // Optimistic update
-          set({
-            admissions: admissions.map((a) =>
-              a.id === id
-                ? {
-                    ...a,
-                    saved: true,
-                    alertEnabled: true,
-                  }
-                : a
-            ),
-          })
-          
-          try {
-            const response = await watchlistsService.add(backendId, true)
-            console.log('✅ Added to watchlist with alert enabled:', backendId, 'Response:', response)
-            
-            if (response.data?.id) {
-              set({
-                admissions: get().admissions.map((a) =>
-                  a.id === id ? { ...a, watchlistId: response.data.id } : a
-                ),
-              })
-              console.log('✅ Stored watchlist ID:', response.data.id)
-            }
-            
-            if (options?.showSuccess) {
-              options.showSuccess('Alert enabled! Program automatically added to your saved list.')
-            }
-            return true
-          } catch (err) {
-            console.error('Failed to enable alert:', err)
-            
-            // Rollback
-            set({
-              admissions: admissions.map((a) =>
-                a.id === id
-                  ? {
-                      ...a,
-                      saved: false,
-                      alertEnabled: false,
-                    }
-                  : a
-              ),
-            })
-            
-            if (options?.showError) {
-              options.showError('Failed to enable alert. Please try again.')
-            }
-            return false
-          }
-        } else if (wasSaved) {
-          // Already saved, just toggle alert
-          set({
-            admissions: admissions.map((a) =>
-              a.id === id
-                ? {
-                    ...a,
-                    alertEnabled: !wasAlertEnabled,
-                  }
-                : a
-            ),
-          })
-          
-          try {
-            if (admission.watchlistId) {
-              const newAlertValue = !wasAlertEnabled
-              console.log('🔔 Toggling alert for watchlist ID:', admission.watchlistId)
-              console.log('📤 Sending to backend:', { alert_opt_in: newAlertValue })
-              
-              const response = await watchlistsService.update(admission.watchlistId, {
-                alert_opt_in: newAlertValue
-              } as any)
-              
-              console.log('📥 Received from backend:', response.data)
-              console.log('⚠️ Backend alert_opt_in value:', response.data?.alert_opt_in)
-              console.log('✅ Alert toggled successfully')
-              
-              await get().fetchStats()
-            } else {
-              console.warn('⚠️ No watchlist ID found, trying to find by admission ID')
-              
-              const watchlistsResponse = await watchlistsService.list()
-              const userWatchlists = Array.isArray(watchlistsResponse.data) 
-                ? watchlistsResponse.data 
-                : []
-              
-              const admissionIds = [id, backendId]
-                .filter(Boolean)
-                .map((value) => String(value))
-              const watchlist = userWatchlists.find((w: any) => admissionIds.includes(String(w.admission_id)))
-              
-              if (watchlist?.id) {
-                console.log('✅ Found watchlist ID:', watchlist.id)
-                
-                set({
-                  admissions: get().admissions.map((a) =>
-                    a.id === id ? { ...a, watchlistId: watchlist.id } : a
-                  ),
-                })
-                
-                const newAlertValue = !wasAlertEnabled
-                console.log('📤 Sending to backend:', { alert_opt_in: newAlertValue })
-                
-                const response = await watchlistsService.update(watchlist.id, {
-                  alert_opt_in: newAlertValue
-                } as any)
-                
-                console.log('📥 Received from backend:', response.data)
-                console.log('⚠️ Backend alert_opt_in value:', response.data?.alert_opt_in)
-                console.log('✅ Alert toggled successfully')
-                
-                await get().fetchStats()
-              } else {
-                throw new Error('Watchlist not found for this admission')
-              }
-            }
-          } catch (err) {
-            console.error('Failed to toggle alert:', err)
-            
-            // Rollback
-            set({
-              admissions: admissions.map((a) =>
-                a.id === id
-                  ? {
-                      ...a,
-                      alertEnabled: wasAlertEnabled,
-                    }
-                  : a
-              ),
-            })
-            
-            if (options?.showError) {
-              options.showError('Failed to update alert settings. Please try again.')
-            }
-            return false
-          }
-          return true
-        }
-        return false
-      },
-      
-      // Update Admission
-      updateAdmission: (id, updates) => {
-        set({
-          admissions: get().admissions.map((admission) =>
-            admission.id === id ? { ...admission, ...updates } : admission
-          ),
-        })
-      },
-      
-      // Get Admission By ID
-      getAdmissionById: (id) => {
-        return get().admissions.find((admission) => admission.id === id)
-      },
-      
-      // Get Admissions By IDs
-      getAdmissionsByIds: (ids) => {
-        const idSet = new Set(ids)
-        return get().admissions.filter((admission) => idSet.has(admission.id))
-      },
-      
-      // Fetch Notifications from API
-      fetchNotifications: async (options?: { page?: number; limit?: number; showError?: (msg: string) => void }) => {
-        try {
-          set({ loading: true, error: null })
-          const response = await notificationsService.list({
-            role_type: 'student',
-            page: options?.page || 1,
-            limit: options?.limit || 50,
-          })
-          
-          if (response.data && Array.isArray(response.data)) {
-            // Transform API notifications to StudentNotification format
-            const transformedNotifications = response.data.map((notif: any) => transformNotification(notif))
-            set({ notifications: transformedNotifications })
-          }
-          
-          set({ loading: false })
-        } catch (err) {
-          console.error('❌ Failed to fetch notifications:', err)
-          const errorMsg = 'Failed to load notifications'
-          set({ error: errorMsg, loading: false })
-          options?.showError?.(errorMsg)
-        }
-      },
-      
-      // Mark Notification Read
-      markNotificationRead: async (id) => {
-        try {
-          await notificationsService.markAsRead(id)
-          set({
-            notifications: get().notifications.map((notification) =>
-              notification.id === id ? { ...notification, read: true } : notification
-            ),
-          })
-        } catch (err) {
-          console.error('Failed to mark notification as read:', err)
-          // Update locally anyway
-          set({
-            notifications: get().notifications.map((notification) =>
-              notification.id === id ? { ...notification, read: true } : notification
-            ),
-          })
-        }
-      },
-      
-      // Mark All Notifications Read
-      markAllNotificationsRead: async () => {
-        try {
-          await notificationsService.markAllAsRead()
-          set({
-            notifications: get().notifications.map((notification) => ({
-              ...notification,
-              read: true,
-            })),
-          })
-        } catch (err) {
-          console.error('Failed to mark all notifications as read:', err)
-          // Update locally anyway
-          set({
-            notifications: get().notifications.map((notification) => ({
-              ...notification,
-              read: true,
-            })),
-          })
-        }
-      },
-      
-      // Search Admissions
-      searchAdmissions: async (filters, options) => {
-        // Prevent concurrent calls
-        if (get().loading) {
-          console.warn('⚠️ [searchAdmissions] Already loading, skipping concurrent call')
-          return []
-        }
-        
-        // Set loading state once at the start
-        set({ loading: true, error: null })
-        
-        try {
-          console.log('🔍 [searchAdmissions] Starting search with filters:', filters)
-          
-          const params = buildSearchParams({
-            ...filters,
-            limit: filters?.limit || 100,
-          })
-          
-          console.log('🔍 [searchAdmissions] Built params:', params)
-          
-          const admissionsFetch = filters?.verificationStatus
-            ? Promise.allSettled([
-                admissionsService.listPublic({
-                  ...params,
-                  verification_status: filters.verificationStatus,
-                } as any),
-              ])
-            : Promise.allSettled([
-                admissionsService.listPublic({
-                  ...params,
-                  verification_status: 'verified',
-                } as any),
-                admissionsService.listPublic({
-                  ...params,
-                  verification_status: 'pending',
-                } as any),
-              ])
-
-          const [admissionsResults, watchlistsResponse] = await Promise.all([
-            admissionsFetch,
-            options?.userId
-              ? watchlistsService.list().catch(err => {
-                  console.warn('⚠️ Failed to fetch watchlists:', err)
-                  return { data: [] }
-                })
-              : Promise.resolve({ data: [] })
+          const [catalog, watchlists] = await Promise.all([
+            fetchCatalog(),
+            watchlistsService.list({ page: 1, limit: 100 }).then((r) => r.data),
           ])
-
-          const admissionsById = new Map<string, any>()
-          let total = 0
-          let anyFulfilled = false
-
-          admissionsResults.forEach((result) => {
-            if (result.status !== 'fulfilled') {
-              return
-            }
-            anyFulfilled = true
-            const rows = Array.isArray(result.value.data) ? result.value.data : []
-            total += result.value.pagination?.total ?? rows.length
-            rows.forEach((admission: any) => {
-              if (admission?.id) {
-                admissionsById.set(String(admission.id), admission)
-              }
-            })
-          })
-
-          if (!anyFulfilled) {
-            throw new Error('Failed to fetch admissions from backend')
-          }
-
-          const admissionsData: any[] = Array.from(admissionsById.values())
-          console.log(`✅ Fetched ${admissionsData.length} admissions out of ${total} total`)
-
-          if (admissionsData.length === 0) {
-            console.warn('⚠️ No admissions found. Check if database has data.')
-          }
-          
-          let userWatchlists: any[] = []
-          if (watchlistsResponse.data) {
-            userWatchlists = Array.isArray(watchlistsResponse.data) 
-              ? watchlistsResponse.data 
-              : []
-          }
-          
-          console.log('📚 [searchAdmissions] Fetched', userWatchlists.length, 'watchlists for user')
-          if (userWatchlists.length > 0) {
-            console.log('📚 [searchAdmissions] Watchlist admission IDs:', userWatchlists.map(w => w.admission_id))
-          }
-          
-          // Transform with watchlist data
-          const transformed = admissionsData.map(admission => {
-            const watchlist = userWatchlists.find((w) => String(w.admission_id) === String(admission.id))
-            if (watchlist) {
-              console.log(`✅ [searchAdmissions] Matched watchlist for admission: ${admission.id} (${admission.title})`)
-            }
-            return transformAdmission(admission, watchlist)
-          })
-          
-          console.log('📚 [searchAdmissions] Transformed admissions with saved status:', transformed.filter(a => a.saved).length, '/', transformed.length)
-          
-          const withDeadline = transformed.filter(a => a.deadline).length
-          const withMatchNumeric = transformed.filter(a => a.matchNumeric).length
-          const withStatus = transformed.filter(a => a.programStatus).length
-          console.log(`📊 [searchAdmissions] Data completeness - deadline: ${withDeadline}/${transformed.length}, matchNumeric: ${withMatchNumeric}/${transformed.length}, programStatus: ${withStatus}/${transformed.length}`)
-          
-          // Single state update: batch everything together
+          const byAdmission = new Map(watchlists.map((w) => [String(w.admission_id), w]))
           set({
-            admissions: transformed,
-            fetchedUserId: options?.userId || null,
+            admissions: catalog.map((row) => transformAdmission(row, byAdmission.get(String(row.id)))),
+            fetchedUserId: userId,
             loading: false,
             error: null,
           })
-          
-          return transformed
         } catch (err) {
-          console.error('Failed to search admissions:', err)
-          const errorMsg = toApiError(err).message || 'Failed to search admissions'
-          
-          // Single state update on error
-          set({ 
-            error: errorMsg,
-            loading: false,
-          })
-          
-          if (options?.showError) {
-            options.showError('Failed to search admissions')
-          }
-          
-          return []
+          const message = toApiError(err).message || 'Failed to load admissions'
+          set({ loading: false, error: message })
+          options?.showError?.('Failed to load admissions. Please try again.')
         }
-      },
-      
-      // Reset
-      reset: () => set({ ...initialState }),
-    })
-)
+      }
+
+      catalogInFlight = run()
+      try {
+        await catalogInFlight
+      } finally {
+        catalogInFlight = null
+      }
+    },
+
+    fetchStats: async () => {
+      try {
+        const response = await dashboardService.getStudentDashboard()
+        set({ stats: response.data.stats })
+      } catch {
+        // Stats are informational; keep the previous values.
+      }
+    },
+
+    fetchRecommendations: async (userId, options) => {
+      const { apiRecommendations, recommendationsUserId, recommendationsLoading } = get()
+      if (recommendationsLoading) return
+      if (!options?.force && recommendationsUserId === userId && apiRecommendations.length > 0) return
+
+      set({ recommendationsLoading: true })
+      try {
+        const response = await recommendationsService.getRecommendations(RECOMMENDATION_COUNT_LIMIT, RECOMMENDATION_MIN_SCORE)
+        set({
+          recommendationsLoading: false,
+          recommendationsUserId: userId,
+          apiRecommendations: response?.data?.recommendations || [],
+        })
+      } catch {
+        set({ recommendationsLoading: false })
+      }
+    },
+
+    toggleSaved: async (id, options) => {
+      const before = entryOf(id)
+      const save = !before
+      // Saving turns reminders on by default (same as mobile).
+      applyEntry(id, save ? { watchlistId: '', alertOptIn: true } : undefined)
+      try {
+        if (save) {
+          await ensureInCatalog(id)
+          const response = await watchlistsService.add(id, true)
+          applyEntry(id, { watchlistId: String(response.data.id), alertOptIn: response.data.alert_opt_in === true })
+        } else if (before?.watchlistId) {
+          await watchlistsService.remove(before.watchlistId)
+        } else {
+          await watchlistsService.removeByAdmissionId(id)
+        }
+        void get().fetchStats()
+        return true
+      } catch {
+        applyEntry(id, before)
+        options?.showError?.('Failed to update saved programs. Please try again.')
+        return false
+      }
+    },
+
+    toggleAlert: async (id, options) => {
+      const before = entryOf(id)
+      const enable = !before?.alertOptIn
+      applyEntry(id, { watchlistId: before?.watchlistId ?? '', alertOptIn: enable })
+      try {
+        let entry: WatchEntry
+        if (before?.watchlistId) {
+          const response = await watchlistsService.update(before.watchlistId, { alert_opt_in: enable })
+          entry = { watchlistId: String(response.data.id), alertOptIn: response.data.alert_opt_in === true }
+        } else {
+          // Not saved yet: saving with reminders on.
+          await ensureInCatalog(id)
+          const response = await watchlistsService.add(id, enable)
+          entry = { watchlistId: String(response.data.id), alertOptIn: response.data.alert_opt_in === true }
+        }
+        applyEntry(id, entry)
+        void get().fetchStats()
+        options?.showSuccess?.(enable ? 'Reminders on. We will remind you 7, 3 and 1 day before the deadline.' : 'Reminders off.')
+        return entry.alertOptIn === enable
+      } catch {
+        applyEntry(id, before)
+        options?.showError?.('Failed to update reminders. Please try again.')
+        return false
+      }
+    },
+
+    getAdmissionById: (id) => get().admissions.find((a) => a.id === id),
+
+    fetchNotifications: async () => {
+      try {
+        const response = await notificationsService.list({ page: 1, limit: 50 })
+        set({ notifications: response.data.map(transformNotification), error: null })
+      } catch (err) {
+        set({ error: toApiError(err).message || 'Failed to load notifications' })
+      }
+    },
+
+    // Optimistic; restored if the server rejects it (the list must match the server).
+    markNotificationRead: async (id) => {
+      const before = get().notifications
+      set({ notifications: before.map((n) => (n.id === id ? { ...n, read: true } : n)) })
+      try {
+        await notificationsService.markAsRead(id)
+        void get().fetchStats()
+      } catch (err) {
+        set({ notifications: before })
+        throw err
+      }
+    },
+
+    markAllNotificationsRead: async () => {
+      const before = get().notifications
+      set({ notifications: before.map((n) => ({ ...n, read: true })) })
+      try {
+        await notificationsService.markAllAsRead()
+        void get().fetchStats()
+      } catch (err) {
+        set({ notifications: before })
+        throw err
+      }
+    },
+
+    reset: () => {
+      catalogInFlight = null
+      set({ ...initialState })
+    },
+  }
+})
+

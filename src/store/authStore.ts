@@ -19,6 +19,9 @@ import { supabase } from '../services/supabase'
 import { resetUserScopedStores } from './resetStores'
 import { closeRealtime } from '../services/realtime'
 import type { User } from '../types/api'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('authStore')
 
 export type { SignInData, SignUpData }
 
@@ -162,7 +165,7 @@ export const useAuthStore = create<AuthStoreState>()(
             await authService.signUp({ email, display_name: displayName, auth_user_id: authUserId })
           } catch (profileError) {
             // The profile is also provisioned on first sign-in, so this is not fatal.
-            console.warn('Profile creation deferred to first sign-in:', errorMessage(profileError, 'unknown error'))
+            log.warn('Profile creation deferred to first sign-in:', errorMessage(profileError, 'unknown error'))
           }
 
           options?.showSuccess?.('Account created! Please check your email to verify your account before signing in.')
@@ -181,7 +184,7 @@ export const useAuthStore = create<AuthStoreState>()(
         try {
           await supabase.auth.signOut()
         } catch (error) {
-          console.warn('Supabase sign-out failed; clearing local session anyway:', error)
+          log.warn('Supabase sign-out failed; clearing local session anyway:', error)
         } finally {
           get().clearSession()
           options?.showSuccess?.('Signed out successfully')

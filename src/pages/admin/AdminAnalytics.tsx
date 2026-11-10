@@ -50,6 +50,8 @@ function AdminAnalytics() {
 	// Fetch analytics on mount and when filters change
 	useEffect(() => {
 		fetchAnalytics()
+	// Reload when any filter changes; fetchAnalytics reads current filters.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [userFilter, eventTypeFilter, roleFilter, dateFrom, dateTo])
 
 	/**
@@ -83,10 +85,7 @@ function AdminAnalytics() {
 
 			const response = await adminService.getAnalytics(filters)
 
-			// Handle both paginated and non-paginated responses
-			const events = Array.isArray(response.data)
-				? response.data
-				: (response.data?.data || response.data?.events || [])
+			const events = response.data ?? []
 
 			// Transform API events to match AnalyticsEvent format
 			const transformed = transformApiEvents(events)

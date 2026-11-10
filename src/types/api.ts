@@ -72,7 +72,7 @@ export interface Admission {
   duration?: string | null;
   delivery_mode?: string | null;
   location?: string | null;
-  requirements?: Record<string, any> | null;
+  requirements?: Record<string, unknown> | null;
   application_fee?: number | null;
   tuition_fee?: number | null;
   currency?: string | null;
@@ -312,8 +312,8 @@ export interface StudentProfile {
   date_of_birth: string | null;
   country: string | null;
   city: string | null;
-  academic_background: Record<string, any> | null;
-  preferences: Record<string, any> | null;
+  academic_background: Record<string, unknown> | null;
+  preferences: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -373,10 +373,10 @@ export interface ChangeLog {
   changed_by: string | null;
   action_type: 'created' | 'updated' | 'verified' | 'rejected' | 'status_changed';
   field_name: string | null;
-  old_value: any | null;
-  new_value: any | null;
+  old_value: unknown;
+  new_value: unknown;
   diff_summary?: string | null;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -391,7 +391,7 @@ export interface Activity {
   action: string;
   related_entity_id: string | null;
   related_entity_type: string | null;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -555,8 +555,8 @@ export interface AdminAuditLog {
   action_type: string;
   entity_type: string;
   entity_id: string;
-  old_values?: Record<string, any> | null;
-  new_values?: Record<string, any> | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
   reason?: string | null;
   ip_address?: string | null;
   user_agent?: string | null;

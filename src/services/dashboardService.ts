@@ -9,6 +9,9 @@
 
 import apiClient from './apiClient';
 import type { ApiResponse, StudentDashboard, UniversityDashboard, AdminDashboard } from '../types/api';
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('dashboardService')
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true';
 
@@ -31,12 +34,12 @@ export const dashboardService = {
    * @returns Promise resolving to university dashboard data
    */
   getUniversityDashboard: async (): Promise<ApiResponse<UniversityDashboard>> => {
-    if (isDashboardDebugEnabled) console.log('🔵 [dashboardService] Fetching university dashboard...')
+    if (isDashboardDebugEnabled) log.debug('Fetching university dashboard...')
     const response = await apiClient.get('/university/dashboard');
     if (isDashboardDebugEnabled) {
-      console.log('🔵 [dashboardService] Raw API response:', response)
-      console.log('🔵 [dashboardService] Response data:', response.data)
-      console.log('🔵 [dashboardService] recent_admissions count:', response.data?.data?.recent_admissions?.length || 0)
+      log.debug('Raw API response:', response)
+      log.debug('Response data:', response.data)
+      log.debug('recent_admissions count:', response.data?.data?.recent_admissions?.length || 0)
     }
     return response.data;
   },

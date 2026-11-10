@@ -78,6 +78,7 @@ export function transformAdmission(
     alertEnabled: watchlist?.alert_opt_in || false,
     aiSummary: api.match_reason || undefined,
     eligibility: text(api.eligibility_text),
+    academicYear: text(api.academic_year),
     officialUrl: text(api.primary_apply_url),
     websiteUrl: text(api.university_website_url),
     portalUrl: text(api.admission_portal_url),

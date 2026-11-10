@@ -71,11 +71,11 @@ function Notifications() {
   }, [notifications, activeTab])
 
   const handleMarkAllRead = () => {
-    markAllNotificationsRead()
+    markAllNotificationsRead().catch(() => showError('Could not mark notifications as read. Please try again.'))
   }
 
   const handleMarkRead = (id: string) => {
-    markNotificationRead(id)
+    markNotificationRead(id).catch(() => showError('Could not mark the notification as read.'))
   }
 
   const handleNotificationClick = (notification: StudentNotification) => {

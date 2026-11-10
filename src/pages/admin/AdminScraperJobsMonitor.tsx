@@ -15,6 +15,9 @@ import {
 	type ScraperRunStatusLabel,
 	type ScraperRunSummary,
 } from "../../services/adminService"
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('AdminScraperJobsMonitor')
 
 const itemsPerPage = 20
 const autoRefreshMs = 30_000
@@ -108,7 +111,7 @@ function AdminScraperJobsMonitor() {
 			const response = await adminService.getScraperRunSummary()
 			setSummary(response.data)
 		} catch (error) {
-			console.error("Failed to load scraper summary", error)
+			log.error("Failed to load scraper summary", error)
 		}
 	}
 
@@ -125,7 +128,7 @@ function AdminScraperJobsMonitor() {
 			setJobs(mappedJobs)
 			setTotalJobs(response.pagination.total)
 		} catch (error) {
-			console.error("Failed to load scraper runs", error)
+			log.error("Failed to load scraper runs", error)
 			setJobs([])
 			setTotalJobs(0)
 		} finally {
@@ -141,6 +144,8 @@ function AdminScraperJobsMonitor() {
 
 	useEffect(() => {
 		void fetchRuns(currentPage)
+	// Reload when the page or filters change; fetchRuns reads current state.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentPage, statusFilter, modeFilter])
 
 	useEffect(() => {
@@ -152,6 +157,8 @@ function AdminScraperJobsMonitor() {
 		return () => {
 			window.clearInterval(intervalId)
 		}
+	// Re-arm polling when the page or filters change; fetchRuns reads current state.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [currentPage, statusFilter, modeFilter])
 
 	const openJobDetail = async (job: ScraperJob) => {
@@ -161,7 +168,7 @@ function AdminScraperJobsMonitor() {
 			setSelectedRunDetail(response.data)
 			setSelectedJob(mapRunToJob(response.data.run, { events: response.data.events }))
 		} catch (error) {
-			console.error("Failed to load scraper run details", error)
+			log.error("Failed to load scraper run details", error)
 			setSelectedRunDetail(null)
 			setSelectedJob(job)
 		} finally {
@@ -180,7 +187,7 @@ function AdminScraperJobsMonitor() {
 			await fetchRuns(1)
 			setCurrentPage(1)
 		} catch (error) {
-			console.error("Failed to trigger manual scraper run", error)
+			log.error("Failed to trigger manual scraper run", error)
 			await showInfo("Failed to start manual scraper run.")
 		} finally {
 			setIsActionLoading(false)
@@ -197,7 +204,7 @@ function AdminScraperJobsMonitor() {
 			await fetchSummary()
 			await fetchRuns(currentPage)
 		} catch (error) {
-			console.error("Failed to trigger scraper rerun", error)
+			log.error("Failed to trigger scraper rerun", error)
 			await showInfo("Failed to rerun scraper job.")
 		} finally {
 			setIsActionLoading(false)

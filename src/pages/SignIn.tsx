@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { toApiError } from '../services/apiClient'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('SignIn')
 
 const getFriendlyAuthError = (raw?: string) => {
   const message = (raw || '').toLowerCase()
@@ -73,16 +76,16 @@ function SignIn() {
     }
 
     try {
-      console.log('[SignIn] Starting signin with email:', formData.email)
+      log.debug('Starting signin with email:', formData.email)
       
       await signIn({
         email: formData.email,
         password: formData.password,
       })
       
-      console.log('[SignIn] Signin successful!')
+      log.debug('Signin successful!')
     } catch (error) {
-      console.error('[SignIn] Error occurred:', error)
+      log.error('Error occurred:', error)
       
       const errorMessage = 
         toApiError(error).response?.data?.message || 

@@ -9,6 +9,9 @@ import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import UpdatedBadge from '../../components/admin/UpdatedBadge'
 import { showConfirm, showInfo, showWarning } from '../../utils/swal'
 import { formatDaysLeft } from '../../utils/studentUtils'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('WatchlistPage')
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -401,7 +404,7 @@ function WatchlistPage() {
   // Get saved programs from shared data
   const savedPrograms = useMemo(() => {
     const saved = admissions.filter(a => a.saved)
-    console.log('📚 [WatchlistPage] Filtered saved programs:', saved.length);
+    log.debug('Filtered saved programs:', saved.length);
     return saved;
   }, [admissions])
 

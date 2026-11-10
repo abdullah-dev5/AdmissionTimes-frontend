@@ -67,6 +67,8 @@ function UniversityAIChatWindow({
 		}
 
 		return () => clearInactivityTimer()
+	// The inactivity timer is reset only when the window opens/closes.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isOpen])
 
 	const resetInactivityTimer = () => {

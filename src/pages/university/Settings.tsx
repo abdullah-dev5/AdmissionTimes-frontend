@@ -4,6 +4,9 @@ import UniversityLayout from '../../layouts/UniversityLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
 import { ChangePasswordForm } from '../../components/common/ChangePasswordForm'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('Settings')
 
 function Settings() {
   const { user } = useAuth()
@@ -52,7 +55,7 @@ function Settings() {
           contactPhone: profile.contact_phone || '',
         })
       } catch (error) {
-        console.error('Failed to load university profile:', error)
+        log.error('Failed to load university profile:', error)
       }
     }
 

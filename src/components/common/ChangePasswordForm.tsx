@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../../services/supabase'
 import { LoadingSpinner } from './LoadingSpinner'
+import { MIN_PASSWORD_LENGTH } from '../../utils/validation'
 
-const MIN_PASSWORD_LENGTH = 8
 
 interface ChangePasswordFormProps {
   email: string

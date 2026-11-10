@@ -5,6 +5,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
 import { showError, showSuccess } from '../../utils/swal'
 import { toApiError } from '../../services/apiClient'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('EditProfile')
 
 function EditProfile() {
   const { user, refreshUser } = useAuth()
@@ -56,7 +59,7 @@ function EditProfile() {
           contactPhone: profile.contact_phone || '',
         })
       } catch (error) {
-        console.error('Failed to load profile:', error)
+        log.error('Failed to load profile:', error)
       }
     }
 
@@ -111,10 +114,10 @@ function EditProfile() {
       await showSuccess('Profile updated successfully!')
       navigate('/university/settings')
     } catch (error) {
-      console.error('Failed to update profile:', error)
-      console.error('Error response:', toApiError(error).response?.data)
-      console.error('Error status:', toApiError(error).response?.status)
-      console.error('User context:', user)
+      log.error('Failed to update profile:', error)
+      log.error('Error response:', toApiError(error).response?.data)
+      log.error('Error status:', toApiError(error).response?.status)
+      log.error('User context:', user)
       
       const errorMessage = toApiError(error).response?.data?.error || toApiError(error).response?.data?.message || toApiError(error).message || 'Failed to update profile'
       await showError(errorMessage)
