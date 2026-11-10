@@ -1,8 +1,10 @@
-import { getUniqueAdmissions, getUniqueUsers, type ChangeType } from "../../data/adminData"
-import type { ChangeLogFilters } from "../../hooks/useChangeLogFilters"
+import type { ChangeType } from "../../data/adminData"
+import type { ChangeLogFilters, FilterOption } from "../../hooks/useChangeLogFilters"
 
 interface ChangeLogFiltersProps {
 	filters: ChangeLogFilters
+	admissionOptions: FilterOption[]
+	userOptions: FilterOption[]
 	onFilterChange: <K extends keyof ChangeLogFilters>(key: K, value: ChangeLogFilters[K]) => void
 	onReset: () => void
 }
@@ -11,10 +13,7 @@ interface ChangeLogFiltersProps {
  * Enhanced filters component for Change Logs page
  * Provides filtering by admission, user, change type, and date range
  */
-export default function ChangeLogFilters({ filters, onFilterChange, onReset }: ChangeLogFiltersProps) {
-	const admissions = getUniqueAdmissions()
-	const users = getUniqueUsers()
-
+export default function ChangeLogFilters({ filters, admissionOptions, userOptions, onFilterChange, onReset }: ChangeLogFiltersProps) {
 	return (
 		<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
 			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
@@ -29,9 +28,9 @@ export default function ChangeLogFilters({ filters, onFilterChange, onReset }: C
 						className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
 					>
 						<option value="All">All Programs</option>
-						{admissions.map((adm) => (
-							<option key={adm.id} value={adm.id}>
-								{adm.title}
+						{admissionOptions.map((option) => (
+							<option key={option.value} value={option.value}>
+								{option.label}
 							</option>
 						))}
 					</select>
@@ -48,9 +47,9 @@ export default function ChangeLogFilters({ filters, onFilterChange, onReset }: C
 						className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
 					>
 						<option value="All">All Users</option>
-						{users.map((user) => (
-							<option key={user} value={user}>
-								{user}
+						{userOptions.map((option) => (
+							<option key={option.value} value={option.value}>
+								{option.label}
 							</option>
 						))}
 					</select>
@@ -69,8 +68,7 @@ export default function ChangeLogFilters({ filters, onFilterChange, onReset }: C
 						<option value="All">All Types</option>
 						<option value="Manual Edit">Manual Edit</option>
 						<option value="Admin Edit">Admin Edit</option>
-						{/* TODO: Enable when scraper module is ready */}
-						{/* <option value="Scraper Update">🔄 Scraper Update</option> */}
+						<option value="Scraper Update">Scraper Update</option>
 					</select>
 				</div>
 

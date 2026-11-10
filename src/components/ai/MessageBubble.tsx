@@ -6,7 +6,7 @@ interface MessageBubbleProps {
 
 const renderAssistantMessage = (message: string) => {
   const lines = message.split('\n')
-  const numberedEntryRegex = /^\s*\d+[\).]\s+/
+  const numberedEntryRegex = /^\s*\d+[).]\s+/
   const bulletRegex = /^\s*[-•]\s+/
 
   const cards: Array<{ title: string; details: string[] }> = []

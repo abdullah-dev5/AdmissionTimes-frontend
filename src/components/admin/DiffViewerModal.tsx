@@ -236,7 +236,6 @@ export default function DiffViewerModal({ log, onClose }: DiffViewerModalProps) 
 									border: `1px solid ${typeColors.text}33`,
 								}}
 							>
-								{/* TODO: Enable when scraper module is ready */}
 								{log.changeType}
 							</span>
 						</div>

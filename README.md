@@ -6,6 +6,14 @@ Frontend application for the University Admissions Management Platform.
 **Version:** 1.0.0  
 **Last Updated:** February 25, 2026
 
+## Latest Updates (April 2026)
+
+- Added scraper-aware admission handling for admin and student flows.
+- Added dedicated scraped verification route and monitor wiring updates.
+- Improved program detail fallback handling and official link resolution.
+- Ensured deadline-passed admissions render below active admissions in search views.
+- Added test coverage for scraper admission adapter behavior.
+
 ---
 
 ## 📖 Documentation

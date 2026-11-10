@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { toApiError } from '../services/apiClient'
 
 const getFriendlyAuthError = (raw?: string) => {
   const message = (raw || '').toLowerCase()
@@ -22,7 +23,6 @@ const getFriendlyAuthError = (raw?: string) => {
 }
 
 function SignUp() {
-  const navigate = useNavigate()
   const { signUp, isLoading } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
@@ -65,8 +65,8 @@ function SignUp() {
 
     if (!formData.password) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters'
     }
 
     if (!formData.confirmPassword) {
@@ -88,29 +88,16 @@ function SignUp() {
     }
 
     try {
-      console.log('[SignUp] Starting signup with:', { 
-        email: formData.email.trim(),
-        user_type: 'student',
-      })
-      
       await signUp({
         email: formData.email.trim(),
         password: formData.password,
-        user_type: 'student',
         display_name: formData.display_name || undefined,
       })
-      
-      console.log('[SignUp] Signup successful!')
-    } catch (error: any) {
-      console.error('[SignUp] Error occurred:', error)
-      
-      // Extract error message
-      const errorMessage = 
-        error?.response?.data?.message || 
-        error?.message || 
+    } catch (error) {
+      const errorMessage =
+        toApiError(error).response?.data?.message ||
+        toApiError(error).message ||
         'Failed to create account. Please try again.'
-      
-      console.error('[SignUp] Error message:', errorMessage)
       setApiError(getFriendlyAuthError(errorMessage))
     }
   }

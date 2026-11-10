@@ -5,6 +5,8 @@ import UniversityPromptChip from "./UniversityPromptChip"
 import LoadingDots from "../LoadingDots"
 import aiService, { type ChatHistoryEntry } from "../../../services/aiService"
 import { formatDisplayTime } from "../../../utils/dateUtils"
+import { mergeUniversityChatReply, type UniversityChatResult } from "../../../utils/universityChatUtils"
+import type { AiChatResponse } from "../../../types/api"
 
 interface Message {
 	id: string
@@ -26,6 +28,9 @@ const initialPrompts = [
 	"Show my verified admissions",
 	"What triggers re-verification?",
 ]
+
+const isTransientStatus = (status?: number): boolean =>
+	status === 429 || status === 502 || status === 503 || status === 504
 
 function UniversityAIChatWindow({
 	isOpen,
@@ -112,8 +117,20 @@ function UniversityAIChatWindow({
 		)
 	}
 
+	const isReverificationQuery = (query: string): boolean =>
+		/re[\s-]?verification|reverification|triggers?\s+re/i.test(query.toLowerCase())
+
 	const buildGuidanceFallback = (query: string): string => {
 		const lower = query.toLowerCase()
+
+		if (isReverificationQuery(query) || lower.includes("resubmit") || lower.includes("edit")) {
+			return [
+				"Re-verification is triggered when key admission fields are edited after verification.",
+				"- Updates to title, deadline, eligibility, fees, or location can move status back to Pending Audit.",
+				"- Open Manage Admissions, apply corrections, then resubmit from Verification Center.",
+				"- Check admin remarks if a record was rejected and needs fixes.",
+			].join("\n")
+		}
 
 		if (lower.includes("pending") || lower.includes("audit") || lower.includes("status") || lower.includes("verify")) {
 			return [
@@ -130,14 +147,6 @@ function UniversityAIChatWindow({
 				"- Go to Manage Admissions and create a new admission.",
 				"- Upload PDF or fill fields manually, then verify extracted values.",
 				"- Submit for verification and monitor in Verification Center.",
-			].join("\n")
-		}
-
-		if (lower.includes("re-verification") || lower.includes("resubmit") || lower.includes("edit")) {
-			return [
-				"Re-verification is triggered when key admission fields are edited.",
-				"- Update details carefully and keep title, deadline, and eligibility consistent.",
-				"- Resubmit and check remarks for any rejection reasons.",
 			].join("\n")
 		}
 
@@ -158,10 +167,16 @@ function UniversityAIChatWindow({
 		].join("\n")
 	}
 
-	const resolveAssistantReply = (query: string, answer: string | undefined): string => {
+	const resolveAssistantReply = (
+		query: string,
+		answer: string | undefined,
+		payload?: Pick<AiChatResponse, "results" | "result_count">
+	): string => {
 		if (!answer) return buildFallback(query)
 		if (isRefusalReply(answer)) return buildGuidanceFallback(query)
-		return answer
+
+		const results = (payload?.results || []) as UniversityChatResult[]
+		return mergeUniversityChatReply(answer, results.length > 0 ? results : undefined, query)
 	}
 
 	const resolveRequestFailureReply = (query: string, error: unknown): string => {
@@ -175,7 +190,7 @@ function UniversityAIChatWindow({
 
 		if (status === 503 || apiMessage.includes("gemini") || apiMessage.includes("not configured")) {
 			return [
-				"AI service is temporarily unavailable right now.",
+				"Gemini API is exhausted and has reached its limits.",
 				buildGuidanceFallback(query),
 			].join("\n")
 		}
@@ -199,16 +214,29 @@ function UniversityAIChatWindow({
 		setIsLoading(true)
 		resetInactivityTimer()
 
-		// Pass last 4 turns so AI retains context across follow-up questions
 		const historySnapshot: ChatHistoryEntry[] = messages
 			.filter((m) => m.id !== "1")
 			.slice(-4)
 			.map((m) => ({ role: m.isUser ? "user" : "ai", text: m.text }))
 
 		try {
-			const response = await aiService.chat(messageText, aiContext, historySnapshot)
-			const answer = response.data?.answer?.trim()
-			const finalAnswer = resolveAssistantReply(messageText, answer)
+			const requestWithRetry = async () => {
+				try {
+					return await aiService.chat(messageText, aiContext, historySnapshot)
+				} catch (firstError) {
+					const axiosError = firstError as AxiosError
+					if (!isTransientStatus(axiosError.response?.status)) {
+						throw firstError
+					}
+					await new Promise((resolve) => setTimeout(resolve, 500))
+					return await aiService.chat(messageText, aiContext, historySnapshot)
+				}
+			}
+
+			const response = await requestWithRetry()
+			const data = response.data
+			const answer = data?.answer?.trim()
+			const finalAnswer = resolveAssistantReply(messageText, answer, data)
 
 			const aiMessage: Message = {
 				id: (Date.now() + 1).toString(),
@@ -246,7 +274,6 @@ function UniversityAIChatWindow({
 
 	return (
 		<div className="fixed bottom-20 right-6 w-full sm:w-96 max-w-sm bg-white shadow-xl rounded-2xl p-4 flex flex-col max-h-[60vh] z-[9999] overflow-hidden border border-blue-100">
-			{/* Header */}
 			<div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
 				<div>
 					<h3 className="text-sm font-semibold text-blue-700">University AI Assistant</h3>
@@ -265,7 +292,6 @@ function UniversityAIChatWindow({
 				</button>
 			</div>
 
-			{/* Messages Area */}
 			<div className="flex-1 overflow-y-auto px-2 py-2 mb-2" style={{ backgroundColor: "#F9FAFB" }}>
 				{messages.map((message) => (
 					<UniversityMessageBubble
@@ -290,7 +316,6 @@ function UniversityAIChatWindow({
 				<div ref={messagesEndRef} />
 			</div>
 
-			{/* Input Bar */}
 			<div className="flex items-center gap-2 border-t border-gray-200 pt-2">
 				<input
 					type="text"
@@ -323,5 +348,3 @@ function UniversityAIChatWindow({
 }
 
 export default UniversityAIChatWindow
-
-

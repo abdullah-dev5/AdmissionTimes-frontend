@@ -12,6 +12,8 @@ const TermsOfService = lazy(() => import("../pages/TermsOfService"));
 const About = lazy(() => import("../pages/About"));
 const SignIn = lazy(() => import("../pages/SignIn"));
 const SignUp = lazy(() => import("../pages/SignUp"));
+const ForgotPassword = lazy(() => import("../pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("../pages/ResetPassword"));
 const StudentDashboard = lazy(() => import("../pages/student/StudentDashboard"));
 const ProgramDetail = lazy(() => import("../pages/ProgramDetail"));
 const Notifications = lazy(() => import("../pages/student/Notifications"));
@@ -29,6 +31,7 @@ const DeadlinePage = lazy(() => import("../pages/student/DeadlinePage"));
 const WatchlistPage = lazy(() => import("../pages/student/WatchlistPage"));
 const AdminDashboard = lazy(() => import("../pages/admin/AdminDashboard"));
 const AdminVerificationCenter = lazy(() => import("../pages/admin/AdminVerificationCenter"));
+const AdminScrapedVerificationCenter = lazy(() => import("../pages/admin/AdminScrapedVerificationCenter"));
 const AdminNotificationsCenter = lazy(() => import("../pages/admin/AdminNotificationsCenter"));
 const AdminScraperJobsMonitor = lazy(() => import("../pages/admin/AdminScraperJobsMonitor"));
 const AdminChangeLogs = lazy(() => import("../pages/admin/AdminChangeLogs"));
@@ -44,6 +47,8 @@ const AppRouter = () => {
                 <Route path="/" element={<App />} />
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/signup" element={<SignUp />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/features" element={<Features />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -65,6 +70,7 @@ const AppRouter = () => {
                 <Route path="/university/settings/edit-profile" element={<ProtectedRoute requiredRole="university"><EditProfile /></ProtectedRoute>} />
                 <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/verification" element={<ProtectedRoute requiredRole="admin"><AdminVerificationCenter /></ProtectedRoute>} />
+                <Route path="/admin/verification/scraped" element={<ProtectedRoute requiredRole="admin"><AdminScrapedVerificationCenter /></ProtectedRoute>} />
                 <Route path="/admin/notifications" element={<ProtectedRoute requiredRole="admin"><AdminNotificationsCenter /></ProtectedRoute>} />
                 <Route path="/admin/scraper-logs" element={<ProtectedRoute requiredRole="admin"><AdminScraperJobsMonitor /></ProtectedRoute>} />
                 <Route path="/admin/change-logs" element={<ProtectedRoute requiredRole="admin"><AdminChangeLogs /></ProtectedRoute>} />

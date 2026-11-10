@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { adminService } from "../services/adminService"
-import { type ChangeType } from "../data/adminData"
+import { getApiErrorMessage } from "../services/apiClient"
+import type { AdminChangeLog, ChangeType } from "../data/adminData"
 
 export interface ChangeLogFilters {
 	admissionId: string
@@ -8,6 +9,11 @@ export interface ChangeLogFilters {
 	changeType: ChangeType | "All"
 	dateFrom: string
 	dateTo: string
+}
+
+export interface FilterOption {
+	value: string
+	label: string
 }
 
 const DEFAULT_FILTERS: ChangeLogFilters = {
@@ -18,138 +24,148 @@ const DEFAULT_FILTERS: ChangeLogFilters = {
 	dateTo: "",
 }
 
+/** Server-side actor filter for each change type shown in the UI. */
+const ACTOR_BY_CHANGE_TYPE: Record<ChangeType, string> = {
+	"Admin Edit": "admin",
+	"Manual Edit": "university",
+	"Scraper Update": "system",
+}
+
+const FETCH_LIMIT = 100
+
+interface ApiChangeLog {
+	id: string
+	admission_id: string
+	admission_title?: string | null
+	program_title?: string | null
+	changed_by?: string | null
+	modified_by?: string | null
+	change_type?: ChangeType
+	actor_type?: string
+	action_type?: string
+	field_name?: string | null
+	old_value?: unknown
+	new_value?: unknown
+	diff_summary?: string | null
+	changed_at_iso?: string | null
+	created_at?: string
+	metadata?: Record<string, unknown> | null
+}
+
+const stringify = (value: unknown): string => {
+	if (value === null || value === undefined) return ""
+	return typeof value === "string" ? value : JSON.stringify(value)
+}
+
+const toAdminChangeLog = (log: ApiChangeLog): AdminChangeLog =>
+	({
+		id: log.id,
+		admissionId: log.admission_id,
+		admissionTitle: log.admission_title || log.program_title || "Unknown program",
+		modifiedBy: log.modified_by || "System",
+		modifiedByUserId: log.changed_by || "",
+		changeType: log.change_type || "Manual Edit",
+		timestamp: log.changed_at_iso || log.created_at || "",
+		summary: log.diff_summary || log.field_name || "Change recorded",
+		diff: [
+			{
+				field: log.field_name || "record",
+				oldValue: stringify(log.old_value),
+				newValue: stringify(log.new_value),
+			},
+		],
+		reasonForChange: typeof log.metadata?.reason === "string" ? log.metadata.reason : undefined,
+		metadata: log.metadata ?? undefined,
+		action_type: log.action_type,
+		actor_type: log.actor_type,
+	}) as AdminChangeLog
+
 /**
- * Custom hook for filtering change logs with API integration
+ * Change-log listing with server-side filters. Dropdown options are built from
+ * real logs returned by the API (accumulated across loads), never mock data.
  */
 export const useChangeLogFilters = () => {
 	const [filters, setFilters] = useState<ChangeLogFilters>(DEFAULT_FILTERS)
-	const [apiLogs, setApiLogs] = useState<any[]>([])
+	const [logs, setLogs] = useState<AdminChangeLog[]>([])
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const knownAdmissions = useRef(new Map<string, string>())
+	const knownUsers = useRef(new Map<string, string>())
+	const [optionsVersion, setOptionsVersion] = useState(0)
 
-	// Fetch change logs on mount and when filters change
-	useEffect(() => {
-		fetchChangeLogs()
-	}, [filters])
-
-	/**
-	 * Fetch change logs from API with current filters
-	 */
-	const fetchChangeLogs = async () => {
+	const fetchChangeLogs = useCallback(async (active: ChangeLogFilters, isCancelled: () => boolean) => {
+		setLoading(true)
+		setError(null)
 		try {
-			setLoading(true)
-			setError(null)
+			const params: Record<string, string> = {}
+			if (active.admissionId !== "All") params.admission_id = active.admissionId
+			if (active.userId !== "All") params.changed_by = active.userId
+			if (active.changeType !== "All") params.actor_type = ACTOR_BY_CHANGE_TYPE[active.changeType]
+			if (active.dateFrom) params.date_from = `${active.dateFrom}T00:00:00`
+			// Inclusive end date: the whole selected day.
+			if (active.dateTo) params.date_to = `${active.dateTo}T23:59:59.999`
 
-			const filterParams: any = {}
-			if (filters.admissionId !== "All") {
-				filterParams.admission_id = filters.admissionId
-			}
-			if (filters.userId !== "All") {
-				filterParams.user_id = filters.userId
-			}
-			if (filters.dateFrom) {
-				filterParams.date_from = filters.dateFrom
-			}
-			if (filters.dateTo) {
-				filterParams.date_to = filters.dateTo
-			}
+			const response = await adminService.getChangeLogs(1, FETCH_LIMIT, params)
+			if (isCancelled()) return
 
-			const response = await adminService.getChangeLogs(1, 100, filterParams)
-
-			// Handle both paginated and non-paginated responses
-			const logs = Array.isArray(response.data) 
-				? response.data 
-				: (response.data?.data || response.data?.changelogs || [])
-
-			// Transform API logs to match AdminChangeLog format
-			const transformed = transformApiLogs(logs)
-			setApiLogs(transformed)
-		} catch (err: any) {
-			console.error('🔴 [useChangeLogFilters] Error fetching change logs:', err)
-			setError(err.message || 'Failed to fetch change logs')
-			setApiLogs([])
-		} finally {
-			setLoading(false)
-		}
-	}
-
-	/**
-	 * Transform API change log format to AdminChangeLog format
-	 */
-	const transformApiLogs = (data: any[]): any[] => {
-		return data.map((log: any) => {
-			const changeType = log.change_type || 'Manual Edit'
-			const actor = String(log.modified_by || log.changed_by || log.actor_type || '').trim()
-			const modifiedBy = actor && actor.toLowerCase() !== 'system' ? actor : 'Admin'
-			
-			const summary = log.diff_summary || log.field_name || 'Unknown change'
-			
-			return {
-				id: log.id,
-				admissionId: log.admission_id,
-				admissionTitle: log.admission_title || log.program_title || 'Unknown',
-				modifiedBy: modifiedBy,
-				modifiedByUserId: log.changed_by || 'admin',
-				changeType: changeType,
-				timestamp: log.changed_at_iso || log.created_at || new Date().toISOString(),
-				summary: summary,
-				diff: [
-					{
-						field: log.field_name || 'Unknown Field',
-						oldValue: log.old_value ? JSON.stringify(log.old_value) : '',
-						newValue: log.new_value ? JSON.stringify(log.new_value) : '',
-					},
-				],
-				reasonForChange: log.metadata?.reason || undefined,
-				metadata: log.metadata,
-				action_type: log.action_type,
-				actor_type: log.actor_type,
-			}
-		})
-	}
-
-	const filteredLogs = useMemo(() => {
-		let filtered = [...apiLogs]
-
-		// Additional client-side filtering if needed
-		// Change type filter (API might not support this)
-		if (filters.changeType !== "All") {
-			filtered = filtered.filter((log) => {
-				const logChangeType = log.changeType || log.field_name || 'Other'
-				return logChangeType === filters.changeType
+			const rows: ApiChangeLog[] = Array.isArray(response.data) ? response.data : []
+			rows.forEach((row) => {
+				if (row.admission_id) knownAdmissions.current.set(row.admission_id, row.admission_title || row.program_title || "Unknown program")
+				if (row.changed_by) knownUsers.current.set(row.changed_by, row.modified_by || "Unknown user")
 			})
+			setOptionsVersion((version) => version + 1)
+			setLogs(rows.map(toAdminChangeLog))
+		} catch (err) {
+			if (isCancelled()) return
+			setError(getApiErrorMessage(err, "Failed to fetch change logs"))
+			setLogs([])
+		} finally {
+			if (!isCancelled()) setLoading(false)
 		}
+	}, [])
 
-		// Sort by timestamp (newest first)
-		filtered.sort((a, b) => {
-			const aTime = new Date(a.timestamp).getTime()
-			const bTime = new Date(b.timestamp).getTime()
-			return bTime - aTime
-		})
+	useEffect(() => {
+		let cancelled = false
+		void fetchChangeLogs(filters, () => cancelled)
+		return () => {
+			cancelled = true
+		}
+	}, [filters, fetchChangeLogs])
 
-		return filtered
-	}, [apiLogs, filters.changeType])
+	const filteredLogs = useMemo(
+		() => [...logs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+		[logs]
+	)
+
+	const admissionOptions: FilterOption[] = useMemo(
+		() =>
+			Array.from(knownAdmissions.current, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[optionsVersion]
+	)
+
+	const userOptions: FilterOption[] = useMemo(
+		() =>
+			Array.from(knownUsers.current, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[optionsVersion]
+	)
 
 	const updateFilter = <K extends keyof ChangeLogFilters>(key: K, value: ChangeLogFilters[K]) => {
 		setFilters((prev) => ({ ...prev, [key]: value }))
 	}
 
-	const resetFilters = () => {
-		setFilters(DEFAULT_FILTERS)
-	}
-
-	// Get all logs (unfiltered for statistics)
-	const allLogs = apiLogs
+	const resetFilters = () => setFilters(DEFAULT_FILTERS)
 
 	return {
 		filters,
 		filteredLogs,
-		allLogs,
+		allLogs: logs,
+		admissionOptions,
+		userOptions,
 		updateFilter,
 		resetFilters,
 		loading,
 		error,
 	}
 }
-
-

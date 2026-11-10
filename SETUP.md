@@ -123,4 +123,36 @@ pnpm install
 
 ---
 
+## Scraper Integration Status (Phase Review)
+
+### Completed
+
+- Frontend scraper monitor is API-backed (no mock monitor data).
+- Scraped verification has a separate route: `/admin/verification/scraped`.
+- Scraper-origin admissions are tagged and rendered in admin/student UI.
+- Frontend scraped verification now fetches all pages from backend (not only first 100 records).
+- Auto-refresh is enabled in scraper monitor and verification views (30s cadence).
+
+### In Progress / Remaining
+
+- True push real-time streaming is not enabled yet (current mode is polling + scheduled ingestion).
+- Backend replay semantics still need full all-source replay behavior for perfect multi-university coverage.
+- Parent-child staging normalization and hash-based idempotency remain to be finalized in scraper/backend repos.
+
+### End-to-End Scraper Flow
+
+1. Scrapers write to scraper staging DB.
+2. Publish script sends staged records to backend internal ingestion API.
+3. Backend writes canonical admissions + ingestion runs/events.
+4. Frontend reads canonical data from backend APIs for admin and student modules.
+
+### Quick Verification Checklist
+
+1. Open `/admin/scraper-logs` and confirm new runs/events are appearing.
+2. Open `/admin/verification/scraped` and confirm records include FAST and other universities.
+3. Open student search and verify scraper-origin records are visible with source badge.
+4. Verify ingestion mode is `publish` for manual replay actions.
+
+---
+
 **Ready to code!** 🎉

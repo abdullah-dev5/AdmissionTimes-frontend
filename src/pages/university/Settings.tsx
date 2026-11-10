@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import UniversityLayout from '../../layouts/UniversityLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersService } from '../../services/usersService'
-import { showError, showSuccess, showWarning } from '../../utils/swal'
+import { ChangePasswordForm } from '../../components/common/ChangePasswordForm'
 
 function Settings() {
-  const { user, refreshUser } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'profile' | 'account'>('profile')
   const [profileData, setProfileData] = useState({
@@ -25,12 +25,6 @@ function Settings() {
     contactEmail: '',
     contactPhone: '',
   })
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  })
-  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -57,100 +51,13 @@ function Settings() {
           contactEmail: profile.contact_email || '',
           contactPhone: profile.contact_phone || '',
         })
-      } catch (error: any) {
-        console.error('Failed to load profile:', error)
-        console.error('Error response:', error.response?.data)
-        console.error('Error status:', error.response?.status)
-        console.error('User context:', user)
+      } catch (error) {
+        console.error('Failed to load university profile:', error)
       }
     }
 
     loadProfile()
   }, [user])
-
-  const handleProfileChange = (field: string, value: string) => {
-    setProfileData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleUniversityChange = (field: string, value: string) => {
-    setUniversityData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleLogoChange = (file?: File) => {
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      if (typeof result === 'string') {
-        setUniversityData(prev => ({ ...prev, logoUrl: result }))
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handlePasswordChange = (field: string, value: string) => {
-    setPasswordData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleSaveProfile = async () => {
-    setIsSaving(true)
-
-    try {
-      await usersService.updateCurrentUser({
-        display_name: profileData.displayName,
-      })
-      await refreshUser()
-      await showSuccess('Profile updated successfully!')
-    } catch (error) {
-      console.error('Failed to update profile:', error)
-      await showError('Failed to update profile')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleSaveUniversity = async () => {
-    setIsSaving(true)
-
-    try {
-      await usersService.updateUniversityProfile({
-        name: universityData.name,
-        city: universityData.city || null,
-        country: universityData.country || null,
-        website: universityData.website || null,
-        logo_url: universityData.logoUrl || null,
-        description: universityData.description || null,
-        address: universityData.address || null,
-        contact_name: universityData.contactName || null,
-        contact_email: universityData.contactEmail || null,
-        contact_phone: universityData.contactPhone || null,
-      })
-      await showSuccess('University profile updated successfully!')
-    } catch (error) {
-      console.error('Failed to update university profile:', error)
-      await showError('Failed to update university profile')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleChangePassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      await showWarning('New passwords do not match!')
-      return
-    }
-    if (passwordData.newPassword.length < 8) {
-      await showWarning('Password must be at least 8 characters long!')
-      return
-    }
-    setIsSaving(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsSaving(false)
-    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
-    await showSuccess('Password changed successfully!')
-  }
 
   return (
     <UniversityLayout>
@@ -317,54 +224,11 @@ function Settings() {
               {activeTab === 'account' && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h2 className="text-xl font-semibold mb-6 text-gray-900">Account Security</h2>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-yellow-800">
-                      <span className="font-semibold">Coming Soon:</span> Password change functionality will be available in a future update.
-                    </p>
-                  </div>
-                  <div className="space-y-6 opacity-50 pointer-events-none">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-                      <input
-                        type="password"
-                        value={passwordData.currentPassword}
-                        onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        disabled
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                      <input
-                        type="password"
-                        value={passwordData.newPassword}
-                        onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        disabled
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Password must be at least 8 characters long.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-                      <input
-                        type="password"
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        disabled
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleChangePassword}
-                        disabled={true}
-                        className="px-6 py-2 text-sm font-medium text-white rounded-lg cursor-not-allowed opacity-50"
-                        style={{ backgroundColor: '#2563EB' }}
-                      >
-                        Change Password
-                      </button>
-                    </div>
-                  </div>
+                  {user?.email ? (
+                    <ChangePasswordForm email={user.email} />
+                  ) : (
+                    <p className="text-sm text-gray-600">Sign in again to change your password.</p>
+                  )}
                 </div>
               )}
             </div>

@@ -11,6 +11,13 @@ const parseDateSafe = (value?: string | null): Date | null => {
 	return parsed
 }
 
+const formatLocalDateKey = (date: Date): string => {
+	const year = date.getFullYear()
+	const month = String(date.getMonth() + 1).padStart(2, "0")
+	const day = String(date.getDate()).padStart(2, "0")
+	return `${year}-${month}-${day}`
+}
+
 export const formatDisplayDate = (
 	value?: string | null,
 	fallback: string = "-"
@@ -103,8 +110,17 @@ export const formatDateTimeSafe = (
  * @returns Date string in YYYY-MM-DD format
  */
 export const formatDateForInput = (dateString: string): string => {
-	const date = new Date(dateString)
-	return date.toISOString().split("T")[0]
+	const trimmed = dateString.trim()
+	if (!trimmed) return ""
+
+	const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+	if (dateOnlyMatch) {
+		return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}`
+	}
+
+	const date = new Date(trimmed)
+	if (Number.isNaN(date.getTime())) return ""
+	return formatLocalDateKey(date)
 }
 
 /**
@@ -199,7 +215,7 @@ export const formatDateTimeWithTimezone = (dateString: string, timezone?: string
  */
 export const getTodayDateString = (): string => {
 	const today = new Date()
-	return today.toISOString().split("T")[0]
+	return formatLocalDateKey(today)
 }
 
 /**
@@ -210,5 +226,5 @@ export const getTodayDateString = (): string => {
 export const getDateDaysAgo = (daysAgo: number): string => {
 	const date = new Date()
 	date.setDate(date.getDate() - daysAgo)
-	return date.toISOString().split("T")[0]
+	return formatLocalDateKey(date)
 }

@@ -41,6 +41,229 @@ export const safeJsonParse = (value: unknown): unknown => {
 	}
 }
 
+/** Repeatedly unwrap JSON-encoded strings (including double-encoded payloads). */
+export const parseDiffValue = (value: unknown): unknown => {
+	let current = value
+
+	for (let depth = 0; depth < 4; depth++) {
+		if (current === null || current === undefined) return current
+		if (current === "" || current === "—") return undefined
+
+		if (typeof current !== "string") break
+
+		const trimmed = current.trim()
+		if (!trimmed || trimmed === "—") return undefined
+
+		if (isJsonString(trimmed)) {
+			try {
+				current = JSON.parse(trimmed)
+				continue
+			} catch {
+				return trimmed
+			}
+		}
+
+		if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+			try {
+				current = JSON.parse(trimmed)
+				continue
+			} catch {
+				return trimmed.slice(1, -1)
+			}
+		}
+
+		return trimmed
+	}
+
+	return current
+}
+
+const ADMISSION_RECORD_MARKERS = ["title", "description", "deadline", "location", "eligibility", "application_fee", "fee_amount"]
+
+export const isAdmissionRecord = (value: unknown): boolean => {
+	const parsed = parseDiffValue(value)
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false
+	const keys = Object.keys(parsed as Record<string, unknown>)
+	return ADMISSION_RECORD_MARKERS.filter((key) => keys.includes(key)).length >= 2
+}
+
+const DIFF_SKIP_KEYS = new Set(["created_at", "updated_at", "created_by", "university_id"])
+
+const DIFF_FIELD_ORDER = [
+	"title",
+	"verification_status",
+	"status_label",
+	"status",
+	"description",
+	"eligibility",
+	"eligibility_text",
+	"deadline",
+	"deadline_iso",
+	"location",
+	"application_fee",
+	"fee_amount",
+	"tuition_fee",
+	"currency",
+	"degree_type",
+	"degree_level",
+	"program_type",
+	"field_of_study",
+	"duration",
+	"delivery_mode",
+	"website_url",
+	"admission_portal_link",
+	"rejection_reason",
+	"verification_comments",
+	"admin_notes",
+	"remarks",
+]
+
+const sortDiffFields = (a: string, b: string) => {
+	const ai = DIFF_FIELD_ORDER.indexOf(a)
+	const bi = DIFF_FIELD_ORDER.indexOf(b)
+	if (ai === -1 && bi === -1) return a.localeCompare(b)
+	if (ai === -1) return 1
+	if (bi === -1) return -1
+	return ai - bi
+}
+
+const valuesEqual = (left: unknown, right: unknown): boolean => {
+	return JSON.stringify(parseDiffValue(left)) === JSON.stringify(parseDiffValue(right))
+}
+
+const toDiffString = (value: unknown): string => {
+	const parsed = parseDiffValue(value)
+	if (parsed === undefined || parsed === null || parsed === "") return "—"
+	if (typeof parsed === "string") return parsed
+	if (typeof parsed === "number" || typeof parsed === "boolean") return String(parsed)
+	try {
+		return JSON.stringify(parsed)
+	} catch {
+		return String(parsed)
+	}
+}
+
+export type DiffDisplayEntry = { field: string; old: string; new: string }
+
+/**
+ * Expands changelog rows that store a full admission snapshot into per-field diffs.
+ */
+export const expandDiffForDisplay = (diff: DiffDisplayEntry[]): DiffDisplayEntry[] => {
+	const expanded: DiffDisplayEntry[] = []
+
+	for (const entry of diff) {
+		const oldParsed = parseDiffValue(entry.old)
+		const newParsed = parseDiffValue(entry.new)
+		const shouldExpand =
+			isAdmissionRecord(oldParsed) ||
+			isAdmissionRecord(newParsed) ||
+			isAdmissionRecord(entry.old) ||
+			isAdmissionRecord(entry.new) ||
+			/^(status|admission_update|updated|created)$/i.test(entry.field)
+
+		if (!shouldExpand) {
+			expanded.push(entry)
+			continue
+		}
+
+		const oldObj =
+			typeof oldParsed === "object" && oldParsed !== null && !Array.isArray(oldParsed)
+				? (oldParsed as Record<string, unknown>)
+				: {}
+		const newObj =
+			typeof newParsed === "object" && newParsed !== null && !Array.isArray(newParsed)
+				? (newParsed as Record<string, unknown>)
+				: {}
+
+		if (Object.keys(oldObj).length === 0 && Object.keys(newObj).length === 0) {
+			expanded.push(entry)
+			continue
+		}
+
+		const keys = [...new Set([...Object.keys(oldObj), ...Object.keys(newObj)])].filter((key) => !DIFF_SKIP_KEYS.has(key)).sort(sortDiffFields)
+		const entryExpansion: DiffDisplayEntry[] = []
+
+		for (const key of keys) {
+			const oldVal = oldObj[key]
+			const newVal = newObj[key]
+			if (valuesEqual(oldVal, newVal)) continue
+			entryExpansion.push({
+				field: key,
+				old: toDiffString(oldVal),
+				new: toDiffString(newVal),
+			})
+		}
+
+		if (entryExpansion.length > 0) {
+			expanded.push(...entryExpansion)
+		} else {
+			expanded.push(entry)
+		}
+	}
+
+	return expanded.length > 0 ? expanded : diff
+}
+
+export const isDateLikeFieldName = (fieldName?: string): boolean => {
+	if (!fieldName) return false
+	return /(date|deadline|time|updated|created|verified|submitted|timestamp)/i.test(fieldName)
+}
+
+export const formatCellValue = (value: unknown, fieldName?: string): string => {
+	const normalized = parseDiffValue(value)
+
+	if (normalized === null || normalized === undefined || normalized === "") {
+		return "—"
+	}
+
+	if (Array.isArray(normalized)) {
+		return normalized.map((item) => formatCellValue(item, fieldName)).join(", ")
+	}
+
+	if (typeof normalized === "object") {
+		return Object.entries(normalized as Record<string, unknown>)
+			.map(([key, val]) => `${formatFieldLabel(key)}: ${formatCellValue(val, key)}`)
+			.join(" · ")
+	}
+
+	if (typeof normalized === "boolean") {
+		return normalized ? "Yes" : "No"
+	}
+
+	const text = String(normalized).trim()
+	if (!text) return "—"
+
+	if (isDateLikeFieldName(fieldName) && !Number.isNaN(Date.parse(text))) {
+		const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+		if (dateOnly) {
+			const year = Number(dateOnly[1])
+			const month = Number(dateOnly[2])
+			const day = Number(dateOnly[3])
+			return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+			})
+		}
+		const parsed = new Date(text)
+		if (!Number.isNaN(parsed.getTime())) {
+			return parsed.toLocaleString("en-US", {
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+				hour: "numeric",
+				minute: "2-digit",
+			})
+		}
+	}
+
+	if (/fee|tuition|amount/i.test(fieldName || "") && !Number.isNaN(Number(text))) {
+		return Number(text).toLocaleString()
+	}
+
+	return text.length > 400 ? truncateText(text, 400) : text
+}
+
 /**
  * Converts a field name to human-readable format
  * @param fieldName - Field name (e.g., "field_name", "fieldName")

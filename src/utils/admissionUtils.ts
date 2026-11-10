@@ -43,7 +43,8 @@ export function sanitizeAdmission(admission: Partial<Admission>): Admission {
   return {
     id: admission.id || `adm-${Date.now()}`,
     title: admission.title || 'Unknown Program',
-    deadline: admission.deadline || new Date().toISOString(),
+    // Missing deadline stays empty; inventing "now" made drafts unsavable.
+    deadline: admission.deadline || '',
     status: admission.status || 'Pending Audit' as const,
     views: admission.views || '0',
     verifiedBy: admission.verifiedBy || undefined,
@@ -128,13 +129,15 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
   return {
     id: apiAdmission.id,
     title: apiAdmission.title || 'Unknown Program',
-    deadline: apiAdmission.deadline || new Date().toISOString(),
+    // No deadline stays empty: never invent one (it would show as "closes today").
+    deadline: apiAdmission.deadline || '',
     status,
     verification_status: verificationStatus,
     views: '0',
-    verifiedBy: apiAdmission.verified_by,
+    verifiedBy: apiAdmission.verified_by ?? undefined,
     lastAction: apiAdmission.updated_at || apiAdmission.created_at || new Date().toISOString(),
     remarks,
+    academicYear: typeof requirements.academicYear === 'string' ? requirements.academicYear : undefined,
     rejection_reason: apiAdmission.rejection_reason || undefined,
     verification_comments: apiAdmission.verification_comments || undefined,
     admin_notes: apiAdmission.admin_notes || undefined,
@@ -153,7 +156,7 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     // Financial
     fee: apiAdmission.application_fee?.toString() || '0',
     tuition_fee: apiAdmission.tuition_fee?.toString(),
-    currency: apiAdmission.currency || 'USD',
+    currency: apiAdmission.currency || 'PKR',
     
     // Descriptions
     overview: apiAdmission.description || '',
@@ -163,16 +166,16 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
     // Web presence
     websiteUrl,
     admissionPortalLink,
-    website_url: apiAdmission.website_url,
-    admission_portal_link: apiAdmission.admission_portal_link,
+    website_url: apiAdmission.website_url ?? undefined,
+    admission_portal_link: apiAdmission.admission_portal_link ?? undefined,
     
     // Metadata
-    start_date: apiAdmission.start_date,
+    start_date: apiAdmission.start_date ?? undefined,
     created_at: apiAdmission.created_at,
     updated_at: apiAdmission.updated_at,
-    verified_at: apiAdmission.verified_at,
-    created_by: apiAdmission.created_by,
-    university_id: apiAdmission.university_id,
+    verified_at: apiAdmission.verified_at ?? undefined,
+    created_by: apiAdmission.created_by ?? undefined,
+    university_id: apiAdmission.university_id ?? undefined,
     is_active: apiAdmission.is_active,
     
     // Auto-tracking fields (system managed)
@@ -188,15 +191,18 @@ export function transformApiAdmissionToFrontend(apiAdmission: ApiAdmission): Adm
  * @param dateString - Date in yyyy-MM-dd format or ISO8601 format
  * @returns ISO8601 datetime string or undefined
  */
+const APP_UTC_OFFSET = import.meta.env.VITE_APP_UTC_OFFSET || '+05:00'
+
 function convertDateToIso8601(dateString: string | undefined): string | undefined {
   if (!dateString) return undefined
   
   // If already in ISO format with time, return as-is
   if (dateString.includes('T')) return dateString
   
-  // Convert yyyy-MM-dd to yyyy-MM-ddT23:59:59Z (end of day in UTC)
+  // yyyy-MM-dd -> end of that day in the platform timezone (Pakistan by
+  // default). Using UTC moved deadlines to 04:59 the next morning in PKT.
   if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return `${dateString}T23:59:59Z`
+    return `${dateString}T23:59:59${APP_UTC_OFFSET}`
   }
   
   return dateString
@@ -237,6 +243,7 @@ export function transformAdmissionToApi(
   const requirements: Record<string, any> = {
     ...baseRequirements,
     eligibility: frontendAdmission.eligibility?.trim() || baseRequirements.eligibility || null,
+    academicYear: frontendAdmission.academicYear?.trim() || baseRequirements.academicYear || null,
     websiteUrl: frontendAdmission.websiteUrl?.trim() || baseRequirements.websiteUrl || null,
     admissionPortalLink: frontendAdmission.admissionPortalLink?.trim() || baseRequirements.admissionPortalLink || null,
     links: {

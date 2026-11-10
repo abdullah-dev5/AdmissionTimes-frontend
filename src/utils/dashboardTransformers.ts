@@ -145,6 +145,44 @@ const toIsoOrNow = (...candidates: unknown[]): string => {
   return new Date().toISOString()
 }
 
+const isFullAdmissionSnapshot = (value: unknown): boolean => {
+  let record: Record<string, unknown> = {}
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    record = value as Record<string, unknown>
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed.startsWith('{')) return false
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
+      record = parsed as Record<string, unknown>
+    } catch {
+      return false
+    }
+  } else {
+    return false
+  }
+
+  const snapshotKeys = ['id', 'title', 'description', 'deadline', 'location', 'eligibility', 'application_fee']
+  const matches = snapshotKeys.filter((key) => key in record).length
+  return matches >= 3
+}
+
+const inferChangeLogFieldName = (change: any): string => {
+  const explicit = String(change?.field_name || change?.field || '').trim()
+  if (explicit) return explicit
+
+  const actionType = String(change?.action_type || '').trim()
+  if (actionType) return actionType.replace(/_/g, ' ')
+
+  if (isFullAdmissionSnapshot(change?.new_value) || isFullAdmissionSnapshot(change?.old_value)) {
+    return 'admission_update'
+  }
+
+  return 'updated'
+}
+
 const deriveChangeStatus = (change: any): ChangeLogItem['status'] | undefined => {
   const fieldName = String(change.field_name || change.field || '').toLowerCase()
   if (!fieldName) return undefined
@@ -273,7 +311,7 @@ export function transformUniversityDashboard(data: UniversityDashboard) {
 
   // Transform recent_changes to ChangeLogItem objects
   const changeLogs: ChangeLogItem[] = (data.recent_changes || []).map((change: any, index: number) => {
-    const fieldName = change.field_name || change.field || 'status'
+    const fieldName = inferChangeLogFieldName(change)
     const status = deriveChangeStatus(change)
     const remarks =
       change.reason ||

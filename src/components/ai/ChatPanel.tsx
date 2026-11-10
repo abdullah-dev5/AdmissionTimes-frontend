@@ -6,7 +6,7 @@ import LoadingDots from './LoadingDots'
 import ContextBadge from './ContextBadge'
 import QuickActionChips from './QuickActionChips'
 import aiService, { type ChatHistoryEntry } from '../../services/aiService'
-import { formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from '../../utils/dateUtils'
+import { formatDisplayDate, formatDisplayTime } from '../../utils/dateUtils'
 
 interface Message {
   id: string
@@ -52,33 +52,6 @@ const redactSensitiveData = (text: string): string => {
   return safe
 }
 
-const formatIsoDateTimeInText = (text: string): string => {
-  return text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?\b/g, (match) => {
-    return formatDisplayDateTime(match, match)
-  })
-}
-
-const formatIsoDateOnlyInText = (text: string): string => {
-  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (match) => {
-    return formatDisplayDate(match, match)
-  })
-}
-
-const formatVerboseJsDateInText = (text: string): string => {
-  return text.replace(
-    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT[+-]\d{4}\s+\([^)]*\)\b/g,
-    (match) => {
-      return formatDisplayDateTime(match, match)
-    }
-  )
-}
-
-const toConversationalText = (text: string): string => {
-  const withDateTime = formatIsoDateTimeInText(text)
-  const withDateOnly = formatIsoDateOnlyInText(withDateTime)
-  return formatVerboseJsDateInText(withDateOnly)
-}
-
 const buildAdmissionResultsSummary = (results: Array<{
   id: string
   title: string
@@ -115,8 +88,17 @@ const STOP_WORDS = new Set([
   'admission', 'admissions', 'in', 'of', 'the', 'a', 'an', 'for', 'with', 'to', 'from', 'on', 'at',
 ])
 
+const DATE_QUERY_PATTERN =
+  /\b\d{1,2}\s*(?:st|nd|rd|th)?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\b/i
+
+const PROGRAM_CODE_QUERY_PATTERN =
+  /\b(bba|bs|bsc|be|mba|ms|msc|mphil|phd|llb|llm|cs)\b/i
+
 const extractQueryKeywords = (query?: string): string[] => {
   if (!query) return []
+  if (DATE_QUERY_PATTERN.test(query) || PROGRAM_CODE_QUERY_PATTERN.test(query)) {
+    return []
+  }
   return query
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -154,31 +136,6 @@ const filterResultsByQuery = (
     const matches = keywords.filter((keyword) => haystack.includes(keyword)).length
     return matches >= requiredMatches
   })
-}
-
-const buildConversationalReply = (
-  answer: string,
-  payload?: AiReplyPayload,
-  query?: string
-): string => {
-  const cleanAnswer = redactSensitiveData(toConversationalText(answer))
-  const originalResults = payload?.results || []
-  const results = filterResultsByQuery(originalResults, query)
-  const hasResultListInAnswer = /(?:^|\n)\s*\d+[\).]|here are the most relevant admissions|i found \d+ match/i.test(cleanAnswer)
-
-  if (!results.length) {
-    if (payload?.clarification_needed && payload.clarification_question) {
-      return [cleanAnswer, redactSensitiveData(payload.clarification_question)].join('\n\n')
-    }
-    return cleanAnswer
-  }
-
-  if (hasResultListInAnswer) {
-    return cleanAnswer
-  }
-
-  const resultsSummary = buildAdmissionResultsSummary(results)
-  return [cleanAnswer, resultsSummary].filter(Boolean).join('\n\n')
 }
 
 const buildDynamicFallbackFromPayload = (query: string, payload?: AiReplyPayload): string => {
@@ -306,16 +263,9 @@ function ChatPanel() {
         clarification_question: data.clarification_question,
       }
       const finalAnswer = resolveAssistantReply(messageText, answer, payload)
-      const conversationalAnswer = buildConversationalReply(finalAnswer, {
-        result_count: data.result_count,
-        results: data.results,
-        clarification_needed: data.clarification_needed,
-        clarification_question: data.clarification_question,
-      }, messageText)
-
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: redactSensitiveData(conversationalAnswer),
+        text: finalAnswer,
         isUser: false,
         timestamp: formatDisplayTime(new Date().toISOString())
       }
@@ -349,7 +299,7 @@ function ChatPanel() {
     }
 
     if (status === 503 || apiMessage.includes('gemini') || apiMessage.includes('not configured')) {
-      return 'AI service is temporarily unavailable right now. Please try again in a moment.'
+      return 'Gemini API is exhausted and has reached its limits.'
     }
 
     if (isTransientStatus(status)) {
@@ -426,10 +376,12 @@ function ChatPanel() {
                 resetInactivityTimer()
               }}
               onKeyPress={handleKeyPress}
+              aria-label="Message the AI assistant"
               placeholder="Ask about deadlines, compare, fees..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             <button
+              aria-label="Send message"
               onClick={() => handleSend()}
               disabled={!inputValue.trim() || isLoading}
               className="px-4 py-2 text-white rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 shadow-sm"

@@ -8,7 +8,8 @@ import ChatPanel from '../components/ai/ChatPanel'
 import { useAi } from '../contexts/AiContext'
 import { useStudentStore } from '../store/studentStore'
 import { useAuthStore } from '../store/authStore'
-import { isRealtimeEnabled, supabase } from '../services/supabase'
+
+import { subscribeToNotifications } from '../services/realtime'
 
 const NOTIFICATIONS_POLL_MS = Math.max(15000, Number(import.meta.env.VITE_NOTIFICATIONS_POLL_MS || 60000))
 
@@ -72,42 +73,12 @@ function StudentLayout({ children }: StudentLayoutProps) {
       }
     }
 
-    const channel = isRealtimeEnabled
-      ? supabase
-          .channel(`notifications-live-${user.id}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'notifications',
-              filter: `recipient_id=eq.${user.id}`,
-            },
-            () => {
-              refresh()
-            }
-          )
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              stopPolling()
-              return
-            }
-
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-              startPolling()
-            }
-          })
-      : null
-
-    if (!isRealtimeEnabled) {
-      startPolling()
-    }
+    // Shared per-user channel (see services/realtime); poll while it is not live.
+    const unsubscribe = subscribeToNotifications(user.id, refresh, (live) => (live ? stopPolling() : startPolling()))
 
     return () => {
       stopPolling()
-      if (channel) {
-        supabase.removeChannel(channel).catch(() => {})
-      }
+      unsubscribe()
     }
   }, [user?.id, user?.role, fetchNotifications, fetchStats])
 

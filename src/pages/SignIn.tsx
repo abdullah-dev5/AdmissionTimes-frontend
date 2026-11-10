@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { toApiError } from '../services/apiClient'
 
 const getFriendlyAuthError = (raw?: string) => {
   const message = (raw || '').toLowerCase()
@@ -12,6 +13,9 @@ const getFriendlyAuthError = (raw?: string) => {
   if (message.includes('401') || message.includes('unauthorized')) {
     return 'Email or password is incorrect.'
   }
+  if (message.includes('429') || message.includes('too many')) {
+    return 'Too many attempts. Please wait a minute and try again.'
+  }
   if (message.includes('timeout') || message.includes('network') || message.includes('fetch')) {
     return 'Connection issue detected. Please check your internet and try again.'
   }
@@ -19,7 +23,6 @@ const getFriendlyAuthError = (raw?: string) => {
 }
 
 function SignIn() {
-  const navigate = useNavigate()
   const { signIn, isLoading } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
@@ -52,10 +55,9 @@ function SignIn() {
       newErrors.email = 'Please enter a valid email address'
     }
 
+    // No length rule at sign-in: existing accounts may predate the current policy.
     if (!formData.password) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
     }
 
     setErrors(newErrors)
@@ -79,15 +81,14 @@ function SignIn() {
       })
       
       console.log('[SignIn] Signin successful!')
-    } catch (error: any) {
+    } catch (error) {
       console.error('[SignIn] Error occurred:', error)
       
       const errorMessage = 
-        error?.response?.data?.message || 
-        error?.message || 
+        toApiError(error).response?.data?.message || 
+        toApiError(error).message || 
         'Failed to sign in. Please check your credentials.'
       
-      console.error('[SignIn] Error message:', errorMessage)
       setApiError(getFriendlyAuthError(errorMessage))
     }
   }
@@ -158,11 +159,7 @@ function SignIn() {
               {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input type="checkbox" className="mr-2" />
-                <span className="text-sm text-gray-600">Remember me</span>
-              </label>
+            <div className="flex items-center justify-end">
               <Link to="/forgot-password" className="text-sm font-medium" style={{ color: '#2563EB' }}>
                 Forgot password?
               </Link>

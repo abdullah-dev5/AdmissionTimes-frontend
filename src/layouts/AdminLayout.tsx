@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import type { ReactNode } from "react"
 import AdminSidebar from "../components/admin/AdminSidebar"
 import { useAuthStore } from "../store/authStore"
-import { isRealtimeEnabled, supabase } from "../services/supabase"
+import { subscribeToNotifications } from '../services/realtime'
 
 const ADMIN_NOTIFICATIONS_POLL_MS = Math.max(15000, Number(import.meta.env.VITE_ADMIN_NOTIFICATIONS_POLL_MS || 60000))
 
@@ -41,40 +41,12 @@ function AdminLayout({ children }: AdminLayoutProps) {
 			}
 		}
 
-		const channel = isRealtimeEnabled
-			? supabase
-					.channel(`admin-notifications-live-${user.id}`)
-					.on(
-						"postgres_changes",
-						{
-							event: "INSERT",
-							schema: "public",
-							table: "notifications",
-							filter: `recipient_id=eq.${user.id}`,
-						},
-						() => emitRefresh()
-					)
-					.subscribe((status) => {
-						if (status === "SUBSCRIBED") {
-							stopPolling()
-							return
-						}
-
-						if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-							startPolling()
-						}
-					})
-			: null
-
-		if (!isRealtimeEnabled) {
-			startPolling()
-		}
+		// Shared per-user channel (see services/realtime); poll while it is not live.
+		const unsubscribe = subscribeToNotifications(user.id, emitRefresh, (live) => (live ? stopPolling() : startPolling()))
 
 		return () => {
 			stopPolling()
-			if (channel) {
-				supabase.removeChannel(channel).catch(() => {})
-			}
+			unsubscribe()
 		}
 	}, [user?.id, user?.role])
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../contexts/AuthContext"
-import { adminService, type EmailMetricsResult } from "../../services/adminService"
+import { adminService, type EmailMetricsResult, type ScraperRunListItem } from "../../services/adminService"
 import { admissionsService } from "../../services/admissionsService"
 import { usersService } from "../../services/usersService"
 import AdminLayout from "../../layouts/AdminLayout"
@@ -14,6 +14,14 @@ import AdmissionStatusChart from "../../components/admin/AdmissionStatusChart"
 import UniversityDistributionChart from "../../components/admin/UniversityDistributionChart"
 import MonthlyTrendChart from "../../components/admin/MonthlyTrendChart"
 import { formatDisplayDateTime } from "../../utils/dateUtils"
+import { toApiError } from '../../services/apiClient'
+import type { AdminAdmission, AdminDashboard as AdminDashboardData, AdminPendingVerification, AdminRecentAction, AdminScraperActivity, Notification } from '../../types/api'
+
+/** Pending rows come from /admin/dashboard or the admissions list; both shapes are accepted. */
+type PendingRow = Partial<Omit<AdminAdmission, 'status_label'>> & Partial<AdminPendingVerification> & { id: string }
+/** Scraper rows come from /admin/dashboard (summary) or /admin/scraper/runs. */
+type ScraperRow = Partial<AdminScraperActivity> & Partial<Omit<ScraperRunListItem, 'status'>> & { id: string; status?: string }
+
 
 // Tooltip Component
 function InfoTooltip({ description }: { description: string }) {
@@ -65,10 +73,9 @@ function InfoTooltip({ description }: { description: string }) {
 }
 
 function AdminDashboard() {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	const navigate = useNavigate()
 	const { isAuthenticated, user, isLoading: authLoading } = useAuth()
-	const [apiDashboard, setApiDashboard] = useState<any>(null)
+	const [apiDashboard, setApiDashboard] = useState<AdminDashboardData | null>(null)
 	const [analyticsData, setAnalyticsData] = useState({
 		statusBreakdown: [] as { status: VerificationStatus; count: number; percentage: number }[],
 		universityDistribution: [] as { university: string; count: number }[],
@@ -77,10 +84,12 @@ function AdminDashboard() {
 	const [totalUsers, setTotalUsers] = useState(0)
 	const [totalAdmissions, setTotalAdmissions] = useState(0)
 	const [emailMetrics, setEmailMetrics] = useState<EmailMetricsResult | null>(null)
-	const [pendingAdmissions, setPendingAdmissions] = useState<any[]>([])
+	const [pendingAdmissions, setPendingAdmissions] = useState<PendingRow[]>([])
 	const [pendingAdmissionsLoaded, setPendingAdmissionsLoaded] = useState(false)
-	const [_loading, _setLoading] = useState(false)
-	const [_error, _setError] = useState<string | null>(null)
+	const [dashboardNotifications, setDashboardNotifications] = useState<Notification[]>([])
+	const [dashboardScraperActivities, setDashboardScraperActivities] = useState<ScraperRow[]>([])
+	const [dashboardLoading, setDashboardLoading] = useState(false)
+	const [dashboardError, setDashboardError] = useState<string | null>(null)
 
 	const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
 	const safeLabel = (value: string | null | undefined, fallback: string) => {
@@ -89,7 +98,14 @@ function AdminDashboard() {
 		return value
 	}
 
-	const buildRealtimeAnalytics = (admissions: any[]) => {
+	const normalizeUniversityLabel = (value: string | null | undefined) => {
+		const normalized = String(value || "").trim().toLowerCase()
+		if (!normalized) return "Unknown University"
+		if (normalized === "all") return "All Universities"
+		return String(value).trim()
+	}
+
+	const buildRealtimeAnalytics = (admissions: AdminAdmission[]) => {
 		const total = admissions.length
 		const statusCounts: Record<VerificationStatus, number> = {
 			Verified: 0,
@@ -111,17 +127,17 @@ function AdminDashboard() {
 		const universityCounts = new Map<string, number>()
 		const monthCounts = new Map<string, number>()
 
-		admissions.forEach((admission: any) => {
+		admissions.forEach((admission) => {
 			const status = mapStatus(admission.verification_status)
 			statusCounts[status] += 1
 
 			const universityName = safeLabel(
-				admission?.universities?.name || admission.university_name || admission.location || admission.university_id,
+				admission.university_name || admission.location || admission.university_id,
 				"Unknown University"
 			)
 			universityCounts.set(universityName, (universityCounts.get(universityName) || 0) + 1)
 
-			const rawDate = admission.created_at || admission.submitted_at || admission.updated_at
+			const rawDate = admission.created_at || admission.updated_at
 			if (rawDate) {
 				const parsed = new Date(rawDate)
 				if (!Number.isNaN(parsed.getTime())) {
@@ -170,21 +186,21 @@ function AdminDashboard() {
 	/**
 	 * Transform pending verifications from API format to UI format
 	 */
-	const transformPendingVerifications = (apiData: any[]) => {
+	const transformPendingVerifications = (apiData: PendingRow[]) => {
 		return (apiData || [])
-			.filter((item: any) => {
-				const status = String(item?.verification_status || item?.status || '').toLowerCase()
+			.filter((item) => {
+				const status = String(item.verification_status || '').toLowerCase()
 				const isPending = status === 'pending' || status === ''
-				const isActive = item?.is_active !== false && !item?.deleted_at
+				const isActive = item.is_active !== false
 				return isPending && isActive
 			})
-			.map((item: any) => {
+			.map((item) => {
 			const submittedSource = item.submitted_on || item.submitted_at || item.created_at
 			return {
 				id: item.admission_id || item.id,
 				admissionTitle: item.admission_title || item.program_title || item.title || 'Unknown',
 				university: safeLabel(item.university_name, 'Unknown University'),
-				submittedBy: safeLabel(item.submitted_by_label || item.submitted_by || item.created_by, 'University'),
+				submittedBy: safeLabel(item.submitted_by_label || item.created_by, 'University'),
 				submittedOn: submittedSource ? new Date(submittedSource).toISOString().split('T')[0] : 'N/A',
 				status: item.status_label || 'Pending Audit',
 			}
@@ -194,18 +210,18 @@ function AdminDashboard() {
 	/**
 	 * Transform recent actions from API format to UI format with admission title enrichment
 	 */
-	const transformRecentActions = (apiData: any[]) => {
-		return (apiData || []).map((item: any) => {
+	const transformRecentActions = (apiData: AdminRecentAction[] = []) => {
+		return apiData.map((item) => {
 			const actionType = item.action_label || 'Updated'
-			const admissionTitle = item.admission_title || item.program_title || item.title || 'Unknown'
+			const admissionTitle = item.admission_title || item.program_title || 'Unknown'
 			
 			return {
 				id: item.id,
 				admission: admissionTitle,
 				action: actionType,
-				admin: item.changed_by_label || item.changed_by_name || safeLabel(item.changed_by || item.modified_by, 'Admin'),
-				timestamp: (item.changed_at_iso || item.created_at) ? formatDisplayDateTime(item.changed_at_iso || item.created_at, 'N/A') : 'N/A',
-				remarks: item.diff_summary || item.remarks || `Changed ${item.field_name || 'field'} from "${item.old_value}" to "${item.new_value}"`,
+				admin: item.changed_by_label || safeLabel(item.changed_by, 'Admin'),
+				timestamp: (item.changed_at_iso || item.changed_at) ? formatDisplayDateTime(item.changed_at_iso || item.changed_at, 'N/A') : 'N/A',
+				remarks: `Changed ${item.field || 'field'} from "${String(item.old_value ?? '')}" to "${String(item.new_value ?? '')}"`,
 			}
 		})
 	}
@@ -213,18 +229,48 @@ function AdminDashboard() {
 	/**
 	 * Normalize dashboard notifications from mixed backend payload shapes.
 	 */
-	const transformDashboardNotifications = (apiData: any[]) => {
-		return (apiData || []).map((item: any, index: number) => {
-			const rawType = item.notification_type || item.type || "system_broadcast"
-			const isRead = typeof item.is_read === "boolean" ? item.is_read : !item.unread
-			const rawTimestamp = item.created_at || item.timestamp || item.time || ""
+	const transformDashboardNotifications = (apiData: Notification[]) => {
+		return apiData.map((item, index) => {
+			const rawType = item.notification_type || "system_broadcast"
+			const isRead = item.is_read
+			const rawTimestamp = item.created_at || ""
 
 			return {
 				id: item.id || `${rawType}-${index}`,
-				title: item.title || item.notification_title || "Notification",
+				title: item.title || "Notification",
 				type: String(rawType).replace(/_/g, " "),
 				unread: !isRead,
 				timestamp: rawTimestamp ? formatDisplayDateTime(rawTimestamp, "N/A") : "N/A",
+			}
+		})
+	}
+
+	/**
+	 * Normalize scraper activity rows from mixed backend payload shapes.
+	 */
+	const transformScraperActivities = (apiData: ScraperRow[]) => {
+		return apiData.map((item, index) => {
+			const rawLastRun =
+				item.lastRun ||
+				item.started_at ||
+				""
+
+			const rawStatus = String(item.status_label || item.status || "").toLowerCase()
+			let status = "No Changes"
+			if (rawStatus.includes("success") || rawStatus.includes("completed")) status = "Success"
+			if (rawStatus.includes("change")) status = "Changes Detected"
+			if (rawStatus.includes("fail")) status = "Failed"
+			if (rawStatus.includes("running")) status = "Running"
+
+			return {
+				id: item.id || item.job_id || `scraper-${index}`,
+				university: normalizeUniversityLabel(item.university),
+				lastRun: rawLastRun ? formatDisplayDateTime(rawLastRun, "N/A") : "N/A",
+				status,
+				changesDetected:
+					item.changesDetected ??
+					item.changes_detected ??
+					0,
 			}
 		})
 	}
@@ -244,15 +290,17 @@ function AdminDashboard() {
 		}
 
 		fetchDashboard()
-	}, [isAuthenticated, user?.user_type, authLoading])
+		// fetchDashboard reads current state; refetch only when auth state changes.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isAuthenticated, user?.role, authLoading])
 
 	/**
 	 * Fetch dashboard data from API and enrich with related data
 	 */
 	const fetchDashboard = async () => {
 		try {
-			_setLoading(true)
-			_setError(null)
+			setDashboardLoading(true)
+			setDashboardError(null)
 
 			// Fetch main dashboard data
 			const dashboardResponse = await adminService.getDashboard()
@@ -270,13 +318,31 @@ function AdminDashboard() {
 				verification_status: 'pending',
 				limit: 100,
 			})
-			setPendingAdmissions((pendingResponse.data || []).filter((item: any) => item?.is_active !== false && !item?.deleted_at))
+			setPendingAdmissions((pendingResponse.data || []).filter((item) => item.is_active !== false))
 			setPendingAdmissionsLoaded(true)
 
 			// Fetch users count
 			const usersResponse = await usersService.list({ limit: 1, page: 1 })
 			const userCount = usersResponse.pagination?.total || 0
 			setTotalUsers(userCount)
+
+			// Fetch latest notifications for dashboard card fallback.
+			try {
+				const notificationsResponse = await adminService.getNotifications(1, 4)
+				setDashboardNotifications(Array.isArray(notificationsResponse?.data) ? notificationsResponse.data : [])
+			} catch (notificationError) {
+				console.warn('[AdminDashboard] Latest notifications unavailable:', notificationError)
+				setDashboardNotifications([])
+			}
+
+			// Fetch latest scraper runs for scraper activity card fallback.
+			try {
+				const scraperRunsResponse = await adminService.getScraperRuns(1, 4)
+				setDashboardScraperActivities(scraperRunsResponse?.data || [])
+			} catch (scraperActivityError) {
+				console.warn('[AdminDashboard] Scraper activity fallback unavailable:', scraperActivityError)
+				setDashboardScraperActivities([])
+			}
 
 			// Fetch email metrics summary for admin observability
 			try {
@@ -287,11 +353,11 @@ function AdminDashboard() {
 				setEmailMetrics(null)
 			}
 
-		} catch (err: any) {
+		} catch (err) {
 			console.error('[AdminDashboard] Failed to fetch dashboard data:', err)
-			_setError(err.message || 'Failed to load dashboard data')
+			setDashboardError(toApiError(err).message || 'Failed to load dashboard data')
 		} finally {
-			_setLoading(false)
+			setDashboardLoading(false)
 			setPendingAdmissionsLoaded(true)
 		}
 	}
@@ -306,19 +372,17 @@ function AdminDashboard() {
 	
 	const displayRecentActions = transformedRecentActions.slice(0, 5)
 	
-	const notificationSource =
-		apiDashboard?.notifications ||
-		apiDashboard?.recent_notifications ||
-		apiDashboard?.stats?.recent_notifications ||
-		[]
-	const displayNotifications = transformDashboardNotifications(notificationSource).slice(0, 4)
-	const displayScraperActivities = (apiDashboard?.scraper_activity || []).slice(0, 4)
+	const displayNotifications = transformDashboardNotifications(dashboardNotifications).slice(0, 4)
+	const scraperActivitySource =
+		dashboardScraperActivities.length > 0
+			? dashboardScraperActivities
+			: (apiDashboard?.scraper_activity || [])
+	const displayScraperActivities = transformScraperActivities(scraperActivitySource).slice(0, 4)
 	
 	const metrics = {
-		totalUsers: totalUsers || apiDashboard?.stats?.total_users || 0,
+		totalUsers,
 		totalAdmissions: totalAdmissions || apiDashboard?.stats?.total_admissions || 0,
-		totalAlertsSent: apiDashboard?.stats?.pending_verifications || apiDashboard?.stats?.alerts || 0,
-		aiSummary: apiDashboard?.stats?.aiSummary || '',
+		pendingVerifications: apiDashboard?.stats?.pending_verifications ?? 0,
 	}
 	const analytics = analyticsData
 	const reminderCoverage = apiDashboard?.reminder_coverage
@@ -327,6 +391,18 @@ function AdminDashboard() {
 	return (
 		<AdminLayout>
 			<div className="p-6">
+				{dashboardError && (
+					<div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-4">
+						<p className="text-sm text-red-800">Some dashboard data could not be loaded: {dashboardError}</p>
+						<button
+							onClick={() => void fetchDashboard()}
+							className="px-3 py-1.5 text-sm font-medium text-red-700 border border-red-300 rounded-lg hover:bg-red-100"
+						>
+							Retry
+						</button>
+					</div>
+				)}
+				{dashboardLoading && <p className="mb-4 text-sm text-gray-500">Refreshing dashboard…</p>}
 				{/* Header */}
 				<div className="mb-6 flex items-center justify-between">
 					<div>
@@ -404,9 +480,9 @@ function AdminDashboard() {
 					<div className="bg-white rounded-lg shadow-sm p-6">
 						<div className="flex items-center justify-between mb-4">
 							<div>
-								<p className="text-sm text-gray-600 mb-1">Total Alerts Sent</p>
+								<p className="text-sm text-gray-600 mb-1">Pending Verifications</p>
 								<p className="text-3xl font-bold" style={{ color: "#111827" }}>
-									{metrics.totalAlertsSent.toLocaleString()}
+									{metrics.pendingVerifications.toLocaleString()}
 								</p>
 							</div>
 							<div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#FEF3C7" }}>
@@ -512,7 +588,7 @@ function AdminDashboard() {
 									{ threshold_day: 7, due_targets: 0, sent_targets: 0, missing_targets: 0 },
 									{ threshold_day: 3, due_targets: 0, sent_targets: 0, missing_targets: 0 },
 									{ threshold_day: 1, due_targets: 0, sent_targets: 0, missing_targets: 0 },
-								]).map((item: any) => (
+								]).map((item) => (
 									<tr key={item.threshold_day} className="border-b border-gray-100">
 										<td className="py-2 px-2 text-sm text-gray-700">{item.threshold_day} day</td>
 										<td className="py-2 px-2 text-sm text-gray-700">{item.due_targets}</td>
@@ -678,7 +754,7 @@ function AdminDashboard() {
 								</tr>
 							</thead>
 							<tbody>
-								{displayPendingVerifications.map((verification: any) => (
+								{displayPendingVerifications.map((verification) => (
 									<tr key={verification.id} className="border-b border-gray-100 hover:bg-gray-50">
 										<td className="py-4 px-4">
 											<p className="font-medium" style={{ color: "#111827" }}>
@@ -752,7 +828,7 @@ function AdminDashboard() {
 								</tr>
 							</thead>
 							<tbody>
-								{displayRecentActions.map((action: any) => {
+								{displayRecentActions.map((action) => {
 									const actionColors = getActionColor(action.action)
 									return (
 										<tr key={action.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -812,7 +888,7 @@ function AdminDashboard() {
 							</button>
 						</div>
 						<div className="space-y-4">
-							{displayNotifications.map((notification: any) => (
+							{displayNotifications.map((notification) => (
 								<div
 									key={notification.id}
 									className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
@@ -865,7 +941,7 @@ function AdminDashboard() {
 									</tr>
 								</thead>
 								<tbody>
-									{displayScraperActivities.map((activity: any) => {
+									{displayScraperActivities.map((activity) => {
 										const statusColors = getScraperStatusColor(activity.status)
 										return (
 											<tr key={activity.id} className="border-b border-gray-100 hover:bg-gray-50">

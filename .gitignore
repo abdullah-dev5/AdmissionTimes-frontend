@@ -27,3 +27,21 @@ dist-ssr
 .env.*
 !.env.example
 *.sw?
+
+# Docs and test artifacts requested to stay out of commits
+project-docs/
+*.md
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test/
+tests/
+
+# Never commit credentials
+credentials*.txt
+*credentials*.txt
+
+# Playwright artifacts
+e2e-report/
+test-results/

@@ -19,5 +19,9 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Context modules intentionally export their provider and its hook together.
+      'react-refresh/only-export-components': ['error', { allowExportNames: ['useAuth', 'useToast', 'useAi'] }],
+    },
   },
 ])

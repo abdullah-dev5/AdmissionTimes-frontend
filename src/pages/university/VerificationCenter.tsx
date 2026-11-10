@@ -316,13 +316,23 @@ function VerificationCenter() {
 		return list
 	}, [audits, status, search])
 
+	/** Download the review record shown in the table as a text file (built from the loaded data). */
 	const handleDownload = (audit: AuditItem) => {
-		// Mock download - in real app, this would call /api/verification/log/:id
+		const lines = [
+			`Admission: ${audit.title}`,
+			`Status: ${audit.status}`,
+			`Reviewed by: ${audit.verifiedBy || 'Not reviewed yet'}`,
+			`Last action: ${audit.lastAction}`,
+			`Remarks: ${audit.remarks || 'None'}`,
+			`Exported: ${new Date().toLocaleString()}`,
+		]
+		const url = URL.createObjectURL(new Blob([`${lines.join('\n')}\n`], { type: 'text/plain' }))
 		const link = document.createElement('a')
-		link.href = '#' // Replace with actual download URL
-		link.download = `audit-log-${audit.id}.txt`
+		link.href = url
+		link.download = `review-${audit.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.txt`
 		link.click()
-		setToast(`Log download started for "${audit.title}"`)
+		URL.revokeObjectURL(url)
+		setToast(`Downloaded review record for "${audit.title}"`)
 	}
 
 	return (

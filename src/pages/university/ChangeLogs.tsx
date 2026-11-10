@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react"
+import DiffValueDisplay from "../../components/changelog/DiffValueDisplay"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type Admission, type ChangeLogItem } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
+import { expandDiffForDisplay, formatFieldLabel, parseDiffValue } from "../../utils/changelogFormatting"
 import { formatDateTimeSafe, getRelativeTimeSafe } from "../../utils/dateUtils"
 
 const formatLabel = (value: string) =>
@@ -54,9 +56,11 @@ const sanitizeActor = (value?: string) => {
 	return cleaned
 }
 
-const normalizeStatusValue = (value?: string) => {
+const KNOWN_STATUS_LABELS = new Set(["Verified", "Pending Audit", "Rejected", "Draft", "Active", "Closed"])
+
+const normalizeStatusValue = (value?: string): string | undefined => {
 	const normalized = (value || "").trim().replace(/^"|"$/g, "").toLowerCase()
-	if (!normalized) return undefined
+	if (!normalized || normalized.length > 40) return undefined
 	if (normalized === "verified") return "Verified"
 	if (normalized === "pending") return "Pending Audit"
 	if (normalized === "rejected") return "Rejected"
@@ -64,16 +68,41 @@ const normalizeStatusValue = (value?: string) => {
 	if (normalized === "active") return "Active"
 	if (normalized === "closed") return "Closed"
 	if (normalized === "pending audit") return "Pending Audit"
-	return value
+	return undefined
+}
+
+/** Pull a display status from a diff value without flattening whole admission records. */
+const extractStatusFromDiffValue = (value: unknown): string | undefined => {
+	const normalized = normalizeValue(value)
+
+	if (typeof normalized === "object" && normalized !== null && !Array.isArray(normalized)) {
+		const record = normalized as Record<string, unknown>
+		for (const key of ["verification_status", "status_label", "status"]) {
+			const candidate = record[key]
+			if (candidate === null || candidate === undefined || typeof candidate === "object") continue
+			const parsed = normalizeStatusValue(String(candidate))
+			if (parsed && KNOWN_STATUS_LABELS.has(parsed)) return parsed
+		}
+		return undefined
+	}
+
+	if (Array.isArray(normalized)) return undefined
+
+	const asString = String(normalized ?? "").trim()
+	if (!asString || asString.length > 40) return undefined
+
+	const parsed = normalizeStatusValue(asString)
+	if (parsed && KNOWN_STATUS_LABELS.has(parsed)) return parsed
+	return undefined
 }
 
 const getStatusFromDiffNewValue = (row: ChangeLogItem) => {
-	const statusDiff = [...row.diff].reverse().find((d) => /(verification_status|status|status_label)/i.test(d.field))
-	if (statusDiff) {
-		const derived = normalizeStatusValue(formatInline(statusDiff.new))
+	for (const fieldName of ["verification_status", "status_label", "status"]) {
+		const statusDiff = [...row.diff].reverse().find((d) => d.field.toLowerCase() === fieldName)
+		if (!statusDiff) continue
+		const derived = extractStatusFromDiffValue(statusDiff.new)
 		if (derived) return derived
 	}
-
 	return undefined
 }
 
@@ -116,103 +145,7 @@ const toDateKey = (value: string) => {
 	return `${year}-${month}-${day}`
 }
 
-const normalizeValue = (value: unknown) => {
-	if (typeof value === "string") {
-		const trimmed = value.trim()
-		if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-			try {
-				return JSON.parse(trimmed)
-			} catch {
-				return value
-			}
-		}
-	}
-	return value
-}
-
-const isDateLikeField = (field?: string) => {
-	if (!field) return false
-	return /(date|deadline|time|updated|created|verified)/i.test(field)
-}
-
-const formatDateValue = (value: string) => {
-	const trimmed = splitBySeparator(value)
-	if (!trimmed) return "—"
-
-	const dateOnly = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-	if (dateOnly) {
-		const year = Number(dateOnly[1])
-		const month = Number(dateOnly[2])
-		const day = Number(dateOnly[3])
-		return new Date(year, month - 1, day).toLocaleDateString("en-US", {
-			year: "numeric",
-			month: "short",
-			day: "numeric",
-		})
-	}
-
-	return formatDateTimeSafe(trimmed, value)
-}
-
-const formatInline = (value: unknown): string => {
-	const normalized = normalizeValue(value)
-	if (normalized === null || normalized === undefined || normalized === "") {
-		return "—"
-	}
-	if (Array.isArray(normalized)) {
-		return normalized.map((item) => formatInline(item)).join(", ")
-	}
-	if (typeof normalized === "object") {
-		return Object.entries(normalized as Record<string, unknown>)
-			.map(([key, val]) => `${formatLabel(key)}: ${formatInline(val)}`)
-			.join(", ")
-	}
-	return String(normalized)
-}
-
-const renderValue = (value: unknown, fieldName?: string) => {
-	const normalized = normalizeValue(value)
-	if (normalized === null || normalized === undefined || normalized === "") {
-		return <span className="text-gray-400 italic">(empty)</span>
-	}
-	if (Array.isArray(normalized)) {
-		return (
-			<div className="flex flex-wrap gap-2">
-				{normalized.map((item, idx) => (
-					<span key={idx} className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
-						{formatInline(item)}
-					</span>
-				))}
-			</div>
-		)
-	}
-	if (typeof normalized === "object") {
-		return (
-			<div className="space-y-1">
-				{Object.entries(normalized as Record<string, unknown>).map(([key, val]) => (
-					<div key={key} className="flex items-start gap-3">
-						<span className="text-xs text-gray-500 min-w-[120px]">{formatLabel(key)}</span>
-						<span className="text-sm text-gray-800 break-words">{formatInline(val)}</span>
-					</div>
-				))}
-			</div>
-		)
-	}
-	if (typeof normalized === "string") {
-		const cleaned = normalized.trim()
-		if (isDateLikeField(fieldName)) {
-			return <span className="text-sm text-gray-800 break-words">{formatDateValue(cleaned)}</span>
-		}
-
-		if (cleaned === "—" || cleaned.toLowerCase() === "null" || cleaned.toLowerCase() === "undefined") {
-			return <span className="text-gray-400 italic">(empty)</span>
-		}
-
-		return <span className="text-sm text-gray-800 break-words">{cleaned}</span>
-	}
-
-	return <span className="text-sm text-gray-800 break-words">{String(normalized)}</span>
-}
+const normalizeValue = (value: unknown) => parseDiffValue(value)
 
 function FilterBar({
 	from,
@@ -381,49 +314,61 @@ function ChangeTable({
 
 function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () => void }) {
 	if (!item) return null
+
+	const displayDiff = expandDiffForDisplay(item.diff)
+
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-			<div className="bg-white w-full max-w-2xl rounded-xl shadow p-5">
-				<div className="flex items-start justify-between">
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+			<div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden">
+				<div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
 					<div>
-						<h3 className="text-lg font-semibold text-blue-800">Field-level Differences</h3>
+						<h3 className="text-xl font-bold text-gray-900">Field-level Differences</h3>
 						<p className="text-sm text-gray-600 mt-1">
 							{item.admission} • {formatDateTimeClean(item.date)} • {sanitizeActor(item.modifiedBy)}
 						</p>
 					</div>
-					<button onClick={onClose} className="p-2 rounded hover:bg-gray-100">
+					<button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Close">
 						<svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
 						</svg>
 					</button>
 				</div>
-				<div className="mt-4">
-					<ul className="space-y-3">
-						{item.diff.map((d, idx) => (
-							<li key={idx} className="border border-gray-200 rounded-lg p-3">
-								<p className="text-sm font-medium text-gray-900">{d.field}</p>
-								<div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
-									<div className="rounded-lg border border-red-100 bg-red-50/40 p-2">
-										<p className="text-xs font-semibold text-red-600 mb-1">Old</p>
-										{renderValue(d.old, d.field)}
+
+				<div className="flex-1 overflow-y-auto px-6 py-4">
+					{displayDiff.length === 0 ? (
+						<p className="text-sm text-gray-500 text-center py-8">No field changes recorded.</p>
+					) : (
+						<ul className="space-y-4">
+							{displayDiff.map((d, idx) => (
+								<li key={`${d.field}-${idx}`} className="border border-gray-200 rounded-xl overflow-hidden">
+									<div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200">
+										<p className="text-sm font-semibold text-gray-900">{formatFieldLabel(d.field)}</p>
 									</div>
-									<div className="rounded-lg border border-green-100 bg-green-50/40 p-2">
-										<p className="text-xs font-semibold text-green-600 mb-1">New</p>
-										{renderValue(d.new, d.field)}
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:divide-x divide-gray-200">
+										<div className="p-4">
+											<p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">Previous</p>
+											<DiffValueDisplay value={d.old} fieldName={d.field} variant="old" />
+										</div>
+										<div className="p-4">
+											<p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Current</p>
+											<DiffValueDisplay value={d.new} fieldName={d.field} variant="new" />
+										</div>
 									</div>
-								</div>
-							</li>
-						))}
-					</ul>
+								</li>
+							))}
+						</ul>
+					)}
+
 					{item.remarks && (
-						<div className="mt-4">
-							<p className="text-sm text-gray-500">Remarks</p>
-							<div className="text-sm text-gray-900 mt-1">{renderValue(item.remarks)}</div>
+						<div className="mt-4 rounded-xl border border-gray-200 p-4">
+							<p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Remarks</p>
+							<DiffValueDisplay value={item.remarks} fieldName="remarks" variant="new" />
 						</div>
 					)}
 				</div>
-				<div className="mt-5 flex justify-end">
-					<button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+
+				<div className="px-6 py-4 border-t border-gray-200 flex justify-end bg-gray-50">
+					<button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-white font-medium">
 						Close
 					</button>
 				</div>
@@ -441,7 +386,7 @@ function ChangeLogs() {
 	const [search, setSearch] = useState("")
 	const [selected, setSelected] = useState<ChangeLogItem | null>(null)
 
-	const mockAdmissions = useMemo(
+	const admissionOptions = useMemo(
 		() => ["All Admissions", ...admissions.map((a) => a.title)],
 		[admissions],
 	)
@@ -495,7 +440,7 @@ function ChangeLogs() {
 							onAdmissionChange={setAdmission}
 							search={search}
 							onSearchChange={setSearch}
-							options={mockAdmissions}
+							options={admissionOptions}
 						/>
 					</div>
 					<div className="bg-white shadow-sm rounded-xl p-4">

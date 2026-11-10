@@ -10,6 +10,7 @@ import {
 import { formatDisplayDate, formatDisplayDateTime } from "../../utils/dateUtils"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
 import { showSuccessToast } from "../../utils/swal"
+import { toApiError } from '../../services/apiClient'
 
 const formatLabel = (value: string) =>
 	value
@@ -129,6 +130,14 @@ const safeLabel = (value: string | null | undefined, fallback: string) => {
 	return value
 }
 
+const getSubmittedViaLabel = (admission: any) => {
+	if (admission?.data_origin === "scraper") {
+		return "System Import"
+	}
+
+	return safeLabel(admission?.submitted_by_label || admission?.submitted_by || admission?.created_by, "University")
+}
+
 const buildRemarksList = (item: VerificationItem | null) => {
 	if (!item) return []
 	const entries = [
@@ -154,10 +163,39 @@ const getFriendlyErrorMessage = (raw?: string | null) => {
 	return "We could not complete this request right now. Please try again."
 }
 
-function AdminVerificationCenter() {
+const inferDegreeFromTitle = (title?: string | null): string => {
+	const text = String(title || "").toLowerCase()
+	if (!text) return "N/A"
+	if (/\bbba\b|bachelor of business administration/.test(text)) return "BBA"
+	if (/\bmba\b|master of business administration/.test(text)) return "MBA"
+	if (/\bphd\b|doctor of philosophy|doctorate/.test(text)) return "PhD"
+	if (/\bmd\b|doctor of medicine/.test(text)) return "MD"
+	if (/\bmphil\b|master of philosophy/.test(text)) return "MPhil"
+	if (/\bms\b|master of science|\bmaster\b|postgraduate|post-graduate|\bgraduate\b/.test(text)) return "MS"
+	if (/\bbs\b|bachelor of science|\bbe\b|bachelor|undergraduate|under-graduate/.test(text)) return "BS"
+	return "N/A"
+}
+
+const resolveCanonicalAdmissionId = (item: Pick<VerificationItem, "id">): string => (isUuid(String(item.id || "")) ? String(item.id) : "")
+
+	interface AdminVerificationCenterProps {
+		forcedDataOrigin?: "scraper" | "manual" | "university"
+	}
+
+	function AdminVerificationCenter({ forcedDataOrigin }: AdminVerificationCenterProps) {
 	const navigate = useNavigate()
-	const location = useLocation() as { state?: { selectedId?: string } }
+	const location = useLocation()
+	const searchParams = new URLSearchParams(location.search)
+	const queryDataOrigin = searchParams.get("source")
+	const resolvedDataOrigin =
+		forcedDataOrigin ||
+		(queryDataOrigin === "scraper" || queryDataOrigin === "manual" || queryDataOrigin === "university"
+			? queryDataOrigin
+			: undefined)
 	const [statusFilter, setStatusFilter] = useState<VerificationStatus | "All">("All")
+	const [dataOriginFilter, setDataOriginFilter] = useState<"All" | "scraper" | "manual" | "university">(
+		resolvedDataOrigin || "All",
+	)
 	const [universityFilter, setUniversityFilter] = useState<string>("All")
 	const [searchQuery, setSearchQuery] = useState("")
 	const [selectedItem, setSelectedItem] = useState<VerificationItem | null>(null)
@@ -165,6 +203,7 @@ function AdminVerificationCenter() {
 	const [remarks, setRemarks] = useState("")
 	const [currentPage, setCurrentPage] = useState(1)
 	const itemsPerPage = 10
+	const autoRefreshMs = 30_000
 
 	// API state
 	const [apiVerifications, setApiVerifications] = useState<any[]>([])
@@ -172,33 +211,45 @@ function AdminVerificationCenter() {
 	const [error, setError] = useState<string | null>(null)
 	const [submitting, setSubmitting] = useState(false)
 
-	// Fetch pending admissions on component mount
+	// Initial load + refetch when filters change (runs on mount too).
 	useEffect(() => {
-		fetchAllAdmissions()
-	}, [])
-
-	useEffect(() => {
-		// Refetch when status filter changes
 		if (currentPage === 1) {
 			fetchAllAdmissions()
 		} else {
 			setCurrentPage(1)
 		}
-	}, [statusFilter])
+		// fetchAllAdmissions reads the latest filters; re-run only when filters change.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [statusFilter, dataOriginFilter])
 
 	useEffect(() => {
-		const selectedId = location.state?.selectedId
+		const intervalId = window.setInterval(() => {
+			void fetchAllAdmissions()
+		}, autoRefreshMs)
+
+		return () => {
+			window.clearInterval(intervalId)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [statusFilter, dataOriginFilter, resolvedDataOrigin])
+
+	useEffect(() => {
+		// Deep links: router state (in-app) or ?admission=<id> (notification links).
+		const selectedId =
+			(location.state as { selectedId?: string } | null | undefined)?.selectedId ||
+			new URLSearchParams(location.search).get('admission') ||
+			undefined
 		if (!selectedId || !apiVerifications.length) {
 			return
 		}
 		if (selectedItem?.id === selectedId) {
 			return
 		}
-		const match = apiVerifications.find((item) => item.id === selectedId)
+		const match = apiVerifications.find((item) => item.id === selectedId || resolveCanonicalAdmissionId(item) === selectedId)
 		if (match) {
 			handleReview(match)
 		}
-	}, [apiVerifications, location.state, selectedItem?.id])
+	}, [apiVerifications, location.state, location.search, selectedItem?.id])
 
 	/**
 	 * Fetch all admissions from API with status filter
@@ -208,14 +259,35 @@ function AdminVerificationCenter() {
 			setLoading(true)
 			setError(null)
 			const status = statusFilter === "All" ? undefined : statusFilter?.toLowerCase()
-			const response = await adminService.getAllAdmissions(1, 100, status) // Get larger batch
-			
+			const pageSize = 100
+			let page = 1
+			let hasNext = true
+			const allAdmissions: any[] = []
+
+			while (hasNext) {
+				const response = await adminService.getAllAdmissions(
+					page,
+					pageSize,
+					status,
+					resolvedDataOrigin || (dataOriginFilter === "All" ? undefined : dataOriginFilter),
+				)
+
+				allAdmissions.push(...(response.data || []))
+				hasNext = Boolean(response.pagination?.hasNext)
+				page += 1
+
+				// Hard guard to prevent accidental infinite paging loops on malformed pagination metadata.
+				if (page > 200) {
+					hasNext = false
+				}
+			}
+
 			// Transform API data to VerificationItem format
-			const transformed = transformApiAdmissions(response)
+			const transformed = transformApiAdmissions(allAdmissions)
 			setApiVerifications(transformed)
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 [AdminVerificationCenter] Error fetching admissions:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to fetch admissions'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to fetch admissions'))
 		} finally {
 			setLoading(false)
 		}
@@ -226,14 +298,22 @@ function AdminVerificationCenter() {
 	 */
 	const transformApiAdmissions = (data: any): VerificationItem[] => {
 		// Handle both paginated and non-paginated responses
-		const admissions = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
+		// One row per real admission (multi-program announcements are verified as a whole).
+		const admissions: any[] = Array.isArray(data) ? data : (data?.data || data?.pending_verifications || [])
 		const statusMap: Record<string, VerificationStatus> = {
 			pending: "Pending",
 			verified: "Verified",
 			rejected: "Rejected",
 		}
 		
-		return admissions.map((admission: any) => {
+		const mappedItems = admissions.map((admission: any) => {
+			const resolvedTitle = admission.admission_title || admission.title || admission.program_title || 'Unknown'
+			const resolvedDegree = admission.degree_level || admission.degree_type || inferDegreeFromTitle(resolvedTitle)
+			const resolvedFee =
+				admission.fee_display ||
+				admission.fee ||
+				(admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A')
+
 			const universityName = safeLabel(
 				admission.university_name || admission.universities?.name || admission.location,
 				'Unknown University'
@@ -250,23 +330,33 @@ function AdminVerificationCenter() {
 					admission.admin_notes ||
 					null,
 				verificationStatusRaw: admission.verification_status,
+				dataOrigin: ((admission.data_origin || (String(admission.source_system || '').toLowerCase().includes('scraper') ? 'scraper' : 'manual')) as "scraper" | "manual" | "university"),
+				sourceSystem: admission.source_system || null,
 				id: admission.id || admission.admission_id,
-				admissionTitle: admission.admission_title || admission.title || admission.program_title || 'Unknown',
+				admissionTitle: resolvedTitle,
 				university: universityName,
-				submittedBy: safeLabel(admission.submitted_by_label || admission.submitted_by || admission.created_by, 'University'),
+				submittedBy: getSubmittedViaLabel(admission),
 				submittedOn: formatDisplayDate(admission.submitted_on || admission.created_at, 'N/A'),
 				status: statusMap[admission.verification_status] || (admission.status_label === 'Pending' ? 'Pending' : 'Pending' as VerificationStatus),
 				metadata: {
-					title: admission.admission_title || admission.title || 'Unknown',
-					degree: admission.degree_level || 'N/A',
-					program: admission.program_type || 'N/A',
-					fee: admission.fee_display || (admission.application_fee ? `${admission.currency || 'PKR'} ${admission.application_fee}` : 'N/A'),
+					title: resolvedTitle,
+					degree: resolvedDegree,
+					program: admission.program_type || admission.program_title || 'N/A',
+					fee: resolvedFee,
 					deadline: formatDisplayDate(admission.deadline, 'N/A'),
 					academicYear: 'N/A',
 					university: universityName,
 				},
 			}
 		})
+
+		// Keep scraper-origin records isolated to the dedicated scraped verification route
+		// to avoid duplicate rendering across both verification pages.
+		if (!resolvedDataOrigin) {
+			return mappedItems.filter((item) => item.dataOrigin !== "scraper")
+		}
+
+		return mappedItems
 	}
 
 	// Use API data only; no mock fallback
@@ -315,11 +405,16 @@ function AdminVerificationCenter() {
 		setSelectedItem(item)
 		setActionType(null)
 		setRemarks("")
+		const admissionId = resolveCanonicalAdmissionId(item)
+		if (!admissionId) {
+			setError('This record cannot be reviewed yet because its canonical admission ID is missing. Please refresh and try again.')
+			return
+		}
 		
 		// Fetch changelog data for this admission
 		try {
 			const changelogResponse = await adminService.getChangeLogs(1, 100, {
-				admission_id: item.id,
+				admission_id: admissionId,
 			})
 			
 			// Handle both paginated and non-paginated responses
@@ -388,7 +483,7 @@ function AdminVerificationCenter() {
 		setSelectedItem(null)
 		setActionType(null)
 		setRemarks("")
-		if (location.state?.selectedId) {
+		if ((location.state as { selectedId?: string } | null | undefined)?.selectedId) {
 			navigate(`${location.pathname}${location.search}`, { replace: true, state: {} })
 		}
 	}
@@ -421,19 +516,21 @@ function AdminVerificationCenter() {
 		try {
 			setSubmitting(true)
 			setError(null) // Clear any previous errors
+			const admissionId = resolveCanonicalAdmissionId(selectedItem)
+			if (!admissionId) {
+				setError('Unable to submit verification because canonical admission ID is missing for this record.')
+				return
+			}
 
 			if (actionType === 'Verify') {
-				console.log('✅ Verifying admission:', selectedItem.id)
-				await adminService.verifyAdmission(selectedItem.id, {
+				await adminService.verifyAdmission(admissionId, {
 					verification_status: 'verified',
 					verification_comments: remarks,
 				})
 			} else if (actionType === 'Reject') {
-				console.log('❌ Rejecting admission:', selectedItem.id)
-				await adminService.rejectAdmission(selectedItem.id, remarks)
+				await adminService.rejectAdmission(admissionId, remarks)
 			} else if (actionType === 'Revision') {
-				console.log('🟠 Requesting revision:', selectedItem.id)
-				await adminService.requestRevision(selectedItem.id, remarks)
+				await adminService.requestRevision(admissionId, remarks)
 			}
 
 			await showSuccessToast(
@@ -452,9 +549,9 @@ function AdminVerificationCenter() {
 
 			// Refresh the list after successful action
 			await fetchAllAdmissions()
-		} catch (err: any) {
+		} catch (err) {
 			console.error('🔴 [AdminVerificationCenter] Error submitting action:', err)
-			setError(getFriendlyErrorMessage(err?.message || 'Failed to submit action'))
+			setError(getFriendlyErrorMessage(toApiError(err).message || 'Failed to submit action'))
 		} finally {
 			setSubmitting(false)
 		}
@@ -462,6 +559,7 @@ function AdminVerificationCenter() {
 
 	const handleResetFilters = () => {
 		setStatusFilter("All")
+		setDataOriginFilter(resolvedDataOrigin || "All")
 		setUniversityFilter("All")
 		setSearchQuery("")
 		setCurrentPage(1)
@@ -472,7 +570,7 @@ function AdminVerificationCenter() {
 	if (showInitialLoading) {
 		return (
 			<AdminLayout>
-				<LoadingSpinner fullScreen message="Loading pending admissions..." />
+				<LoadingSpinner fullScreen message="Loading admissions from backend..." />
 			</AdminLayout>
 		)
 	}
@@ -483,9 +581,13 @@ function AdminVerificationCenter() {
 				{/* Header */}
 				<div className="mb-6">
 					<h1 className="text-2xl font-bold mb-2" style={{ color: "#111827" }}>
-						Verification Center
+						{resolvedDataOrigin === "scraper" ? "Imported Records Verification Center" : "Verification Center"}
 					</h1>
-					<p className="text-gray-600">Review and manage admissions requiring verification.</p>
+					<p className="text-gray-600">
+						{resolvedDataOrigin === "scraper"
+							? "Review and manage imported admissions synced through backend ingestion, including FAST and other universities."
+							: "Review and manage admissions requiring verification."}
+					</p>
 				</div>
 
 				{/* Error Banner */}
@@ -545,6 +647,24 @@ function AdminVerificationCenter() {
 
 						{/* University Filter & Search */}
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+							{!resolvedDataOrigin && (
+								<div className="flex items-center gap-2">
+									<label className="text-sm text-gray-600">Source:</label>
+									<select
+										value={dataOriginFilter}
+										onChange={(e) => {
+											setDataOriginFilter(e.target.value as "All" | "scraper" | "manual" | "university")
+											setCurrentPage(1)
+										}}
+										className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+									>
+										<option value="All">All</option>
+										<option value="university">University</option>
+										<option value="manual">Manual</option>
+									</select>
+								</div>
+							)}
+
 							<div className="flex items-center gap-2">
 								<label className="text-sm text-gray-600">University:</label>
 								<select
@@ -599,9 +719,9 @@ function AdminVerificationCenter() {
 						<table className="w-full">
 							<thead>
 								<tr className="border-b border-gray-200">
-									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Admission Title</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Program Title</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">University</th>
-									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted By</th>
+									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted Via</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Submitted On</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Status</th>
 									<th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Remarks</th>
@@ -617,6 +737,11 @@ function AdminVerificationCenter() {
 												<p className="font-medium" style={{ color: "#111827" }}>
 													{item.admissionTitle}
 												</p>
+													{item.dataOrigin === "scraper" && (
+														<span className="inline-block mt-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+																Imported
+														</span>
+													)}
 											</td>
 											<td className="py-4 px-4">
 												<p className="text-sm text-gray-600">{item.university}</p>
@@ -770,9 +895,9 @@ function AdminVerificationCenter() {
 									</h3>
 									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 										{[
-											{ label: "Title", value: selectedItem.metadata?.title || selectedItem.admissionTitle },
+											{ label: "Program Title", value: selectedItem.metadata?.title || selectedItem.admissionTitle },
 											{ label: "University", value: selectedItem.metadata?.university || selectedItem.university },
-											{ label: "Submitted By", value: selectedItem.submittedBy },
+											{ label: "Submitted Via", value: selectedItem.submittedBy },
 											{ label: "Submitted On", value: formatDisplayDate(selectedItem.submittedOn, selectedItem.submittedOn || "—") },
 											{ label: "Degree", value: formatInline(selectedItem.metadata?.degree) },
 											{ label: "Program", value: formatInline(selectedItem.metadata?.program) },
@@ -915,7 +1040,7 @@ function AdminVerificationCenter() {
 									<div className="flex flex-wrap gap-3 mb-4">
 										<button
 											onClick={() => handleActionSelect("Verify")}
-											disabled={selectedItem.verificationStatusRaw === 'verified'}
+											disabled={selectedItem.verificationStatusRaw === 'verified' || submitting}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Verify"
 													? "text-white"
@@ -929,7 +1054,7 @@ function AdminVerificationCenter() {
 										</button>
 										<button
 											onClick={() => handleActionSelect("Reject")}
-											disabled={selectedItem.verificationStatusRaw === 'rejected'}
+											disabled={selectedItem.verificationStatusRaw === 'rejected' || submitting}
 											className={`px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
 												actionType === "Reject"
 													? "text-white"
@@ -988,7 +1113,7 @@ function AdminVerificationCenter() {
 								{actionType && (
 									<button
 										onClick={handleSubmitAction}
-										disabled={remarks.trim().length < 10}
+										disabled={remarks.trim().length < 10 || submitting}
 										className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors hover:opacity-90"
 										style={{ backgroundColor: "#004AAD" }}
 									>
