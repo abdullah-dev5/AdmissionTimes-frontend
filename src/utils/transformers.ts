@@ -80,6 +80,7 @@ export function transformAdmission(
     aiSummary: api.match_reason || undefined,
     eligibility: text(api.eligibility_text),
     academicYear: text(api.academic_year),
+    sourceAnnouncementTitle: text(api.source_announcement_title),
     officialUrl: text(api.primary_apply_url),
     websiteUrl: text(api.university_website_url),
     portalUrl: text(api.admission_portal_url),

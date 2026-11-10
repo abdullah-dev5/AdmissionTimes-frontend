@@ -533,6 +533,9 @@ function ProgramDetail() {
                       <div className="p-4 bg-gray-50 rounded-lg col-span-2">
                         <p className="text-sm text-gray-600 mb-1">Source</p>
                         <p className="font-semibold text-gray-800">{sourceLabel}</p>
+                        {program.sourceAnnouncementTitle ? (
+                          <p className="text-sm text-gray-700 mt-1">Listed in “{program.sourceAnnouncementTitle}”</p>
+                        ) : null}
                         <p className="text-xs text-gray-500 mt-1">{sourceHint}</p>
                       </div>
                     </div>

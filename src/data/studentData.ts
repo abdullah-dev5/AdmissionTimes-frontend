@@ -38,6 +38,8 @@ export interface StudentAdmission {
   eligibility?: string
   /** Academic year entered by the university, e.g. "2026-2027". */
   academicYear?: string
+  /** Scraped programs: the announcement they were listed in. */
+  sourceAnnouncementTitle?: string
   officialUrl?: string
   websiteUrl?: string
   portalUrl?: string
