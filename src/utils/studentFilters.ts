@@ -9,6 +9,9 @@
  */
 
 import type { StudentAdmission } from '../data/studentData'
+import { createLogger } from './logger'
+
+const log = createLogger('studentFilters')
 
 /**
  * Filter admissions for student visibility
@@ -32,7 +35,7 @@ export function filterStudentVisibleAdmissions(
       acc[status] = (acc[status] || 0) + 1
       return acc
     }, {} as Record<string, number>)
-    console.log('📊 [filterStudentVisibleAdmissions] Status breakdown:', statusCounts)
+    log.debug('Status breakdown:', statusCounts)
   }
 
   const filtered = admissions.filter(a => {
@@ -46,15 +49,15 @@ export function filterStudentVisibleAdmissions(
     
     // Debug logging for filtered out admissions
     if (debugLogging && !shouldShow && a.verificationStatus) {
-      console.log(`🚫 [filterStudentVisibleAdmissions] Hiding "${a.program}" with status: ${a.verificationStatus}`)
+      log.debug(`Hiding "${a.program}" with status: ${a.verificationStatus}`)
     }
     
     return shouldShow
   })
 
   if (debugLogging) {
-    console.log(
-      `📚 [filterStudentVisibleAdmissions] Showing ${filtered.length}/${admissions.length} admissions ` +
+    log.debug(
+      `Showing ${filtered.length}/${admissions.length} admissions ` +
       `(hidden: ${admissions.length - filtered.length})`
     )
   }

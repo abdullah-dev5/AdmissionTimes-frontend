@@ -14,6 +14,9 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('supabase')
 
 /**
  * Get Supabase configuration from environment variables
@@ -24,10 +27,10 @@ const getSupabaseConfig = () => {
 
   // Validate configuration
   if (!url || !key) {
-    console.error('❌ Missing Supabase Configuration');
-    console.error('   VITE_SUPABASE_URL:', url ? '✅' : '❌ NOT SET');
-    console.error('   VITE_SUPABASE_ANON_KEY:', key ? '✅' : '❌ NOT SET');
-    console.error('   Please check your .env file');
+    log.error('Missing Supabase Configuration');
+    log.error('   VITE_SUPABASE_URL:', url ? '✅' : '❌ NOT SET');
+    log.error('   VITE_SUPABASE_ANON_KEY:', key ? '✅' : '❌ NOT SET');
+    log.error('   Please check your .env file');
   }
 
   return { url: url || '', key: key || '' };
@@ -61,7 +64,7 @@ export const isRealtimeEnabled = import.meta.env.VITE_ENABLE_REALTIME === 'true'
  * 
  * // Listen for auth changes
  * supabase.auth.onAuthStateChange((event, session) => {
- *   console.log('Auth state changed:', event);
+ *   log.debug('Auth state changed:', event);
  * });
  */
 export const supabase: SupabaseClient = createClient(url, key, {
@@ -103,8 +106,8 @@ supabase.auth.onAuthStateChange((_event, session) => syncRealtimeAuth(session?.a
  * @example
  * const { session, error } = await getSession();
  * if (session) {
- *   console.log('User is logged in');
- *   console.log('Access token:', session.access_token);
+ *   log.debug('User is logged in');
+ *   log.debug('Access token:', session.access_token);
  * }
  */
 export const getSession = async () => {
@@ -129,7 +132,7 @@ export const getAccessToken = async (): Promise<string | null> => {
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error) {
-    console.error('❌ Failed to get session:', error);
+    log.error('Failed to get session:', error);
     return null;
   }
 
@@ -144,15 +147,15 @@ export const getAccessToken = async (): Promise<string | null> => {
  * @example
  * const user = await getAuthUser();
  * if (user) {
- *   console.log('User ID:', user.id);
- *   console.log('Email:', user.email);
+ *   log.debug('User ID:', user.id);
+ *   log.debug('Email:', user.email);
  * }
  */
 export const getAuthUser = async () => {
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error) {
-    console.error('❌ Failed to get user:', error);
+    log.error('Failed to get user:', error);
     return null;
   }
 
@@ -184,7 +187,7 @@ export const signOutUser = async () => {
  * useEffect(() => {
  *   const { data: { subscription } } = supabase.auth.onAuthStateChange(
  *     (event, session) => {
- *       console.log('Auth event:', event);
+ *       log.debug('Auth event:', event);
  *       setUser(session?.user || null);
  *     }
  *   );
@@ -207,7 +210,7 @@ export const onAuthStateChange = (callback: any) => {
  * @example
  * const { data: { session }, error } = await supabase.auth.refreshSession();
  * if (session) {
- *   console.log('New token:', session.access_token);
+ *   log.debug('New token:', session.access_token);
  * }
  */
 export const refreshToken = async () => {

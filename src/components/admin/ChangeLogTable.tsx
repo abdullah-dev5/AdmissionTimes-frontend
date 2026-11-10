@@ -1,6 +1,6 @@
 import { getChangeTypeColor, type AdminChangeLog } from "../../data/adminData"
 import { formatDateTimeSafe, getRelativeTimeSafe } from "../../utils/dateUtils"
-import { formatInlineValue, sanitizeActorName } from "../../utils/changelogFormatting"
+import { changeActionLabel, formatInlineValue, sanitizeActorName } from "../../utils/changelogFormatting"
 
 interface ChangeLogTableProps {
 	logs: AdminChangeLog[]
@@ -89,6 +89,9 @@ export default function ChangeLogTable({ logs, onViewDiff }: ChangeLogTableProps
 									>
 										<span className="hidden sm:inline">{log.changeType}</span>
 									</span>
+									<p className="text-xs text-gray-600 mt-1.5">
+										{changeActionLabel({ action_type: log.action_type, field_name: log.diff[0]?.field, new_value: log.diff[0]?.newValue, diff_summary: log.summary })}
+									</p>
 								</td>
 
 								{/* Summary with truncation */}

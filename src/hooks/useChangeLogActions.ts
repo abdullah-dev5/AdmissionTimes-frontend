@@ -5,6 +5,9 @@
 
 import { useCallback } from "react"
 import type { AdminChangeLog } from "../data/adminData"
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('useChangeLogActions')
 
 export interface ChangeLogActionsAPI {
 	copyChangeLogId: (id: string | number) => void
@@ -28,14 +31,46 @@ export const useChangeLogActions = (): ChangeLogActionsAPI => {
 		const text = String(id)
 		navigator.clipboard.writeText(text).then(
 			() => {
-				console.log("Changelog ID copied to clipboard:", text)
+				logger.debug("Changelog ID copied to clipboard:", text)
 			},
 			() => {
-				console.error("Failed to copy changelog ID")
+				logger.error("Failed to copy changelog ID")
 			}
 		)
 	}, [])
 
+	/**
+	 * Generate a formatted text report for changelogs
+	 */
+	const generateChangelogReport = useCallback((logs: AdminChangeLog[]): string => {
+		const lines: string[] = []
+		lines.push(`CHANGELOG REPORT - Generated ${new Date().toLocaleString()}`)
+		lines.push(`Total Entries: ${logs.length}`)
+		lines.push("")
+
+		logs.forEach((log, index) => {
+			lines.push(`[${index + 1}] ${log.admissionTitle}`)
+			lines.push(`    ID: ${log.id}`)
+			lines.push(`    Modified By: ${log.modifiedBy}`)
+			lines.push(`    Type: ${log.changeType}`)
+			lines.push(`    Time: ${log.timestamp}`)
+			if (log.reasonForChange) {
+				lines.push(`    Reason: ${log.reasonForChange}`)
+			}
+			lines.push(`    Summary: ${log.summary}`)
+			lines.push(`    Changes:`)
+			log.diff.forEach((change) => {
+				lines.push(`      - ${change.field}: "${change.oldValue}" → "${change.newValue}"`)
+			})
+			lines.push("")
+		})
+
+		return lines.join("\n")
+	}, [])
+
+	/**
+	 * Get a human-readable summary of a changelog entry
+	 */
 	/**
 	 * Copy entire changelog entry to clipboard as formatted text
 	 */
@@ -43,13 +78,13 @@ export const useChangeLogActions = (): ChangeLogActionsAPI => {
 		const text = generateChangelogReport([log])
 		navigator.clipboard.writeText(text).then(
 			() => {
-				console.log("Changelog entry copied to clipboard")
+				logger.debug("Changelog entry copied to clipboard")
 			},
 			() => {
-				console.error("Failed to copy changelog entry")
+				logger.error("Failed to copy changelog entry")
 			}
 		)
-	}, [])
+	}, [generateChangelogReport])
 
 	/**
 	 * Export a single changelog entry
@@ -91,38 +126,6 @@ export const useChangeLogActions = (): ChangeLogActionsAPI => {
 		URL.revokeObjectURL(url)
 	}, [])
 
-	/**
-	 * Generate a formatted text report for changelogs
-	 */
-	const generateChangelogReport = useCallback((logs: AdminChangeLog[]): string => {
-		const lines: string[] = []
-		lines.push(`CHANGELOG REPORT - Generated ${new Date().toLocaleString()}`)
-		lines.push(`Total Entries: ${logs.length}`)
-		lines.push("")
-
-		logs.forEach((log, index) => {
-			lines.push(`[${index + 1}] ${log.admissionTitle}`)
-			lines.push(`    ID: ${log.id}`)
-			lines.push(`    Modified By: ${log.modifiedBy}`)
-			lines.push(`    Type: ${log.changeType}`)
-			lines.push(`    Time: ${log.timestamp}`)
-			if (log.reasonForChange) {
-				lines.push(`    Reason: ${log.reasonForChange}`)
-			}
-			lines.push(`    Summary: ${log.summary}`)
-			lines.push(`    Changes:`)
-			log.diff.forEach((change) => {
-				lines.push(`      - ${change.field}: "${change.oldValue}" → "${change.newValue}"`)
-			})
-			lines.push("")
-		})
-
-		return lines.join("\n")
-	}, [])
-
-	/**
-	 * Get a human-readable summary of a changelog entry
-	 */
 	const getChangelogSummaryText = useCallback((log: AdminChangeLog): string => {
 		const changeCount = log.diff.length
 		const changedFields = log.diff.map((d) => d.field).join(", ")
@@ -142,7 +145,7 @@ export const useChangeLogActions = (): ChangeLogActionsAPI => {
 					text: summary,
 					url: window.location.href,
 				})
-				.catch((error) => console.log("Share failed:", error))
+				.catch((error) => logger.debug("Share failed:", error))
 		} else {
 			// Fallback: copy to clipboard
 			copyChangeToClipboard(log)
@@ -190,7 +193,7 @@ const convertToCsv = (logs: AdminChangeLog[]): string => {
 export const useChangeLogAnalytics = () => {
 	const trackEvent = useCallback(
 		(event: "view_changelog" | "export_changelog" | "share_changelog" | "filter_changelog", logId?: string) => {
-			console.log(`Analytics Event: ${event}`, { logId, timestamp: new Date().toISOString() })
+			logger.debug(`Analytics Event: ${event}`, { logId, timestamp: new Date().toISOString() })
 			// TODO: Implement actual analytics tracking when analytics service is ready
 		},
 		[]

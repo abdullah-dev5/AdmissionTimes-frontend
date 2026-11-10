@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { changelogsService, type ApiChangeLogEntry } from "../../services/changelogsService"
+import { getApiErrorMessage } from "../../services/apiClient"
 import DiffValueDisplay from "../../components/changelog/DiffValueDisplay"
 import UniversityLayout from "../../layouts/UniversityLayout"
 import { type Admission, type ChangeLogItem } from "../../data/universityData"
 import { useUniversityStore } from "../../store/universityStore"
-import { expandDiffForDisplay, formatFieldLabel, parseDiffValue } from "../../utils/changelogFormatting"
+import { changeActionLabel, changeReason, expandDiffForDisplay, formatFieldLabel, parseDiffValue, pktDayBound, sanitizeActorName } from "../../utils/changelogFormatting"
 import { formatDateTimeSafe, getRelativeTimeSafe } from "../../utils/dateUtils"
 
 const formatLabel = (value: string) =>
@@ -38,23 +40,12 @@ const getStatusBadgeClasses = (status?: string) => {
 	return "bg-slate-100 text-slate-700 border border-slate-200"
 }
 
-const isUuid = (value: string) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(value)
-
 const splitBySeparator = (value: string) => {
 	const parts = value.split(/\s[•|]\s|\s-\s/)
 	return parts[0] ?? value
 }
 
-const sanitizeActor = (value?: string) => {
-	if (!value) return "—"
-	let cleaned = splitBySeparator(value)
-	cleaned = cleaned.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
-	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
-	if (!cleaned || isUuid(cleaned)) return "Admin"
-	if (!Number.isNaN(Date.parse(cleaned))) return "Admin"
-	if (cleaned.toLowerCase() === "system") return "Admin"
-	return cleaned
-}
+const sanitizeActor = (value?: string) => sanitizeActorName(value)
 
 const KNOWN_STATUS_LABELS = new Set(["Verified", "Pending Audit", "Rejected", "Draft", "Active", "Closed"])
 
@@ -131,20 +122,6 @@ const formatDateTimeClean = (value: string) => {
 	return formatDateTimeSafe(trimmed, trimmed)
 }
 
-const toDateKey = (value: string) => {
-	if (!value) return ""
-	const trimmed = splitBySeparator(value)
-	const parsed = new Date(trimmed)
-	if (Number.isNaN(parsed.getTime())) {
-		const directDate = trimmed.match(/^(\d{4}-\d{2}-\d{2})/)
-		return directDate?.[1] || ""
-	}
-	const year = parsed.getFullYear()
-	const month = String(parsed.getMonth() + 1).padStart(2, "0")
-	const day = String(parsed.getDate()).padStart(2, "0")
-	return `${year}-${month}-${day}`
-}
-
 const normalizeValue = (value: unknown) => parseDiffValue(value)
 
 function FilterBar({
@@ -166,7 +143,7 @@ function FilterBar({
 	onAdmissionChange: (v: string) => void
 	search: string
 	onSearchChange: (v: string) => void
-	options: string[]
+	options: Array<{ value: string; label: string }>
 }) {
 	return (
 		<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -197,8 +174,8 @@ function FilterBar({
 						className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 					>
 						{options.map((a) => (
-							<option key={a} value={a}>
-								{a}
+							<option key={a.value} value={a.value}>
+								{a.label}
 							</option>
 						))}
 					</select>
@@ -207,7 +184,7 @@ function FilterBar({
 			<div className="relative w-full md:max-w-sm">
 				<input
 					type="text"
-					placeholder="Search by title or modifier"
+					placeholder="Search by program or change"
 					value={search}
 					onChange={(e) => onSearchChange(e.target.value)}
 					className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -225,7 +202,7 @@ function ChangeTable({
 	admissions,
 	onViewDiff,
 }: {
-	data: ChangeLogItem[]
+	data: Array<ChangeLogItem & { action?: string }>
 	admissions: Admission[]
 	onViewDiff: (item: ChangeLogItem) => void
 }) {
@@ -276,6 +253,7 @@ function ChangeTable({
 								</p>
 							</td>
 							<td className="py-4 px-4">
+								<p className="text-sm font-medium text-gray-800 mb-1">{row.action}</p>
 								<div className="flex flex-wrap gap-2 max-w-[260px]">
 									{row.diff.map((d) => (
 										<span key={d.field} className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-medium">
@@ -377,48 +355,87 @@ function DiffModal({ item, onClose }: { item: ChangeLogItem | null; onClose: () 
 	)
 }
 
+const stringifyValue = (value: unknown): string => {
+	if (value === null || value === undefined) return ""
+	return typeof value === "string" ? value : JSON.stringify(value)
+}
+
+type ChangeLogRow = ChangeLogItem & { action: string }
+
+const toChangeLogItem = (row: ApiChangeLogEntry): ChangeLogRow => {
+	const reason = changeReason(row.metadata)
+	return {
+		id: String(row.id),
+		admissionId: row.admission_id,
+		admission: row.admission_title || row.program_title || "Unknown program",
+		modifiedBy: row.modified_by || (row.actor_type === "admin" ? "Administrator" : row.actor_type === "system" ? "system" : "University"),
+		date: row.changed_at_iso || row.created_at || "",
+		diff: [{ field: row.field_name || "record", old: stringifyValue(row.old_value), new: stringifyValue(row.new_value) }],
+		// The admin's reason (rejection / revision notes) is what the university needs to act on.
+		remarks: [row.diff_summary, reason && !row.diff_summary?.includes(reason) ? `Reason: ${reason}` : null].filter(Boolean).join("\n") || undefined,
+		action: changeActionLabel(row),
+	}
+}
+
+/** Rows per page; the API scopes results to the signed-in rep's university. */
+const PAGE_SIZE = 20
+
 function ChangeLogs() {
-	const changeLogs = useUniversityStore((state) => state.changeLogs)
 	const admissions = useUniversityStore((state) => state.admissions)
+	const [changeLogs, setChangeLogs] = useState<ChangeLogRow[]>([])
+	const [total, setTotal] = useState(0)
+	const [page, setPage] = useState(1)
+	const [loading, setLoading] = useState(true)
+	const [loadError, setLoadError] = useState<string | null>(null)
 	const [from, setFrom] = useState("")
 	const [to, setTo] = useState("")
-	const [admission, setAdmission] = useState("All Admissions")
+	const [admission, setAdmission] = useState("")
 	const [search, setSearch] = useState("")
+	const [debouncedSearch, setDebouncedSearch] = useState("")
 	const [selected, setSelected] = useState<ChangeLogItem | null>(null)
 
+	useEffect(() => {
+		const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+		return () => clearTimeout(timer)
+	}, [search])
+
+	// Any filter change starts again from the first page.
+	useEffect(() => setPage(1), [from, to, admission, debouncedSearch])
+
+	// Filters and paging run on the server (this page used to load the newest
+	// 100 entries and filter those only).
+	useEffect(() => {
+		let cancelled = false
+		setLoading(true)
+		setLoadError(null)
+		changelogsService
+			.list(page, PAGE_SIZE, {
+				admission_id: admission || undefined,
+				date_from: from ? pktDayBound(from, false) : undefined,
+				date_to: to ? pktDayBound(to, true) : undefined,
+				search: debouncedSearch || undefined,
+			})
+			.then((response) => {
+				if (cancelled) return
+				setChangeLogs((response.data || []).map(toChangeLogItem))
+				setTotal(response.pagination?.total ?? 0)
+			})
+			.catch((err) => {
+				if (!cancelled) setLoadError(getApiErrorMessage(err, "Failed to load change logs"))
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false)
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [page, admission, from, to, debouncedSearch])
+
 	const admissionOptions = useMemo(
-		() => ["All Admissions", ...admissions.map((a) => a.title)],
+		() => [{ value: "", label: "All Admissions" }, ...admissions.map((a) => ({ value: a.id, label: a.title }))],
 		[admissions],
 	)
-
-	const logs = useMemo(() => {
-		return [...changeLogs].sort((a, b) => (a.date < b.date ? 1 : -1))
-	}, [changeLogs])
-
-	const filtered = useMemo(() => {
-		let list = logs
-		if (admission !== "All Admissions") {
-			list = list.filter((l) => l.admission === admission)
-		}
-		if (from) {
-			list = list.filter((l) => {
-				const key = toDateKey(l.date)
-				return key !== "" && key >= from
-			})
-		}
-		if (to) {
-			list = list.filter((l) => {
-				const key = toDateKey(l.date)
-				return key !== "" && key <= to
-			})
-		}
-		if (search.trim()) {
-			const q = search.trim().toLowerCase()
-			list = list.filter((l) => l.admission.toLowerCase().includes(q) || l.modifiedBy.toLowerCase().includes(q))
-		}
-		// Keep latest first
-		return [...list].sort((a, b) => (a.date < b.date ? 1 : -1))
-	}, [logs, admission, from, to, search])
+	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
 	return (
 		<UniversityLayout>
@@ -444,7 +461,40 @@ function ChangeLogs() {
 						/>
 					</div>
 					<div className="bg-white shadow-sm rounded-xl p-4">
-						<ChangeTable data={filtered} admissions={admissions} onViewDiff={setSelected} />
+						{loadError ? (
+							<p className="text-sm text-red-700" role="alert">{loadError}</p>
+						) : loading ? (
+							<p className="text-sm text-gray-500">Loading change logs…</p>
+						) : (
+							<>
+								<ChangeTable data={changeLogs} admissions={admissions} onViewDiff={setSelected} />
+								{total > 0 ? (
+									<div className="flex items-center justify-between pt-4 text-sm text-gray-600">
+										<span>
+											{total} change{total === 1 ? "" : "s"} · page {page} of {totalPages}
+										</span>
+										<div className="flex gap-2">
+											<button
+												type="button"
+												disabled={page <= 1}
+												onClick={() => setPage((p) => p - 1)}
+												className="px-3 py-1.5 rounded-lg border border-gray-300 disabled:opacity-50"
+											>
+												Previous
+											</button>
+											<button
+												type="button"
+												disabled={page >= totalPages}
+												onClick={() => setPage((p) => p + 1)}
+												className="px-3 py-1.5 rounded-lg border border-gray-300 disabled:opacity-50"
+											>
+												Next
+											</button>
+										</div>
+									</div>
+								) : null}
+							</>
+						)}
 					</div>
 				</main>
 				<DiffModal item={selected} onClose={() => setSelected(null)} />

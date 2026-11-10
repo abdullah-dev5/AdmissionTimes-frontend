@@ -11,6 +11,9 @@
 
 import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { getAccessToken, supabase } from './supabase';
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('apiClient')
 
 const isApiDebugEnabled = import.meta.env.VITE_DEBUG_API === 'true';
 
@@ -63,7 +66,7 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
     config.headers.set('Authorization', `Bearer ${token}`);
   }
   if (isApiDebugEnabled) {
-    console.debug(`[API] ${config.method?.toUpperCase()} ${config.url} (auth: ${token ? 'yes' : 'no'})`);
+    log.debug(`${config.method?.toUpperCase()} ${config.url} (auth: ${token ? 'yes' : 'no'})`);
   }
   return config;
 });
@@ -95,7 +98,7 @@ apiClient.interceptors.response.use(
     }
 
     if (isApiDebugEnabled) {
-      console.debug(`[API] ${status ?? 'network'} ${original?.method?.toUpperCase()} ${original?.url}: ${error.response?.data?.message ?? error.message}`);
+      log.debug(`${status ?? 'network'} ${original?.method?.toUpperCase()} ${original?.url}: ${error.response?.data?.message ?? error.message}`);
     }
     return Promise.reject(error);
   }

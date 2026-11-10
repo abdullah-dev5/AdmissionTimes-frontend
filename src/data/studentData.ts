@@ -26,6 +26,8 @@ export interface StudentAdmission {
   dataOrigin?: string
   programStatus: ProgramStatus
   updated: string
+  /** When the admission was first published (ISO). */
+  createdAt?: string
   daysRemaining: number
   /** False when no deadline has been announced (daysRemaining is then meaningless). */
   hasDeadline?: boolean
@@ -34,6 +36,8 @@ export interface StudentAdmission {
   logoBg: string
   aiSummary?: string
   eligibility?: string
+  /** Academic year entered by the university, e.g. "2026-2027". */
+  academicYear?: string
   officialUrl?: string
   websiteUrl?: string
   portalUrl?: string

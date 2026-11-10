@@ -72,7 +72,7 @@ export interface AuditItem {
 }
 
 export interface ChangeLogItem {
-	id: number
+	id: string
 	admissionId?: string
 	admission: string
 	modifiedBy: string

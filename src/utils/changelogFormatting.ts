@@ -387,23 +387,55 @@ export const highlightDifference = (oldValue: unknown, newValue: unknown): { has
  */
 export const sanitizeActorName = (value?: string): string => {
 	if (!value) return "—"
-	if (value.trim().toLowerCase() === "system") return "Admin"
+	// Scraper imports are recorded as "system"; they were shown as "Admin".
+	if (value.trim().toLowerCase() === "system") return "Automated import"
 
-	// Remove UUID
-	let cleaned = value.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
-
-	// Clean up extra spaces
-	cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
-
-	// If still empty or looks like UUID, return generic label
-	if (!cleaned || isUuid(cleaned)) return "Admin"
-
-	// If looks like a date, return generic label
-	if (!Number.isNaN(Date.parse(cleaned))) return "Admin"
-	if (cleaned.toLowerCase() === "system") return "Admin"
-
+	const cleaned = value.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "").replace(/\s{2,}/g, " ").trim()
+	if (!cleaned || isUuid(cleaned)) return "Unknown user"
 	return cleaned
 }
+
+const unquote = (value: unknown): string => String(value ?? "").replace(/^"|"$/g, "").toLowerCase()
+
+/**
+ * What happened, in words ("Verified", "Revision requested", "Edited: Deadline").
+ * The backend records the action type plus the field and new value.
+ */
+export const changeActionLabel = (log: { action_type?: string | null; field_name?: string | null; new_value?: unknown; diff_summary?: string | null }): string => {
+	const action = (log.action_type || "").toLowerCase()
+	const summary = (log.diff_summary || "").toLowerCase()
+	if (action === "created") return "Created"
+	if (action === "verified") return "Verified"
+	if (action === "rejected") return "Rejected"
+	if (action === "status_changed") {
+		if (summary.includes("revision")) return "Revision requested"
+		if (summary.includes("re-verification")) return "Sent for re-verification"
+		if (summary.includes("resubmitted")) return "Resubmitted"
+		const to = unquote(log.new_value)
+		return to === "pending" ? "Submitted for review" : `Status: ${to || "changed"}`
+	}
+	if (action === "updated") {
+		if (log.field_name === "is_active") return "Deactivated"
+		return log.field_name ? `Edited: ${formatFieldLabel(log.field_name)}` : "Edited"
+	}
+	return action ? action.replace(/_/g, " ") : "Change"
+}
+
+/** Admin's reason / remarks stored with a moderation entry. */
+export const changeReason = (metadata?: Record<string, unknown> | null): string | undefined => {
+	if (!metadata) return undefined
+	for (const key of ["rejection_reason", "admin_notes", "reason"]) {
+		const value = metadata[key]
+		if (typeof value === "string" && value.trim()) return value.trim()
+	}
+	return undefined
+}
+
+/**
+ * Date filter bound in Pakistan time: the pickers give calendar days, and the
+ * server compares instants (it was reading them as UTC, 5 hours off).
+ */
+export const pktDayBound = (day: string, end: boolean): string => `${day}T${end ? "23:59:59.999" : "00:00:00"}+05:00`
 
 /**
  * Converts a value to appropriate display format with metadata

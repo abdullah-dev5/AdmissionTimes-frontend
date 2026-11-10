@@ -1,32 +1,13 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import AdmissionCard from '../../components/student/AdmissionCard'
+import { dayKey } from '../../utils/appDates'
 import StudentLayout from '../../layouts/StudentLayout'
-import { getStatusColor, type StudentAdmission } from '../../data/studentData'
+import type { StudentAdmission } from '../../data/studentData'
 import { useStudentStore } from '../../store/studentStore'
 import { useToast } from '../../contexts/ToastContext'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { filterStudentVisibleAdmissions } from '../../utils/studentFilters'
 import { formatDisplayDateLong } from '../../utils/dateUtils'
-import UpdatedBadge from '../../components/admin/UpdatedBadge'
-
-const parseDeadlineDate = (deadline?: string | null): Date | null => {
-  if (!deadline) return null
-  const value = String(deadline).trim()
-  if (!value) return null
-
-  // Date-only values should stay open for the full local day.
-  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (dateOnlyMatch) {
-    const year = Number(dateOnlyMatch[1])
-    const month = Number(dateOnlyMatch[2])
-    const day = Number(dateOnlyMatch[3])
-    return new Date(year, month - 1, day, 23, 59, 59, 999)
-  }
-
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return null
-  return parsed
-}
 
 const toDateKey = (date: Date) => {
   const year = date.getFullYear()
@@ -35,189 +16,104 @@ const toDateKey = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const normalizeDeadlineDate = (deadline?: string | null) => {
-  const parsed = parseDeadlineDate(deadline)
-  if (!parsed) return ''
-  return toDateKey(parsed)
-}
+/** Deadline day in Pakistan time (same rule as the dashboard and the mobile app). */
+const normalizeDeadlineDate = (deadline?: string | null) => (deadline ? dayKey(deadline) : '')
 
-const calculateDaysFromDeadline = (deadline?: string | null) => {
-  const deadlineDate = parseDeadlineDate(deadline)
-  if (!deadlineDate) return -1
-  const now = new Date()
-  const diffMs = deadlineDate.getTime() - now.getTime()
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-}
+const RANGES: Array<{ value: string; label: string }> = [
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: '30 days' },
+  { value: '3months', label: '90 days' },
+  { value: '', label: 'All' },
+]
 
-const deriveProgramStatusFromDays = (daysRemaining: number): StudentAdmission['programStatus'] => {
-  if (daysRemaining < 0) return 'Closed'
-  if (daysRemaining <= 7) return 'Closing Soon'
-  return 'Open'
-}
-
-const DeadlineHeader = ({ 
-  onUniversityFilter, 
-  onDegreeFilter, 
-  onDateRangeFilter,
+const DeadlineHeader = ({
+  universities,
+  degrees,
+  university,
+  degree,
+  range,
+  savedOnly,
+  search,
+  onUniversity,
+  onDegree,
+  onRange,
+  onSavedOnly,
   onSearch,
-  searchValue,
-  universities
-}: { 
-  onUniversityFilter: (value: string) => void
-  onDegreeFilter: (value: string) => void
-  onDateRangeFilter: (value: string) => void
-  onSearch: (value: string) => void
-  searchValue: string
+}: {
   universities: string[]
-}) => {
-  return (
-    <div className="bg-white flex flex-col border-b border-gray-200 px-6 py-3">
-      <div className="mb-3">
-        <h1 className="text-2xl font-bold" style={{ color: '#111827' }}>Upcoming Deadlines</h1>
-      </div>
-      <div className="flex flex-row  gap-3 items-center justify-between">
-      <div className="w-200 px-4 py-2">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search for program or university name..."
-            value={searchValue}
-            onChange={(e) => onSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-          <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mb-3">
-        <select
-          onChange={(e) => onUniversityFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
-        >
-          <option value="">All Universities</option>
-          {universities.map(uni => (
-            <option key={uni} value={uni}>{uni}</option>
-          ))}
-        </select>
-        <select
-          onChange={(e) => onDegreeFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
-        >
-          <option value="">All Degrees</option>
-          <option value="BS">Bachelor's</option>
-          <option value="MS">Master's</option>
-          <option value="PhD">PhD</option>
-          <option value="MBA">MBA</option>
-        </select>
-        <select
-          onChange={(e) => onDateRangeFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
-        >
-          <option value="">All Dates</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="3months">Next 3 Months</option>
-        </select>
-      </div>
-    </div>
-    </div>
-  )
-}
-
-const AlertToggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) => {
-  return (
-    <button
-      onClick={onToggle}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full cursor-pointer transition-colors ${
-        enabled ? 'bg-blue-600' : 'bg-gray-300'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-          enabled ? 'translate-x-5' : 'translate-x-1'
-        }`}
+  degrees: string[]
+  university: string
+  degree: string
+  range: string
+  savedOnly: boolean
+  search: string
+  onUniversity: (value: string) => void
+  onDegree: (value: string) => void
+  onRange: (value: string) => void
+  onSavedOnly: (value: boolean) => void
+  onSearch: (value: string) => void
+}) => (
+  <div className="bg-white border-b border-gray-200 px-6 py-4 space-y-3">
+    <h1 className="text-2xl font-bold text-gray-900">Deadlines</h1>
+    <div className="flex flex-wrap items-center gap-3">
+      <input
+        type="search"
+        placeholder="Search program or university"
+        aria-label="Search deadlines"
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+        className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
-    </button>
-  )
-}
-
-const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission & { daysRemaining: number; alertEnabled: boolean }; onAlertToggle: (id: string) => void }) => {
-  const statusColors = getStatusColor(deadline.status)
-  const isClosed = deadline.programStatus === 'Closed' || deadline.daysRemaining < 0
-  const isPending = deadline.verificationStatus === 'pending' || deadline.status === 'Pending'
-
-  return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${isClosed ? 'opacity-60' : ''}`}>
-      <div className="flex items-start justify-between mb-4 gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-semibold text-sm flex-shrink-0" style={{ backgroundColor: '#1F2937' }}>
-            {deadline.university.substring(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <h3 className="font-semibold text-lg mb-1 truncate" style={{ color: '#111827' }} title={deadline.university}>{deadline.university}</h3>
-            <p className="text-sm text-gray-600 truncate" title={deadline.program}>{deadline.program}</p>
-          </div>
-        </div>
-        <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: statusColors.bg, color: statusColors.text }}>
-          {deadline.programStatus}
-        </span>
-        {isPending && (
-          <span className="px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap bg-yellow-100 text-yellow-700">
-            Pending
-          </span>
-        )}
+      <select value={university} onChange={(e) => onUniversity(e.target.value)} aria-label="University" className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <option value="">All universities</option>
+        {universities.map((u) => (
+          <option key={u} value={u}>{u}</option>
+        ))}
+      </select>
+      <select value={degree} onChange={(e) => onDegree(e.target.value)} aria-label="Degree" className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <option value="">All degrees</option>
+        {degrees.map((d) => (
+          <option key={d} value={d}>{d}</option>
+        ))}
+      </select>
+      <div className="flex items-center gap-1" role="group" aria-label="Time range">
+        {RANGES.map((r) => (
+          <button
+            key={r.value || 'all'}
+            type="button"
+            onClick={() => onRange(r.value)}
+            aria-pressed={range === r.value}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${range === r.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
-      
-      {/* ✅ Show Updated Tag if status is Updated (after admin verification) */}
-      {deadline.status === 'Updated' && (
-        <div className="mb-4">
-          <UpdatedBadge size="sm" showTime={false} />
-        </div>
-      )}
-
-      <div className="space-y-2 mb-4">
-        <div className="flex items-center gap-2 text-sm">
-          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-          </svg>
-          <span className="text-gray-700">{deadline.degree}</span>
-        </div>
-
-        <div className="flex items-center gap-2 text-sm">
-          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <span className={`font-medium ${isClosed ? 'text-gray-500' : 'text-red-600'}`}>{deadline.deadlineDisplay}</span>
-        </div>
-
-        <div className="flex items-center gap-2 text-sm">
-          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className={`font-medium ${isClosed ? 'text-gray-500' : deadline.daysRemaining <= 7 ? 'text-red-600' : 'text-gray-700'}`}>
-            {deadline.daysRemaining < 0 ? 'Deadline Passed' : `${deadline.daysRemaining} days left`}
-          </span>
-        </div>
-      </div>
-
-      <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Alert</span>
-          <AlertToggle enabled={deadline.alertEnabled} onToggle={() => onAlertToggle(deadline.id)} />
-        </div>
-        <Link
-          to={`/program/${deadline.id}`}
-          className="text-sm font-medium cursor-pointer transition-colors hover:opacity-80"
-          style={{ color: '#2563EB' }}
-        >
-          View Details →
-        </Link>
-      </div>
+      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+        <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={savedOnly} onChange={(e) => onSavedOnly(e.target.checked)} />
+        Saved only
+      </label>
     </div>
-  )
-}
+  </div>
+)
+
+const DeadlineCard = ({ deadline, onAlertToggle }: { deadline: StudentAdmission & { daysRemaining: number; alertEnabled: boolean }; onAlertToggle: (id: string) => void }) => (
+  <AdmissionCard
+    admission={deadline}
+    footer={
+      <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+        <input
+          type="checkbox"
+          className="w-4 h-4 accent-blue-600"
+          checked={deadline.alertEnabled}
+          disabled={deadline.programStatus === 'Closed'}
+          onChange={() => onAlertToggle(deadline.id)}
+        />
+        Deadline reminders
+      </label>
+    }
+  />
+)
 
 const DeadlineList = ({ deadlines, onAlertToggle }: { deadlines: (StudentAdmission & { daysRemaining: number; alertEnabled: boolean })[]; onAlertToggle: (id: string) => void }) => {
   const isClosedDeadline = (deadline: StudentAdmission & { daysRemaining: number }) =>
@@ -344,13 +240,6 @@ const AiSummaryBox = ({ count }: { count: number }) => {
 const CalendarView = ({ deadlines, selectedDate, onDateSelect }: { deadlines: (StudentAdmission & { daysRemaining: number })[]; selectedDate: string | null; onDateSelect: (date: string | null) => void }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   
-  // Debug: Log deadlines passed to calendar
-  useEffect(() => {
-    if (deadlines.length > 0) {
-      console.log('📅 [CalendarView] Received deadlines:', deadlines.length)
-      console.log('📅 [CalendarView] Sample deadlines:', deadlines.slice(0, 2).map(d => d.deadline))
-    }
-  }, [deadlines])
   
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -570,7 +459,9 @@ function DeadlinePage() {
   const toggleAlert = useStudentStore((state) => state.toggleAlert)
   const [universityFilter, setUniversityFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
-  const [dateRangeFilter, setDateRangeFilter] = useState('')
+  // Same default as the mobile app: the next 30 days.
+  const [dateRangeFilter, setDateRangeFilter] = useState('month')
+  const [savedOnly, setSavedOnly] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
@@ -578,31 +469,20 @@ function DeadlinePage() {
     return Array.from(new Set(admissions.map(admission => admission.university))).sort()
   }, [admissions])
 
-  // Convert shared admissions to deadline format with calculated days remaining
-  const deadlines = useMemo(() => {
-    return admissions.map(admission => {
-      const daysRemaining = calculateDaysFromDeadline(admission.deadline)
-      return {
-      ...admission,
-      // Always recompute from deadline on this page to avoid stale/misaligned payload values.
-      daysRemaining,
-      programStatus: deriveProgramStatusFromDays(daysRemaining),
-      alertEnabled: Boolean(admission.alertEnabled),
-      }
-    })
-  }, [admissions])
+  const degrees = useMemo(
+    () => Array.from(new Set(admissions.map((a) => a.degree).filter((d) => d && d !== 'Not specified'))).sort(),
+    [admissions]
+  )
 
-  // Debug: Log deadline dates format
-  useEffect(() => {
-    if (deadlines.length > 0) {
-      console.log('📅 [DeadlinePage] Sample deadline dates:', deadlines.slice(0, 3).map(d => ({
-        program: d.program,
-        deadline: d.deadline,
-        daysRemaining: d.daysRemaining
-      })))
-      console.log('📅 [DeadlinePage] Total deadlines with dates:', deadlines.filter(d => d.deadline).length)
-    }
-  }, [deadlines])
+  // Programs with an announced deadline; days left and status come from the shared transform.
+  const deadlines = useMemo(
+    () =>
+      admissions
+        .filter((admission) => admission.hasDeadline !== false && Boolean(admission.deadline))
+        .map((admission) => ({ ...admission, alertEnabled: Boolean(admission.alertEnabled) })),
+    [admissions]
+  )
+
 
   const handleAlertToggle = (id: string) => {
     toggleAlert(id, { showError, showSuccess })
@@ -610,8 +490,9 @@ function DeadlinePage() {
 
   const filteredDeadlines = useMemo(() => {
     return deadlines.filter(deadline => {
-      if (universityFilter && !deadline.university.includes(universityFilter)) return false
-      if (degreeFilter && deadline.degreeType !== degreeFilter) return false
+      if (savedOnly && !deadline.saved) return false
+      if (universityFilter && deadline.university !== universityFilter) return false
+      if (degreeFilter && deadline.degree !== degreeFilter) return false
       if (searchQuery && !deadline.university.toLowerCase().includes(searchQuery.toLowerCase()) && !deadline.program.toLowerCase().includes(searchQuery.toLowerCase())) return false
       if (selectedDate) {
         const normalizedDeadline = normalizeDeadlineDate(deadline.deadline)
@@ -628,7 +509,7 @@ function DeadlinePage() {
       }
       return true
     })
-  }, [deadlines, universityFilter, degreeFilter, searchQuery, selectedDate, dateRangeFilter])
+  }, [deadlines, universityFilter, degreeFilter, searchQuery, selectedDate, dateRangeFilter, savedOnly])
 
   const approachingCount = filteredDeadlines.filter(d => d.daysRemaining >= 0 && d.daysRemaining <= 7).length
 
@@ -636,12 +517,18 @@ function DeadlinePage() {
     <StudentLayout>
       <div className="flex flex-col h-full">
         <DeadlineHeader
-          onUniversityFilter={setUniversityFilter}
-          onDegreeFilter={setDegreeFilter}
-          onDateRangeFilter={setDateRangeFilter}
-          onSearch={setSearchQuery}
-          searchValue={searchQuery}
           universities={universities}
+          degrees={degrees}
+          university={universityFilter}
+          degree={degreeFilter}
+          range={dateRangeFilter}
+          savedOnly={savedOnly}
+          search={searchQuery}
+          onUniversity={setUniversityFilter}
+          onDegree={setDegreeFilter}
+          onRange={setDateRangeFilter}
+          onSavedOnly={setSavedOnly}
+          onSearch={setSearchQuery}
         />
 
         <div className="flex-1 overflow-y-auto">

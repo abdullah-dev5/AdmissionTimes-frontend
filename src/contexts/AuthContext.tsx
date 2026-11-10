@@ -14,6 +14,9 @@ import { supabase } from '../services/supabase';
 import type { User } from '../types/api';
 import type { SignInData, SignUpData } from '../services/authService';
 import { useToast } from './ToastContext';
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('AuthContext')
 
 interface AuthContextType {
   user: User | null;
@@ -104,7 +107,7 @@ export function useAuth() {
   const signOut = useAuthStore((state) => state.signOut);
 
   if (!context) {
-    console.warn('useAuth used without AuthProvider; falling back to store-only auth.');
+    log.warn('useAuth used without AuthProvider; falling back to store-only auth.');
     return {
       user,
       isAuthenticated,

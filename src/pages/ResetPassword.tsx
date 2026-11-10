@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabase'
 import { useAuthStore } from '../store/authStore'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { MIN_PASSWORD_LENGTH } from '../utils/validation'
 
-const MIN_PASSWORD_LENGTH = 8
 
 /**
  * Landing page for the Supabase password-recovery link. Supabase establishes

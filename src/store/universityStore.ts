@@ -21,6 +21,9 @@ import {
   type NotificationItem,
 } from '../data/universityData'
 import { toApiError } from '../services/apiClient'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('universityStore')
 
 const isDashboardDebugEnabled = import.meta.env.VITE_DEBUG_DASHBOARD === 'true'
 
@@ -62,7 +65,6 @@ interface UniversityStoreState {
   markNotificationRead: (id: number | string) => void
   markAllNotificationsRead: () => void
   refreshNotifications: () => void
-  appendChangeLog: (entry: Omit<ChangeLogItem, 'id'>) => void
   reset: () => void
 }
 
@@ -105,15 +107,6 @@ const deriveStats = (
   }
 }
 
-const formatNow = () => {
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  const hh = String(now.getHours()).padStart(2, '0')
-  const min = String(now.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${min}`
-}
 
 const initialState = {
   admissions: [] as Admission[],
@@ -165,7 +158,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           fetchedUserId: options?.userId || null,
         })
 
-        if (isDashboardDebugEnabled) console.log('🟢 [UniversityStore] ✅ State updated successfully')
+        if (isDashboardDebugEnabled) log.debug('State updated successfully')
       } else {
         const admissions: Admission[] = []
         const notifications: NotificationItem[] = []
@@ -185,10 +178,10 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
           stats: deriveStats(admissions, changeLogs, notifications),
           fetchedUserId: options?.userId || null,
         })
-        console.warn('[UniversityStore] No data in response, showing empty dashboard state')
+        log.warn('No data in response, showing empty dashboard state')
       }
     } catch (err) {
-      console.error('[UniversityStore] Failed to fetch dashboard data:', err)
+      log.error('Failed to fetch dashboard data:', err)
       const errorMsg = toApiError(err).message || 'Failed to load dashboard data'
       set({
         error: errorMsg,
@@ -259,19 +252,10 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         }
       })
 
-      // Create changelog entry if there are changes
-      if (options?.diff && options.diff.length > 0) {
-        get().appendChangeLog({
-          admission: savedAdmission.title,
-          modifiedBy: options.modifiedBy ?? 'University representative',
-          date: formatNow(),
-          diff: options.diff,
-        })
-      }
 
       return { success: true, data: savedAdmission }
     } catch (error) {
-      console.error('[UniversityStore] Failed to save admission:', error)
+      log.error('Failed to save admission:', error)
 
       // Extract error message from response
       let errorMessage = 'Failed to save admission'
@@ -324,7 +308,7 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
 
       return { success: true }
     } catch (error) {
-      console.error('🔴 [UniversityStore] Failed to delete admission:', error)
+      log.error('Failed to delete admission:', error)
 
       const errorMessage = toApiError(error).message || 'Failed to delete admission'
       set({ error: errorMessage })
@@ -350,20 +334,17 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
       if (response.data && Array.isArray(response.data)) {
         // Convert API notifications to NotificationItem format
         // Preserve backend notification IDs so read actions can be persisted
-        const transformedNotifications: NotificationItem[] = response.data
-          .filter((notif: any, index: number, self: any[]) => {
-            // Remove exact duplicates
-            return index === self.findIndex((t) => t.id === notif.id && t.title === notif.title)
-          })
-          .map((notif: any, index: number) => ({
-            id: notif.id || `${index}`,
-            title: notif.title || 'Notification',
-            message: notif.message || '',
-            type: notif.notification_type === 'system_broadcast' ? 'System Alert' : 'Admin Feedback',
-            time: notif.created_at || new Date().toISOString(),
-            read: notif.is_read || false,
-            admissionId: notif.related_entity_id || undefined,
-          }))
+        const transformedNotifications: NotificationItem[] = response.data.map((notif) => ({
+          id: notif.id,
+          title: notif.title || 'Notification',
+          message: notif.message || '',
+          type: notif.notification_type === 'system_broadcast' ? 'System Alert' : 'Admin Feedback',
+          time: notif.created_at,
+          read: Boolean(notif.is_read),
+          // The admission comes from the link (e.g. /university/manage-admissions?edit=<id>).
+          admissionId: /[?&](?:edit|admission)=([0-9a-f-]{36})/i.exec(notif.action_url || '')?.[1]
+            || (notif.related_entity_type === 'admission' ? notif.related_entity_id || undefined : undefined),
+        }))
         
         set({
           notifications: transformedNotifications,
@@ -371,43 +352,26 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
         })
       }
     } catch (err) {
-      console.error('❌ Failed to fetch notifications:', err)
+      log.error('Failed to fetch notifications:', err)
       options?.showError?.('Failed to load notifications')
     }
   },
 
-  // Mark Notification Read
+  // Optimistic; restored if the server rejects it (the list must match the server).
   markNotificationRead: (id: number | string) => {
-    if (typeof id === 'string' && id.length >= 8) {
-      void notificationsService.markAsRead(String(id)).catch((err) => {
-        console.error('Failed to persist notification read state:', err)
-      })
-    }
-
-    set((state) => {
-      const notifications = state.notifications.map((notification) =>
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-      return {
-        notifications,
-        stats: deriveStats(state.admissions, state.changeLogs, notifications),
-      }
-    })
+    const before = get().notifications
+    const apply = (notifications: NotificationItem[]) =>
+      set((state) => ({ notifications, stats: deriveStats(state.admissions, state.changeLogs, notifications) }))
+    apply(before.map((notification) => (notification.id === id ? { ...notification, read: true } : notification)))
+    void notificationsService.markAsRead(String(id)).catch(() => apply(before))
   },
 
-  // Mark All Notifications Read
   markAllNotificationsRead: () => {
-    void notificationsService.markAllAsRead().catch((err) => {
-      console.error('Failed to persist mark-all notifications state:', err)
-    })
-
-    set((state) => {
-      const notifications = state.notifications.map((notification) => ({ ...notification, read: true }))
-      return {
-        notifications,
-        stats: deriveStats(state.admissions, state.changeLogs, notifications),
-      }
-    })
+    const before = get().notifications
+    const apply = (notifications: NotificationItem[]) =>
+      set((state) => ({ notifications, stats: deriveStats(state.admissions, state.changeLogs, notifications) }))
+    apply(before.map((notification) => ({ ...notification, read: true })))
+    void notificationsService.markAllAsRead().catch(() => apply(before))
   },
 
   // Refresh Notifications
@@ -415,18 +379,6 @@ export const useUniversityStore = create<UniversityStoreState>((set, get) => ({
     void get().fetchNotifications({ page: 1, limit: 50 })
   },
 
-  // Append Change Log
-  appendChangeLog: (entry) => {
-    set((state) => {
-      const nextId = state.changeLogs.length > 0 ? Math.max(...state.changeLogs.map((log) => log.id)) + 1 : 1
-      const withId: ChangeLogItem = { ...entry, id: nextId }
-      const changeLogs = [withId, ...state.changeLogs].sort((a, b) => (a.date < b.date ? 1 : -1))
-      return {
-        changeLogs,
-        stats: deriveStats(state.admissions, changeLogs, state.notifications),
-      }
-    })
-  },
 
   // Reset
   reset: () => set(initialState),

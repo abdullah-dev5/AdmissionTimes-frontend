@@ -29,8 +29,8 @@ const initialPrompts = [
 	"What triggers re-verification?",
 ]
 
-const isTransientStatus = (status?: number): boolean =>
-	status === 429 || status === 502 || status === 503 || status === 504
+// 429 is our own per-user rate limit: retrying immediately only hits it again.
+const isTransientStatus = (status?: number): boolean => status === 502 || status === 503 || status === 504
 
 function UniversityAIChatWindow({
 	isOpen,
@@ -67,6 +67,8 @@ function UniversityAIChatWindow({
 		}
 
 		return () => clearInactivityTimer()
+	// The inactivity timer is reset only when the window opens/closes.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isOpen])
 
 	const resetInactivityTimer = () => {
@@ -188,11 +190,12 @@ function UniversityAIChatWindow({
 			return "Your session has expired. Please sign in again, then retry your question."
 		}
 
-		if (status === 503 || apiMessage.includes("gemini") || apiMessage.includes("not configured")) {
-			return [
-				"Gemini API is exhausted and has reached its limits.",
-				buildGuidanceFallback(query),
-			].join("\n")
+		if (status === 429) {
+			return ["You are sending messages quickly. Please wait a minute and try again.", buildGuidanceFallback(query)].join("\n")
+		}
+
+		if (isTransientStatus(status) || apiMessage.includes("not configured")) {
+			return ["The AI assistant is unavailable right now. Here is some quick guidance:", buildGuidanceFallback(query)].join("\n")
 		}
 
 		return buildGuidanceFallback(query)

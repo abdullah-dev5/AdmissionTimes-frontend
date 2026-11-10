@@ -9,6 +9,9 @@ import { showWarning } from '../../utils/swal'
 import { useStudentDashboardData } from '../../hooks/useStudentDashboardData'
 import { admissionsService } from '../../services/admissionsService'
 import { transformAdmission } from '../../utils/transformers'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('ComparePage')
 
 // Helper function to convert match percentage to text label
 function getMatchLabel(matchNumeric?: number): string {
@@ -164,7 +167,7 @@ const CompareHighlights = ({ admissions }: { admissions: StudentAdmission[] }) =
       setComparison(result)
       setLastSource(result.method === 'ai' ? 'ai' : 'fallback')
     } catch (err: unknown) {
-      console.warn('[ComparePage] AI comparison failed:', err)
+      log.warn('AI comparison failed:', err)
       const quick = buildQuickHighlights(admissions)
       setComparison({
         summary: 'Could not reach the AI service. Showing an instant comparison from program data on this page.',

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { useAi } from '../../contexts/AiContext'
 import MessageBubble from './MessageBubble'
@@ -13,7 +14,11 @@ interface Message {
   text: string
   isUser: boolean
   timestamp: string
+  /** Programs the assistant found; shown as links to the program page (as on mobile). */
+  results?: NonNullable<AiReplyPayload['results']>
 }
+
+const MAX_RESULT_LINKS = 5
 
 interface AiReplyPayload {
   result_count?: number
@@ -159,9 +164,8 @@ const buildDynamicFallbackFromPayload = (query: string, payload?: AiReplyPayload
   return 'I could not generate a response right now. Please try again with a slightly more specific query.'
 }
 
-const isTransientStatus = (status?: number): boolean => {
-  return status === 429 || status === 502 || status === 503 || status === 504
-}
+// 429 is our own per-user rate limit: retrying immediately only hits it again.
+const isRetryableStatus = (status?: number): boolean => status === 502 || status === 503 || status === 504
 
 function ChatPanel() {
   const { isOpen, closeChat, context } = useAi()
@@ -193,6 +197,8 @@ function ChatPanel() {
       clearInactivityTimer()
     }
     return () => clearInactivityTimer()
+  // The inactivity timer is reset only when the panel opens/closes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   const resetInactivityTimer = () => {
@@ -243,7 +249,7 @@ function ChatPanel() {
         } catch (firstError) {
           const axiosError = firstError as AxiosError<{ message?: string }>
           const status = axiosError.response?.status
-          if (!isTransientStatus(status)) {
+          if (!isRetryableStatus(status)) {
             throw firstError
           }
 
@@ -267,7 +273,8 @@ function ChatPanel() {
         id: (Date.now() + 1).toString(),
         text: finalAnswer,
         isUser: false,
-        timestamp: formatDisplayTime(new Date().toISOString())
+        timestamp: formatDisplayTime(new Date().toISOString()),
+        results: (data.results || []).slice(0, MAX_RESULT_LINKS),
       }
 
       setMessages(prev => [...prev, aiMessage])
@@ -298,12 +305,12 @@ function ChatPanel() {
       return 'Your session has expired. Please sign in again, then retry your request.'
     }
 
-    if (status === 503 || apiMessage.includes('gemini') || apiMessage.includes('not configured')) {
-      return 'Gemini API is exhausted and has reached its limits.'
+    if (status === 429) {
+      return 'You are sending messages quickly. Please wait a minute and try again.'
     }
 
-    if (isTransientStatus(status)) {
-      return 'The assistant is temporarily busy. Please retry your question in a few seconds.'
+    if (isRetryableStatus(status) || apiMessage.includes('not configured')) {
+      return 'The AI assistant is unavailable right now. Please try again in a moment.'
     }
 
     return 'I could not process that request right now. Please try again.'
@@ -347,12 +354,28 @@ function ChatPanel() {
 
       <div className="flex-1 overflow-y-auto px-4 py-4" style={{ backgroundColor: '#F9FAFB' }}>
         {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message.text}
-            isUser={message.isUser}
-            timestamp={message.timestamp}
-          />
+          <div key={message.id}>
+            <MessageBubble message={message.text} isUser={message.isUser} timestamp={message.timestamp} />
+            {message.results?.length ? (
+              <ul className="-mt-2 mb-4 ml-1 mr-8 space-y-1.5" aria-label="Programs found">
+                {message.results.map((result) => (
+                  <li key={result.id}>
+                    <Link
+                      to={`/program/${result.id}`}
+                      className="block px-3 py-2 rounded-lg bg-white border border-blue-100 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                    >
+                      <span className="block text-sm font-semibold text-blue-700 line-clamp-2">{result.title}</span>
+                      <span className="block text-xs text-gray-500 truncate">
+                        {[result.degree_level, result.location, result.deadline ? `Deadline ${formatDisplayDate(result.deadline, result.deadline)}` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         ))}
         {isLoading && (
           <div className="flex justify-start mb-4">

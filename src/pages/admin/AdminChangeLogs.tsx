@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import AdminLayout from "../../layouts/AdminLayout"
 import { useChangeLogFilters } from "../../hooks/useChangeLogFilters"
 import { useChangeLogActions } from "../../hooks/useChangeLogActions"
@@ -9,15 +9,6 @@ import ChangeLogTable from "../../components/admin/ChangeLogTable"
 import DiffViewerModal from "../../components/admin/DiffViewerModal"
 import Pagination from "../../components/admin/Pagination"
 import { LoadingSpinner } from "../../components/common/LoadingSpinner"
-
-interface ChangeLogStats {
-	total: number
-	manualEdits: number
-	adminEdits: number
-	scraperUpdates: number
-	today: number
-	thisWeek: number
-}
 
 const getFriendlyErrorMessage = (raw?: string | null) => {
 	const message = (raw || "").toLowerCase()
@@ -31,44 +22,19 @@ const getFriendlyErrorMessage = (raw?: string | null) => {
 }
 
 /**
- * Calculate statistics from changelog entries
- */
-const calculateStats = (logs: AdminChangeLog[]): ChangeLogStats => {
-	const now = new Date()
-	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-	const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-
-	return {
-		total: logs.length,
-		manualEdits: logs.filter((l) => l.changeType === "Manual Edit").length,
-		adminEdits: logs.filter((l) => l.changeType === "Admin Edit").length,
-		scraperUpdates: logs.filter((l) => l.changeType === "Scraper Update").length,
-		today: logs.filter((l) => new Date(l.timestamp) >= todayStart).length,
-		thisWeek: logs.filter((l) => new Date(l.timestamp) >= weekStart).length,
-	}
-}
-
-/**
  * Admin Change Logs page - View and analyze all changes made to admission records
  * Enhanced with statistics, better layout, and action handlers
  */
 function AdminChangeLogs() {
-	const { filters, filteredLogs, updateFilter, resetFilters, loading, error, allLogs, admissionOptions, userOptions } = useChangeLogFilters()
+	// Paged and filtered on the server; the cards count every entry (summary endpoint).
+	const { filters, logs, page: currentPage, setPage: setCurrentPage, total, totalPages, summary, updateFilter, resetFilters, loading, error, admissionOptions, userOptions } =
+		useChangeLogFilters()
 	const { downloadChangeLog } = useChangeLogActions()
 	const [selectedLog, setSelectedLog] = useState<AdminChangeLog | null>(null)
-	const [currentPage, setCurrentPage] = useState(1)
 
-	// Pagination
-	const totalPages = Math.ceil(filteredLogs.length / DEFAULT_ITEMS_PER_PAGE)
-	const paginatedLogs = useMemo(() => {
-		const startIndex = (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
-		return filteredLogs.slice(startIndex, startIndex + DEFAULT_ITEMS_PER_PAGE)
-	}, [filteredLogs, currentPage])
-
-	// Calculate statistics
-	const allStats = calculateStats(allLogs)
 	const friendlyError = getFriendlyErrorMessage(error)
-	const showInitialLoading = loading && allLogs.length === 0
+	const showInitialLoading = loading && logs.length === 0 && !summary
+	const pct = (n: number) => Math.round((n / Math.max(summary?.total ?? 0, 1)) * 100)
 
 	if (showInitialLoading) {
 		return (
@@ -80,12 +46,10 @@ function AdminChangeLogs() {
 
 	const handleFilterChange = <K extends keyof typeof filters>(key: K, value: typeof filters[K]) => {
 		updateFilter(key, value)
-		setCurrentPage(1) // Reset to first page when filters change
 	}
 
 	const handleReset = () => {
 		resetFilters()
-		setCurrentPage(1)
 	}
 
 	const handleViewDiff = (log: AdminChangeLog) => {
@@ -98,8 +62,8 @@ function AdminChangeLogs() {
 		window.scrollTo({ top: 0, behavior: "smooth" })
 	}
 
-	const handleDownloadAll = () => {
-		downloadChangeLog(filteredLogs, `changelogs-${new Date().toISOString().split("T")[0]}.json`)
+	const handleDownloadPage = () => {
+		downloadChangeLog(logs, `changelogs-page-${currentPage}-${new Date().toISOString().split("T")[0]}.json`)
 	}
 
 	return (
@@ -114,49 +78,48 @@ function AdminChangeLogs() {
 								Track all modifications made to admission records. View detailed changes, filter by type or date, and export reports.
 							</p>
 						</div>
-						{filteredLogs.length > 0 && (
+						{logs.length > 0 && (
 							<button
-								onClick={handleDownloadAll}
+								onClick={handleDownloadPage}
 								className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-150 cursor-pointer flex items-center gap-2"
-								title="Download current filtered logs"
+								title="Download the entries on this page"
 							>
-
-								Download ({filteredLogs.length})
+								Download page ({logs.length})
 							</button>
 						)}
 					</div>
 				</div>
 
-				{/* Statistics Cards */}
+				{/* Statistics Cards (all entries, from the server) */}
 				<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
 					<div className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-4">
 						<p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">Total Changes</p>
-						<p className="text-2xl font-bold text-blue-900">{allStats.total}</p>
-						<p className="text-xs text-blue-700 mt-2">Latest {allStats.total} loaded</p>
+						<p className="text-2xl font-bold text-blue-900">{summary?.total ?? "—"}</p>
+						<p className="text-xs text-blue-700 mt-2">All recorded changes</p>
 					</div>
 
 					<div className="bg-orange-50 rounded-lg shadow-sm border border-orange-200 p-4">
-						<p className="text-xs font-semibold text-orange-700 uppercase tracking-wider mb-2">Manual Edits</p>
-						<p className="text-2xl font-bold text-orange-900">{allStats.manualEdits}</p>
-						<p className="text-xs text-orange-700 mt-2">{Math.round((allStats.manualEdits / Math.max(allStats.total, 1)) * 100)}% of total</p>
+						<p className="text-xs font-semibold text-orange-700 uppercase tracking-wider mb-2">University Edits</p>
+						<p className="text-2xl font-bold text-orange-900">{summary?.by_actor.university ?? "—"}</p>
+						<p className="text-xs text-orange-700 mt-2">{summary ? `${pct(summary.by_actor.university)}% of total` : ""}</p>
 					</div>
 
 					<div className="bg-purple-50 rounded-lg shadow-sm border border-purple-200 p-4">
-						<p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-2">Admin Edits</p>
-						<p className="text-2xl font-bold text-purple-900">{allStats.adminEdits}</p>
-						<p className="text-xs text-purple-700 mt-2">{Math.round((allStats.adminEdits / Math.max(allStats.total, 1)) * 100)}% of total</p>
+						<p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-2">Admin Actions</p>
+						<p className="text-2xl font-bold text-purple-900">{summary?.by_actor.admin ?? "—"}</p>
+						<p className="text-xs text-purple-700 mt-2">{summary ? `${summary.reviews} verification decisions` : ""}</p>
 					</div>
 
 					<div className="bg-green-50 rounded-lg shadow-sm border border-green-200 p-4">
 						<p className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2">Today</p>
-						<p className="text-2xl font-bold text-green-900">{allStats.today}</p>
-						<p className="text-xs text-green-700 mt-2">Changes</p>
+						<p className="text-2xl font-bold text-green-900">{summary?.today ?? "—"}</p>
+						<p className="text-xs text-green-700 mt-2">Changes (Pakistan time)</p>
 					</div>
 
 					<div className="bg-red-50 rounded-lg shadow-sm border border-red-200 p-4">
-						<p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">This Week</p>
-						<p className="text-2xl font-bold text-red-900">{allStats.thisWeek}</p>
-						<p className="text-xs text-red-700 mt-2">Changes</p>
+						<p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">Last 7 Days</p>
+						<p className="text-2xl font-bold text-red-900">{summary?.last_7_days ?? "—"}</p>
+						<p className="text-xs text-red-700 mt-2">{summary ? `${summary.by_actor.system} automated imports overall` : ""}</p>
 					</div>
 				</div>
 
@@ -186,19 +149,19 @@ function AdminChangeLogs() {
 				</div>
 
 				{/* Contents Info */}
-				{filteredLogs.length > 0 && (
+				{logs.length > 0 && (
 					<div className="mb-4 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
-						<span className="font-semibold">Showing {paginatedLogs.length}</span>
+						<span className="font-semibold">Showing {logs.length}</span>
 						{" of "}
-						<span className="font-semibold">{filteredLogs.length}</span>
-						{filteredLogs.length !== allStats.total ? " filtered" : ""} changes
-						{filteredLogs.length > DEFAULT_ITEMS_PER_PAGE ? ` (Page ${currentPage} of ${totalPages})` : ""}
+						<span className="font-semibold">{total}</span>
+						{summary && total !== summary.total ? " matching" : ""} changes
+						{totalPages > 1 ? ` (Page ${currentPage} of ${totalPages})` : ""}
 					</div>
 				)}
 
 				{/* Change Logs Table */}
 				<div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-					<ChangeLogTable logs={paginatedLogs} onViewDiff={handleViewDiff} />
+					<ChangeLogTable logs={logs} onViewDiff={handleViewDiff} />
 
 					{/* Pagination */}
 					{totalPages > 1 && (
@@ -206,7 +169,7 @@ function AdminChangeLogs() {
 							<Pagination
 								currentPage={currentPage}
 								totalPages={totalPages}
-								totalItems={filteredLogs.length}
+								totalItems={total}
 								itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
 								onPageChange={handlePageChange}
 							/>

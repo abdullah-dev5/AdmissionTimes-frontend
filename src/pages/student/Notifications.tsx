@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { NOTIFICATION_TABS, type NotificationTab } from '../../utils/studentPortal'
 import { useNavigate } from 'react-router-dom'
 import StudentLayout from '../../layouts/StudentLayout'
 import { type StudentNotification } from '../../data/studentData'
@@ -15,7 +16,7 @@ function Notifications() {
   const markNotificationRead = useStudentStore((state) => state.markNotificationRead)
   const markAllNotificationsRead = useStudentStore((state) => state.markAllNotificationsRead)
   const { showError, showSuccess } = useToast()
-  const [activeTab, setActiveTab] = useState<'All' | 'alert' | 'system' | 'admission'>('All')
+  const [activeTab, setActiveTab] = useState<NotificationTab>('all')
   const [preferences, setPreferences] = useState<UserPreferences | null>(null)
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
   const [isSavingPrefs, setIsSavingPrefs] = useState(false)
@@ -64,18 +65,17 @@ function Notifications() {
   }
 
   const filteredNotifications = useMemo(() => {
-    if (activeTab === 'All') {
-      return notifications
-    }
-    return notifications.filter(n => n.type === activeTab)
+    if (activeTab === 'all') return notifications
+    if (activeTab === 'unread') return notifications.filter((n) => !n.read)
+    return notifications.filter((n) => n.type === activeTab)
   }, [notifications, activeTab])
 
   const handleMarkAllRead = () => {
-    markAllNotificationsRead()
+    markAllNotificationsRead().catch(() => showError('Could not mark notifications as read. Please try again.'))
   }
 
   const handleMarkRead = (id: string) => {
-    markNotificationRead(id)
+    markNotificationRead(id).catch(() => showError('Could not mark the notification as read.'))
   }
 
   const handleNotificationClick = (notification: StudentNotification) => {
@@ -163,11 +163,12 @@ function Notifications() {
                 <div className="bg-white rounded-lg shadow-sm p-6">
                   <div className="border-b border-gray-200 mb-6">
                     <nav className="flex space-x-8 -mb-px">
-                      {(['All', 'Alerts', 'System', 'Admission'] as const).map((tab) => {
-                        const tabValue = tab === 'All' ? 'All' : tab === 'Alerts' ? 'alert' : tab === 'System' ? 'system' : 'admission'
+                      {/* Same tabs as the mobile app (utils/studentPortal). */}
+                      {NOTIFICATION_TABS.map(({ value: tabValue, label: tab }) => {
                         return (
                           <button
-                            key={tab}
+                            key={tabValue}
+                            aria-pressed={activeTab === tabValue}
                             onClick={() => setActiveTab(tabValue)}
                             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm cursor-pointer transition-colors ${
                               activeTab === tabValue
@@ -256,8 +257,8 @@ function Notifications() {
 
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <p className="font-medium text-sm mb-1" style={{ color: '#111827' }}>In-App Alerts</p>
-                        <p className="text-xs text-gray-500">Push notifications on this device.</p>
+                        <p className="font-medium text-sm mb-1" style={{ color: '#111827' }}>Phone notifications</p>
+                        <p className="text-xs text-gray-500">Push alerts in the AdmissionTimes mobile app.</p>
                       </div>
                       <button
                         onClick={handleToggleInApp}

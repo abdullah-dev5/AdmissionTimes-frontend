@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
 import { toApiError } from '../../services/apiClient'
+import { createLogger } from '../../utils/logger'
+
+const log = createLogger('AdminBroadcastModal')
 
 interface AdminBroadcastModalProps {
   onClose: () => void;
@@ -58,11 +61,11 @@ export const AdminBroadcastModal = ({ onClose, onSuccess }: AdminBroadcastModalP
         action_url: actionUrl.trim() || undefined,
       });
 
-      console.log('✅ Broadcast sent successfully:', response.data);
+      log.debug('Broadcast sent successfully:', response.data);
       onSuccess();
       onClose();
     } catch (err) {
-      console.error('❌ Failed to send broadcast:', err);
+      log.error('Failed to send broadcast:', err);
       setError(toApiError(err).response?.data?.message || 'Failed to send broadcast notification');
     } finally {
       setIsSubmitting(false);

@@ -13,26 +13,18 @@ export const aiService = {
     conversationContext?: string,
     history?: ChatHistoryEntry[]
   ): Promise<ApiResponse<AiChatResponse>> => {
-    let fullContext = conversationContext || ''
-    if (history && history.length > 0) {
-      const historyStr = history
-        .slice(-8)
-        .map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text.slice(0, 200)}`)
-        .join('\n')
-      fullContext = fullContext ? `${fullContext}\nRecent messages:\n${historyStr}` : `Recent messages:\n${historyStr}`
-    }
-
-    const conversationHistory = history?.slice(-8).map((entry) => ({
-      role: entry.role === 'ai' ? 'assistant' : entry.role,
-      text: entry.text.slice(0, 500),
-    }))
+    // The backend merges the page context with the history; send each once.
+    const conversationHistory = history
+      ?.map((entry) => ({ role: entry.role === 'ai' ? 'assistant' : entry.role, text: entry.text.trim().slice(0, 500) }))
+      .filter((entry) => entry.text)
+      .slice(-8)
 
     const response = await apiClient.post(
       '/ai/chat',
       {
         message,
-        conversation_context: fullContext.slice(0, 3000) || undefined,
-        conversation_history: conversationHistory,
+        conversation_context: conversationContext?.trim().slice(0, 3000) || undefined,
+        conversation_history: conversationHistory?.length ? conversationHistory : undefined,
       },
       { timeout: 60000 }
     )

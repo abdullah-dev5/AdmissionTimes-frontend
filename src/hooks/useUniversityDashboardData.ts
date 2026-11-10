@@ -8,6 +8,9 @@ import { useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useUniversityStore } from '../store/universityStore'
+import { createLogger } from '../utils/logger'
+
+const log = createLogger('useUniversityDashboardData')
 
 export function useUniversityDashboardData() {
   const { user } = useAuth()
@@ -35,7 +38,9 @@ export function useUniversityDashboardData() {
     fetchTriggeredRef.current = userId
 
     storeState.fetchDashboardData({ showError, userId }).catch((err) => {
-      console.error('[useUniversityDashboardData] Error fetching university data:', err)
+      log.error('Error fetching university data:', err)
     })
+  // showError comes from a stable provider; reload only when the user changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, userRole])
 }

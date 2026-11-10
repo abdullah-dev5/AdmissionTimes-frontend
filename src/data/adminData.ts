@@ -102,6 +102,8 @@ export interface VerificationItem {
 	dataOrigin?: "scraper" | "manual" | "university"
 	sourceSystem?: string | null
 	verificationStatusRaw?: string
+	/** A verified admission edited by its university, hidden from new students until re-checked. */
+	needsReverification?: boolean
 	rejectionReason?: string | null
 	reviewReason?: string | null
 	verificationComments?: string | null
