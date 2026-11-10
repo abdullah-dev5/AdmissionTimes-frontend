@@ -257,8 +257,8 @@ function Notifications() {
 
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <p className="font-medium text-sm mb-1" style={{ color: '#111827' }}>In-App Alerts</p>
-                        <p className="text-xs text-gray-500">Push notifications on this device.</p>
+                        <p className="font-medium text-sm mb-1" style={{ color: '#111827' }}>Phone notifications</p>
+                        <p className="text-xs text-gray-500">Push alerts in the AdmissionTimes mobile app.</p>
                       </div>
                       <button
                         onClick={handleToggleInApp}
